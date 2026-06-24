@@ -38,7 +38,7 @@ import { UIManager } from "../ui/UIManager.js";
 import { AudioRegistry } from "../content/audio/AudioRegistry.js";
 import { BlockInteractionAudio } from "./BlockInteractionAudio.js";
 import { SaveManager } from "../engine/save/SaveManager.js";
-import { GameSession, type GameMode } from "./GameSession.js";
+import { GameSession, MAX_RENDER_DISTANCE, type GameMode } from "./GameSession.js";
 import { PlayerInteractionController } from "./PlayerInteractionController.js";
 
 export class Game {
@@ -98,7 +98,8 @@ export class Game {
     const blocks = new BlockRegistry(4096);
     new VanillaBlockFactory().registerAll(blocks);
 
-    const pool = SharedPool.create((config.renderDistance * 2 + 1) ** 2 + 8, {
+    // Size the shared chunk pool for the largest render distance the options menu allows.
+    const pool = SharedPool.create((MAX_RENDER_DISTANCE * 2 + 1) ** 2 + 8, {
       sizeX: config.chunkSize,
       sizeY: config.worldHeight,
       sizeZ: config.chunkSize,

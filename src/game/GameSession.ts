@@ -1,7 +1,7 @@
 import { GameState } from "../engine/core/GameState.js";
 
-const MIN_RENDER_DISTANCE = 2;
-const MAX_RENDER_DISTANCE = 32;
+export const MIN_RENDER_DISTANCE = 2;
+export const MAX_RENDER_DISTANCE = 4;
 
 export type GameMode = "survival" | "creative";
 

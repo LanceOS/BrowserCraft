@@ -34,7 +34,7 @@ test("game session clamps render distance updates", () => {
   assert.equal(session.gameMode, "survival");
 
   session.setRenderDistance(128);
-  assert.equal(session.renderDistance, 32);
+  assert.equal(session.renderDistance, 4);
 
   session.setRenderDistance(Number.NaN);
   assert.equal(session.renderDistance, 2);

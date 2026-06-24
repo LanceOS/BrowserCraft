@@ -1,5 +1,5 @@
 import { GameState } from "../engine/core/GameState.js";
-import { GameSession } from "../game/GameSession.js";
+import { GameSession, MAX_RENDER_DISTANCE } from "../game/GameSession.js";
 
 export class UIManager {
   private readonly root: HTMLDivElement;
@@ -203,7 +203,7 @@ export class UIManager {
             class="ui-slider"
             id="rd-slider"
             min="2"
-            max="32"
+            max="${MAX_RENDER_DISTANCE}"
             type="range"
             value="${this.session.renderDistance}"
           />
