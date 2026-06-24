@@ -80,7 +80,7 @@ public:
   /// Check if a world position has a liquid block.
   [[nodiscard]] auto isFluid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool;
 
-  /// Check if the world is ready (center chunk has mesh).
+  /// Check if the world is ready (center chunk has voxel data available for gameplay logic).
   [[nodiscard]] auto isReady() const -> bool;
 
   /// Attach a save manager for loading/saving chunks.

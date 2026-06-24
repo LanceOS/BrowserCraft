@@ -222,6 +222,8 @@ void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh)
   m_spawnedToSurface = false;
   m_camera.position = glm::vec3(0.0f, 80.0f, 50.0f);
   syncPlayerWithCamera();
+  m_input.clearAll();
+  m_input.pointerLocked = false;
 
   const int32_t idx = playerIndex();
   if (idx >= 0 && m_transforms.has(idx) && m_bodies.has(idx) && m_players.has(idx)) {
@@ -236,6 +238,7 @@ void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh)
   }
 
   m_ui->clearUI();
+  m_ui->setInventoryOpen(false);
   glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 }
 
@@ -308,7 +311,10 @@ auto Game::collidesAt(const glm::vec3& candidatePosition, const cmp::RigidBody& 
 }
 
 void Game::applyPlayerControls(float dt) {
-  if (m_session.state() != GameState::InGame) return;
+  if (m_session.state() != GameState::InGame &&
+      m_session.state() != GameState::GeneratingWorld) {
+    return;
+  }
 
   const int32_t idx = playerIndex();
   if (idx < 0 ||
@@ -326,7 +332,8 @@ void Game::applyPlayerControls(float dt) {
     glfwSetInputMode(m_window, GLFW_CURSOR, nowOpen ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
   }
 
-  const bool canControl = m_session.state() == GameState::InGame &&
+  const bool canControl = (m_session.state() == GameState::InGame ||
+                          m_session.state() == GameState::GeneratingWorld) &&
     (m_ui->state() == UIState::InGame) &&
     !m_ui->isInventoryOpen();
 
@@ -468,11 +475,10 @@ void Game::update(float dt) {
 
     if (!m_spawnedToSurface && m_world->isReady()) {
       int32_t idx = playerIndex();
-    if (idx >= 0 && m_transforms.has(idx)) {
+      if (idx >= 0 && m_transforms.has(idx) && m_bodies.has(idx)) {
         auto& transform = m_transforms.get(idx);
         auto& body = m_bodies.get(idx);
         const int32_t groundY = groundHeightAt(transform.position.x, transform.position.z, m_config.worldHeight - 1);
-        m_spawnedToSurface = true;
         if (groundY >= 0) {
           float spawnY = static_cast<float>(groundY + 1);
           transform.position.y = spawnY;
@@ -481,12 +487,13 @@ void Game::update(float dt) {
           }
           body.velocity.y = 0.0f;
           body.onGround = 1;
+          m_spawnedToSurface = true;
+          syncCameraFromPlayer();
         } else {
           transform.position.y = std::min(transform.position.y, 64.0f);
           body.velocity.y = 0.0f;
           body.onGround = 0;
         }
-        syncCameraFromPlayer();
       }
     }
 

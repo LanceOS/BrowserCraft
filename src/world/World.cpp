@@ -33,7 +33,7 @@ void World::update(glm::vec3 cameraPos) {
 auto World::isReady() const -> bool {
   if (!m_hasCenter) return false;
   auto* center = m_chunks.get(m_centerChunkX, m_centerChunkZ);
-  return center && (center->state == ChunkState::MeshReady || center->state == ChunkState::Uploaded);
+  return center && chunkHasVoxelData(*center);
 }
 
 auto World::getChunk(int32_t cx, int32_t cz) const -> const Chunk* {
