@@ -43,7 +43,7 @@ UIManager::UIManager(GLFWwindow* window, Callbacks callbacks)
   std::strncpy(m_slotId.data(), "default", m_slotId.size() - 1);
   m_slotId[m_slotId.size() - 1] = '\0';
 
-  ImGui_ImplGlfw_InitForOpenGL(window, true);
+  ImGui_ImplGlfw_InitForOpenGL(window, false);
   ImGui_ImplOpenGL3_Init("#version 460");
   m_initialized = true;
 }
