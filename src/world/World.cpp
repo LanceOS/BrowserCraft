@@ -141,6 +141,22 @@ void World::markUploaded(const Chunk& chunk) {
   *slot.status = static_cast<int32_t>(ChunkSlotStatus::GPU_UPLOADED);
 }
 
+void World::clear() {
+  std::vector<int32_t> usedSlots;
+  m_chunks.forEach([&](const Chunk& chunk) { usedSlots.push_back(chunk.slotIndex); });
+
+  for (const int32_t slotIndex : usedSlots) {
+    m_slotToChunk.erase(slotIndex);
+    m_pool.release(m_pool.view(slotIndex));
+  }
+
+  m_chunks = ChunkManager{};
+  m_slotToChunk.clear();
+  m_pendingGen.clear();
+  m_pendingMesh.clear();
+  m_hasCenter = false;
+}
+
 void World::onWorldGenDone(int32_t slotIndex) {
   auto it = m_slotToChunk.find(slotIndex);
   if (it == m_slotToChunk.end()) return;

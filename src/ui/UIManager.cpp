@@ -3,6 +3,7 @@
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 #include <stdexcept>
+#include <cstring>
 
 namespace voxel {
 
@@ -13,6 +14,8 @@ UIManager::UIManager(GLFWwindow* window, Callbacks callbacks)
   ImGuiIO& io = ImGui::GetIO();
   io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
   io.IniFilename = nullptr; // don't save layout
+  std::strncpy(m_slotId.data(), "default", m_slotId.size() - 1);
+  m_slotId[m_slotId.size() - 1] = '\0';
 
   ImGui_ImplGlfw_InitForOpenGL(window, true);
   ImGui_ImplOpenGL3_Init("#version 460");
@@ -119,18 +122,33 @@ void UIManager::renderGameModeMenu() {
   float winH = ImGui::GetWindowHeight();
   ImGui::SetCursorPos(ImVec2(winW * 0.5f - 200.0f, winH * 0.35f));
 
-  ImGui::BeginChild("ModePanel", ImVec2(400, 250), ImGuiChildFlags_Border);
-  ImGui::SetCursorPosX(140);
+  ImGui::BeginChild("ModePanel", ImVec2(420, 320), ImGuiChildFlags_Border);
+  ImGui::SetCursorPosX(155);
   ImGui::Text("Select Mode");
   ImGui::Spacing();
 
+  ImGui::SetCursorPosX(95);
+  ImGui::RadioButton("Survival##menu_mode", &m_gameModeIndex, 0);
+  ImGui::SameLine();
+  ImGui::RadioButton("Creative##menu_mode", &m_gameModeIndex, 1);
+
+  ImGui::Spacing();
+  ImGui::SetCursorPosX(90);
+  ImGui::Text("World Slot");
+  ImGui::SetCursorPosX(80);
+  ImGui::InputText("##world_slot", m_slotId.data(), m_slotId.size());
+
+  const std::string slotId = std::string(m_slotId.data());
+  const GameMode mode = m_gameModeIndex == 1 ? GameMode::Creative : GameMode::Survival;
+
+  ImGui::Spacing();
   ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Survival", ImVec2(200, 40))) {
-    if (m_callbacks.onStartSurvival) m_callbacks.onStartSurvival();
+  if (ImGui::Button("Load World", ImVec2(200, 40))) {
+    if (m_callbacks.onStartWorld) m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, false);
   }
   ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Creative", ImVec2(200, 40))) {
-    if (m_callbacks.onStartCreative) m_callbacks.onStartCreative();
+  if (ImGui::Button("Start New World", ImVec2(200, 40))) {
+    if (m_callbacks.onStartWorld) m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, true);
   }
   ImGui::SetCursorPosX(100);
   if (ImGui::Button("Back", ImVec2(200, 40))) {

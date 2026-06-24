@@ -76,6 +76,7 @@ add_library(voxel_engine STATIC
   src/engine/workers/worldgen/CaveCarver.cpp
   src/engine/workers/worldgen/OreDistributor.cpp
   src/engine/workers/worldgen/WorldGenPipeline.cpp
+  src/engine/workers/mesher/GreedyMesher.cpp
   src/content/biomes/BiomeSampler.cpp
   src/game/GameSession.cpp
   src/game/Game.cpp

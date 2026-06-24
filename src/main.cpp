@@ -6,8 +6,6 @@
 #include "game/Game.hpp"
 
 namespace {
-  voxel::InputState g_input;
-
   voxel::GameConfig makeConfig() {
     voxel::GameConfig cfg{};
     cfg.chunkSize = 16; cfg.worldHeight = 256; cfg.renderDistance = 4;
@@ -35,23 +33,25 @@ auto main() -> int {
   voxel::gl::loadGLFunctions();
   std::cout << "OpenGL loaded\n";
 
-  // Input callbacks
-  glfwSetKeyCallback(window, [](GLFWwindow*, int key, int, int action, int) {
-    g_input.setKeyByCode(key, action != GLFW_RELEASE);
-  });
-  glfwSetMouseButtonCallback(window, [](GLFWwindow*, int btn, int act, int) {
-    g_input.setMouseButton(btn, act == GLFW_PRESS);
-  });
-  glfwSetCursorPosCallback(window, [](GLFWwindow*, double x, double y) {
-    static double lx=0,ly=0; static bool first=true;
-    if(first){lx=x;ly=y;first=false;}
-    g_input.addMouseDelta(float(x-lx), float(y-ly));
-    lx=x; ly=y;
-  });
-
   // Create and run game
   auto config = makeConfig();
   voxel::Game game(window, config, {.initialState = voxel::GameState::MainMenu});
+  auto& input = game.input();
+
+  // Input callbacks
+  glfwSetKeyCallback(window, [&input](GLFWwindow*, int key, int, int action, int) {
+    input.setKeyByCode(key, action != GLFW_RELEASE);
+  });
+  glfwSetMouseButtonCallback(window, [&input](GLFWwindow*, int btn, int act, int) {
+    input.setMouseButton(btn, act == GLFW_PRESS);
+  });
+  glfwSetCursorPosCallback(window, [&input](GLFWwindow*, double x, double y) {
+    static double lx=0,ly=0; static bool first=true;
+    if (first) { lx = x; ly = y; first = false; }
+    input.addMouseDelta(float(x-lx), float(y-ly));
+    lx=x; ly=y;
+  });
+
   game.run();
 
   glfwDestroyWindow(window);

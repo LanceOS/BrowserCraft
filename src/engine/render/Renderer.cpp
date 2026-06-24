@@ -64,6 +64,24 @@ void Renderer::render(World& world, const CameraView& camera,
   gl::Clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   uploadCameraBlock(camera, timeSeconds, daylightFactor, skyR, skyG, skyB);
+
+  // Upload time block
+  {
+    float sunAngle = timeSeconds * 0.05f;
+    float dayFac = daylightFactor;
+    float timeData[8] = {
+      timeSeconds,           // u_timeElapsed
+      sunAngle,              // u_sunAngle
+      dayFac,                // u_daylight
+      dayFac * 15.0f,        // u_lightLevel
+      std::sin(sunAngle),    // u_sunDir.x
+      std::cos(sunAngle),    // u_sunDir.y
+      0.3f,                  // u_sunDir.z
+      0.0f                   // u_pad
+    };
+    m_timeUbo.upload(timeData, sizeof(timeData));
+  }
+
   renderSky();
 
   // ---- Render chunks ----
@@ -161,12 +179,13 @@ void Renderer::syncChunks(World& world) {
 
     auto& mesh = m_meshes[key];
     auto slot = world.getChunkSlot(chunk);
+    const int32_t stride = m_config.vertexStrideFloats;
     mesh.upload(
       slot.vertices,
-      static_cast<size_t>(chunk.vertexCount) * VERTEX_STRIDE_FLOATS,
+      static_cast<size_t>(chunk.vertexCount) * static_cast<size_t>(stride),
       slot.indices,
       chunk.indexCount,
-      VERTEX_STRIDE_FLOATS
+      stride
     );
     world.markUploaded(chunk);
   });

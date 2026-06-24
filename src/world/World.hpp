@@ -100,6 +100,8 @@ public:
 
   /// Mark a chunk as uploaded to GPU.
   void markUploaded(const Chunk& chunk);
+  /// Remove all currently loaded chunks and reset world state.
+  void clear();
 
   /// Signal that a world-gen job completed.
   void onWorldGenDone(int32_t slotIndex);

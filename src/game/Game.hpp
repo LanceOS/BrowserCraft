@@ -64,7 +64,15 @@ public:
 private:
   void initECS();
   void initSystems();
+  void syncPlayerWithCamera();
   void createPlayer();
+  void applyPlayerControls(float dt);
+  auto playerIndex() const -> int32_t;
+  auto groundHeightAt(float worldX, float worldZ, int32_t startY) const -> int32_t;
+  auto collidesAt(const glm::vec3& candidatePosition, const cmp::RigidBody& body) const -> bool;
+  void syncCameraFromPlayer();
+  void configureSaveWorld(const std::string& slotId, bool startFresh);
+  void startWorld(GameMode mode, const std::string& slotId, bool startFresh);
   void updateCamera();
   void processGenJobs();
   void processMeshJobs();
@@ -93,6 +101,7 @@ private:
 
   // Save
   std::unique_ptr<SaveManager> m_saveManager;
+  std::string m_saveDir;
 
   // ECS
   EntityManager m_entityManager{1 << 12};
@@ -106,6 +115,7 @@ private:
   TagStore m_friendlyTags;
 
   SystemManager<Game> m_systems;
+  bool m_spawnedToSurface = false;
   int32_t m_playerEntityId = 0;
 };
 

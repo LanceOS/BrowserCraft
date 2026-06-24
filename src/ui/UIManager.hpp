@@ -1,8 +1,10 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <functional>
 #include <GLFW/glfw3.h>
+#include "game/GameSession.hpp"
 
 namespace voxel {
 
@@ -19,10 +21,10 @@ enum class UIState {
 class UIManager {
 public:
   using Callback = std::function<void()>;
+  using StartWorldCallback = std::function<void(GameMode, const std::string&, bool)>;
 
   struct Callbacks {
-    Callback onStartSurvival;
-    Callback onStartCreative;
+    StartWorldCallback onStartWorld;
     Callback onQuitToTitle;
     Callback onResume;
     Callback onQuit;
@@ -83,6 +85,8 @@ private:
   UIState m_state = UIState::MainMenu;
   bool m_inventoryOpen = false;
   int32_t m_renderDistance = 8;
+  int32_t m_gameModeIndex = 0; // 0 = Survival, 1 = Creative
+  std::array<char, 64> m_slotId{};
   bool m_showDemoWindow = false;
   bool m_initialized = false;
 };

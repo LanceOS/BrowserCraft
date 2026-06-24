@@ -110,7 +110,8 @@ void main() {
   }
 
   vec3 normal = normalize(v_normal);
-  float NdotL = max(dot(normal, u_sunDir), 0.0);
+  vec3 sunDir = normalize(u_sunDir);
+  float NdotL = max(dot(normal, sunDir), 0.0);
   float NdotU = max(dot(normal, vec3(0.0, 1.0, 0.0)), 0.0);
 
   float ambient = 0.05 + 0.15 * NdotU;
@@ -123,7 +124,8 @@ void main() {
   light = mix(0.15, 1.0, light);
 
   albedo.rgb *= light;
-  albedo.rgb *= (1.0 - v_ao * 0.4);
+  float aoFactor = clamp(1.0 - v_ao, 0.0, 1.0);
+  albedo.rgb *= aoFactor;
 
   fragColor.rgb = mix(albedo.rgb, u_fogColor.rgb, v_fogFactor);
   fragColor.a = albedo.a;
@@ -181,7 +183,8 @@ void main() {
   vec3 daySky = mix(daySkyBot, daySkyTop, skyGradient);
   vec3 sky = mix(nightSky, daySky, u_daylight);
 
-  float sunDot = max(dot(viewDir, u_sunDir), 0.0);
+  vec3 sunDir = normalize(u_sunDir);
+  float sunDot = max(dot(viewDir, sunDir), 0.0);
   float sunGlow = pow(sunDot, 600.0) * u_daylight;
 
   fragColor.rgb = sky + sunGlow * vec3(1.0, 0.9, 0.6);
