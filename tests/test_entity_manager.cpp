@@ -49,9 +49,13 @@ TEST_CASE("EntityManager reuses indices with generation bump", "[ecs]") {
 TEST_CASE("EntityManager capacity exhausted", "[ecs]") {
   voxel::EntityManager em(3);
 
-  em.allocate();
-  em.allocate();
-  em.allocate();
+  auto id1 = em.allocate();
+  auto id2 = em.allocate();
+  auto id3 = em.allocate();
+  REQUIRE(id1 != id2);
+  REQUIRE(id2 != id3);
+  REQUIRE(id1 != id3);
+  (void)id1; (void)id2; (void)id3;
 
   REQUIRE_THROWS(em.allocate());
 }
