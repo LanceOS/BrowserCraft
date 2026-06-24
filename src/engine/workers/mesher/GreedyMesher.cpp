@@ -1,4 +1,5 @@
 #include "GreedyMesher.hpp"
+#include "AmbientOcclusion.hpp"
 #include <cstring>
 #include <algorithm>
 #include <new>
@@ -86,11 +87,10 @@ static inline int32_t aoTop(const uint8_t* voxels,
                              const MesherConfig& cfg,
                              const BlockRegistry& blocks) {
   int32_t ly = faceY - 1; // blocks below the face
-  int32_t n = 0;
-  if (isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz)) ++n;
-  return n;
+  bool s1 = isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz);
+  bool s2 = isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz);
+  bool c  = isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz);
+  return calculateAO(s1, s2, c);
 }
 
 static inline int32_t aoBottom(const uint8_t* voxels,
@@ -99,11 +99,10 @@ static inline int32_t aoBottom(const uint8_t* voxels,
                                 const MesherConfig& cfg,
                                 const BlockRegistry& blocks) {
   int32_t ly = faceY + 1; // blocks above the face
-  int32_t n = 0;
-  if (isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz)) ++n;
-  return n;
+  bool s1 = isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz);
+  bool s2 = isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz);
+  bool c  = isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz);
+  return calculateAO(s1, s2, c);
 }
 
 static inline int32_t aoRight(const uint8_t* voxels,
@@ -112,11 +111,10 @@ static inline int32_t aoRight(const uint8_t* voxels,
                                const MesherConfig& cfg,
                                const BlockRegistry& blocks) {
   int32_t lx = faceX - 1;
-  int32_t n = 0;
-  if (isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz)) ++n;
-  return n;
+  bool s1 = isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz);
+  bool s2 = isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz);
+  bool c  = isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz);
+  return calculateAO(s1, s2, c);
 }
 
 static inline int32_t aoLeft(const uint8_t* voxels,
@@ -125,11 +123,10 @@ static inline int32_t aoLeft(const uint8_t* voxels,
                               const MesherConfig& cfg,
                               const BlockRegistry& blocks) {
   int32_t lx = faceX + 1;
-  int32_t n = 0;
-  if (isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz)) ++n;
-  return n;
+  bool s1 = isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz);
+  bool s2 = isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz);
+  bool c  = isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz);
+  return calculateAO(s1, s2, c);
 }
 
 static inline int32_t aoFront(const uint8_t* voxels,
@@ -138,11 +135,10 @@ static inline int32_t aoFront(const uint8_t* voxels,
                                const MesherConfig& cfg,
                                const BlockRegistry& blocks) {
   int32_t lz = faceZ - 1;
-  int32_t n = 0;
-  if (isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz)) ++n;
-  return n;
+  bool s1 = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz);
+  bool s2 = isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz);
+  bool c  = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz);
+  return calculateAO(s1, s2, c);
 }
 
 static inline int32_t aoBack(const uint8_t* voxels,
@@ -151,11 +147,10 @@ static inline int32_t aoBack(const uint8_t* voxels,
                               const MesherConfig& cfg,
                               const BlockRegistry& blocks) {
   int32_t lz = faceZ + 1;
-  int32_t n = 0;
-  if (isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz)) ++n;
-  if (isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz)) ++n;
-  return n;
+  bool s1 = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz);
+  bool s2 = isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz);
+  bool c  = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz);
+  return calculateAO(s1, s2, c);
 }
 
 // ======================================================================
