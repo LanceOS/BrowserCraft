@@ -32,7 +32,22 @@ layout(location = 2) in vec2 a_uv;
 layout(location = 3) in float a_texLayer;
 layout(location = 4) in float a_lightData;
 
-uniform vec3 u_chunkTranslation;
+struct ChunkCullData {
+    vec4 min;
+    vec4 max;
+    uint indexCount;
+    uint firstIndex;
+    uint baseVertex;
+    uint slotIndex;
+    uint pad1;
+    uint pad2;
+    uint pad3;
+    uint pad4;
+};
+
+layout(std430, binding = 0) readonly buffer InputChunks {
+    ChunkCullData chunks[];
+};
 
 out vec2 v_uv;
 out vec3 v_normal;
@@ -43,7 +58,8 @@ out float v_blockLight;
 out float v_ao;
 
 void main() {
-  vec3 worldPos = a_pos + u_chunkTranslation;
+  vec3 chunkTranslation = chunks[gl_InstanceID].min.xyz;
+  vec3 worldPos = a_pos + chunkTranslation;
   vec4 clip = u_projView * vec4(worldPos, 1.0);
   gl_Position = clip;
 
@@ -189,6 +205,90 @@ void main() {
 
   fragColor.rgb = sky + sunGlow * vec3(1.0, 0.9, 0.6);
   fragColor.a = 1.0;
+}
+)glsl";
+
+inline const char* cullingCompute = R"glsl(#version 460 core
+
+layout(local_size_x = 64) in;
+
+struct ChunkCullData {
+    vec4 min;
+    vec4 max;
+    uint indexCount;
+    uint firstIndex;
+    uint baseVertex;
+    uint slotIndex;
+    uint pad1;
+    uint pad2;
+    uint pad3;
+    uint pad4;
+};
+
+struct DrawCommand {
+    uint count;
+    uint instanceCount;
+    uint firstIndex;
+    uint baseVertex;
+    uint baseInstance;
+};
+
+layout(std430, binding = 0) readonly buffer InputChunks {
+    ChunkCullData chunks[];
+};
+
+layout(std430, binding = 1) writeonly buffer OutputCommands {
+    DrawCommand commands[];
+};
+
+uniform mat4 u_projView;
+uniform uint u_maxChunks;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= u_maxChunks) return;
+
+    ChunkCullData chunk = chunks[idx];
+    if (chunk.indexCount == 0) {
+        commands[idx].instanceCount = 0;
+        return;
+    }
+
+    vec4 rowX = vec4(u_projView[0][0], u_projView[1][0], u_projView[2][0], u_projView[3][0]);
+    vec4 rowY = vec4(u_projView[0][1], u_projView[1][1], u_projView[2][1], u_projView[3][1]);
+    vec4 rowZ = vec4(u_projView[0][2], u_projView[1][2], u_projView[2][2], u_projView[3][2]);
+    vec4 rowW = vec4(u_projView[0][3], u_projView[1][3], u_projView[2][3], u_projView[3][3]);
+
+    vec4 planes[6];
+    planes[0] = rowW + rowX; // Left
+    planes[1] = rowW - rowX; // Right
+    planes[2] = rowW + rowY; // Bottom
+    planes[3] = rowW - rowY; // Top
+    planes[4] = rowW + rowZ; // Near
+    planes[5] = rowW - rowZ; // Far
+
+    bool visible = true;
+    for (int i = 0; i < 6; i++) {
+        vec4 p = planes[i];
+        vec3 normal = p.xyz;
+        
+        vec3 pV = vec3(
+            normal.x > 0.0 ? chunk.max.x : chunk.min.x,
+            normal.y > 0.0 ? chunk.max.y : chunk.min.y,
+            normal.z > 0.0 ? chunk.max.z : chunk.min.z
+        );
+        
+        if (dot(normal, pV) + p.w < 0.0) {
+            visible = false;
+            break;
+        }
+    }
+
+    commands[idx].count = chunk.indexCount;
+    commands[idx].instanceCount = visible ? 1 : 0;
+    commands[idx].firstIndex = chunk.firstIndex;
+    commands[idx].baseVertex = chunk.baseVertex;
+    commands[idx].baseInstance = chunk.slotIndex;
 }
 )glsl";
 

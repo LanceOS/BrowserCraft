@@ -57,6 +57,10 @@ using PFN_BufferData = void (*)(GLenum, GLsizeiptr, const void*, GLenum);
 using PFN_BufferSubData = void (*)(GLenum, GLintptr, GLsizeiptr, const void*);
 using PFN_DeleteBuffers = void (*)(GLsizei, const GLuint*);
 using PFN_BindBufferBase = void (*)(GLenum, GLuint, GLuint);
+using PFN_CreateBuffers = void (*)(GLsizei, GLuint*);
+using PFN_NamedBufferStorage = void (*)(GLuint, GLsizeiptr, const void*, GLbitfield);
+using PFN_MapNamedBufferRange = void* (*)(GLuint, GLintptr, GLsizeiptr, GLbitfield);
+using PFN_UnmapNamedBuffer = GLboolean (*)(GLuint);
 
 // Texture
 using PFN_GenTextures = void (*)(GLsizei, GLuint*);
@@ -71,6 +75,12 @@ using PFN_DeleteTextures = void (*)(GLsizei, const GLuint*);
 // Draw
 using PFN_DrawElements = void (*)(GLenum, GLsizei, GLenum, const void*);
 using PFN_DrawArrays = void (*)(GLenum, GLint, GLsizei);
+using PFN_DrawElementsBaseVertex = void (*)(GLenum, GLsizei, GLenum, const void*, GLint);
+using PFN_MultiDrawElementsIndirect = void (*)(GLenum, GLenum, const void*, GLsizei, GLsizei);
+
+// Compute
+using PFN_DispatchCompute = void (*)(GLuint, GLuint, GLuint);
+using PFN_MemoryBarrier = void (*)(GLbitfield);
 
 // State
 using PFN_Enable = void (*)(GLenum);
@@ -116,6 +126,10 @@ extern PFN_BufferData BufferData;
 extern PFN_BufferSubData BufferSubData;
 extern PFN_DeleteBuffers DeleteBuffers;
 extern PFN_BindBufferBase BindBufferBase;
+extern PFN_CreateBuffers CreateBuffers;
+extern PFN_NamedBufferStorage NamedBufferStorage;
+extern PFN_MapNamedBufferRange MapNamedBufferRange;
+extern PFN_UnmapNamedBuffer UnmapNamedBuffer;
 
 extern PFN_GenTextures GenTextures;
 extern PFN_BindTexture BindTexture;
@@ -128,6 +142,11 @@ extern PFN_DeleteTextures DeleteTextures;
 
 extern PFN_DrawElements DrawElements;
 extern PFN_DrawArrays DrawArrays;
+extern PFN_DrawElementsBaseVertex DrawElementsBaseVertex;
+extern PFN_MultiDrawElementsIndirect MultiDrawElementsIndirect;
+
+extern PFN_DispatchCompute DispatchCompute;
+extern PFN_MemoryBarrier MemoryBarrier;
 
 extern PFN_Enable Enable;
 extern PFN_Disable Disable;
@@ -139,5 +158,22 @@ extern PFN_ClearColor ClearColor;
 extern PFN_Viewport Viewport;
 
 void loadGLFunctions();
+
+// GL constants for Compute and Indirect
+#ifndef GL_COMPUTE_SHADER
+#define GL_COMPUTE_SHADER 0x91B9
+#endif
+#ifndef GL_SHADER_STORAGE_BUFFER
+#define GL_SHADER_STORAGE_BUFFER 0x90D2
+#endif
+#ifndef GL_DRAW_INDIRECT_BUFFER
+#define GL_DRAW_INDIRECT_BUFFER 0x8F3F
+#endif
+#ifndef GL_COMMAND_BARRIER_BIT
+#define GL_COMMAND_BARRIER_BIT 0x00000040
+#endif
+#ifndef GL_SHADER_STORAGE_BARRIER_BIT
+#define GL_SHADER_STORAGE_BARRIER_BIT 0x00002000
+#endif
 
 } // namespace voxel::gl

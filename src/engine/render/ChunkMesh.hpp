@@ -1,41 +1,38 @@
 #pragma once
 
-#include "VertexArray.hpp"
-#include "VertexBuffer.hpp"
 #include <cstdint>
+#include <cstddef>
 
 namespace voxel {
 
-/// GPU mesh for one chunk. Owns VAO, VBO, and EBO.
+/// Lightweight struct defining a chunk's position inside a massive persistently mapped VBO/EBO.
 class ChunkMesh {
 public:
-  ChunkMesh();
+  ChunkMesh() = default;
   ~ChunkMesh() = default;
 
-  ChunkMesh(const ChunkMesh&) = delete;
-  ChunkMesh& operator=(const ChunkMesh&) = delete;
-  ChunkMesh(ChunkMesh&&) = default;
-  ChunkMesh& operator=(ChunkMesh&&) = default;
+  void setup(size_t vboOffset, size_t iboOffset, int32_t baseVertex, size_t indexCount) {
+    m_vboOffset = vboOffset;
+    m_iboOffset = iboOffset;
+    m_baseVertex = baseVertex;
+    m_indexCount = indexCount;
+  }
 
-  /// Upload vertex and index data. Sets up vertex attribute pointers.
-  void upload(const float* vertexData, size_t vertexFloats,
-              const uint32_t* indexData, size_t indexCount,
-              int32_t vertexStrideFloats);
-
-  /// Draw the mesh using glDrawElements.
-  void draw() const;
-
+  [[nodiscard]] auto vboOffset() const -> size_t { return m_vboOffset; }
+  [[nodiscard]] auto iboOffset() const -> size_t { return m_iboOffset; }
+  [[nodiscard]] auto baseVertex() const -> int32_t { return m_baseVertex; }
   [[nodiscard]] auto indexCount() const -> size_t { return m_indexCount; }
   [[nodiscard]] auto valid() const -> bool { return m_indexCount > 0; }
 
-  void dispose();
+  void dispose() {
+    m_indexCount = 0;
+  }
 
 private:
-  VertexArray m_vao;
-  VertexBuffer m_vbo{GL_ARRAY_BUFFER};
-  VertexBuffer m_ebo{GL_ELEMENT_ARRAY_BUFFER};
+  size_t m_vboOffset = 0;
+  size_t m_iboOffset = 0;
+  int32_t m_baseVertex = 0;
   size_t m_indexCount = 0;
-  bool m_uploaded = false;
 };
 
 } // namespace voxel
