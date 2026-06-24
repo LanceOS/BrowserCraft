@@ -153,7 +153,12 @@ export class World {
   }
 
   requestRemesh(chunk: Chunk): void {
-    if (chunk.state === "queuedMesh" || chunk.state === "meshing" || chunk.state === "loadingFromDisk") return;
+    if (chunk.state === "loadingFromDisk") return;
+    if (chunk.state === "queuedMesh") return;
+    if (chunk.state === "meshing") {
+      chunk.needsRemesh = true;
+      return;
+    }
     if (
       chunk.state === "generating" ||
       chunk.state === "queuedGen" ||
@@ -206,6 +211,7 @@ export class World {
     slot.redstone.set(redstone);
     Atomics.store(slot.status, 0, ChunkSlotStatus.VOXELS_READY);
     chunk.state = "voxelsReady";
+    chunk.needsRemesh = false;
     this.pendingMesh.push(chunk);
   }
 
@@ -306,6 +312,7 @@ export class World {
     const chunk = this.slotToChunk.get(message.slotIndex);
     if (!chunk) return;
     chunk.state = "voxelsReady";
+    chunk.needsRemesh = false;
     this.saveManager?.markDirty(chunk.chunkX, chunk.chunkZ);
     this.pendingMesh.push(chunk);
   }
@@ -317,6 +324,10 @@ export class World {
     chunk.vertexCount = message.vertexCount;
     chunk.indexCount = message.indexCount;
     chunk.state = message.success ? "meshReady" : "meshFailed";
+    if (chunk.needsRemesh) {
+      chunk.needsRemesh = false;
+      this.requestRemesh(chunk);
+    }
   }
 
   private getBlockId(worldX: number, worldY: number, worldZ: number): number {

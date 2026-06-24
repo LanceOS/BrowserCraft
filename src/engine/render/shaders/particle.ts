@@ -40,6 +40,7 @@ void main() {
 
 export const particleFragmentShaderSource = `#version 300 es
 precision highp float;
+precision highp sampler2DArray;
 
 layout(std140) uniform CameraBlock {
   mat4 u_proj;

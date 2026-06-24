@@ -1,11 +1,12 @@
-import { GameContext, GameState } from "../engine/core/GameState.js";
+import { GameState } from "../engine/core/GameState.js";
+import { GameSession, MAX_RENDER_DISTANCE } from "../game/GameSession.js";
 
 export class UIManager {
   private readonly root: HTMLDivElement;
   private readonly styleEl: HTMLStyleElement;
   private previousState: GameState = GameState.MAIN_MENU;
 
-  constructor() {
+  constructor(private readonly session: GameSession) {
     this.root = document.createElement("div");
     this.root.id = "ui-root";
     document.body.appendChild(this.root);
@@ -82,17 +83,31 @@ export class UIManager {
 
   handleAction(action: string): void {
     switch (action) {
+      case "show-start-menu":
+        this.showGameModeMenu();
+        break;
+      case "start-survival":
+        this.session.startSingleplayer("survival");
+        this.showLoadingScreen("Survival");
+        break;
+      case "start-creative":
+        this.session.startSingleplayer("creative");
+        this.showLoadingScreen("Creative");
+        break;
+      case "back-main-menu":
+        this.showMainMenu();
+        break;
       case "start-singleplayer":
-        GameContext.state = GameState.GENERATING_WORLD;
+        this.session.startSingleplayer("survival");
         this.showLoadingScreen();
         break;
       case "show-options":
-        this.previousState = GameContext.state;
+        this.previousState = this.session.state;
         this.showOptionsMenu(this.previousState);
         break;
       case "save-render-distance": {
         const slider = document.getElementById("rd-slider") as HTMLInputElement | null;
-        if (slider) GameContext.renderDistance = Number.parseInt(slider.value, 10) || GameContext.renderDistance;
+        if (slider) this.session.setRenderDistance(Number.parseInt(slider.value, 10) || this.session.renderDistance);
         if (this.previousState === GameState.PAUSED) {
           this.showPauseMenu();
         } else {
@@ -101,21 +116,18 @@ export class UIManager {
         break;
       }
       case "resume-game":
-        GameContext.state = GameState.IN_GAME;
-        this.clearUI();
+        if (this.session.resume()) this.clearUI();
         break;
       case "quit-to-title":
-        GameContext.state = GameState.MAIN_MENU;
+        this.session.returnToTitle();
         document.exitPointerLock?.();
         this.showMainMenu();
         break;
       case "toggle-pause":
-        if (GameContext.state === GameState.IN_GAME) {
-          GameContext.state = GameState.PAUSED;
+        if (this.session.pause()) {
           document.exitPointerLock?.();
           this.showPauseMenu();
-        } else if (GameContext.state === GameState.PAUSED) {
-          GameContext.state = GameState.IN_GAME;
+        } else if (this.session.resume()) {
           this.clearUI();
         }
         break;
@@ -137,15 +149,29 @@ export class UIManager {
   }
 
   showMainMenu(): void {
-    GameContext.state = GameState.MAIN_MENU;
+    this.session.enterMainMenu();
     this.clearUI();
     this.root.innerHTML = `
       <div class="ui-overlay">
         <div class="ui-panel">
           <div class="ui-title">VOXEL ENGINE (v1.5.2)</div>
-          <button class="ui-btn" data-action="start-singleplayer">Singleplayer</button>
+          <button class="ui-btn" data-action="show-start-menu">Start Game</button>
           <button class="ui-btn" data-action="show-options">Options</button>
           <button class="ui-btn" data-action="quit-game">Quit Game</button>
+        </div>
+      </div>
+    `;
+  }
+
+  showGameModeMenu(): void {
+    this.clearUI();
+    this.root.innerHTML = `
+      <div class="ui-overlay">
+        <div class="ui-panel">
+          <div class="ui-title">Select Mode</div>
+          <button class="ui-btn" data-action="start-survival">Survival</button>
+          <button class="ui-btn" data-action="start-creative">Creative</button>
+          <button class="ui-btn" data-action="back-main-menu">Back</button>
         </div>
       </div>
     `;
@@ -172,14 +198,14 @@ export class UIManager {
       <div class="ui-overlay">
         <div class="ui-panel">
           <div class="ui-title">Options</div>
-          <label class="ui-label">Render Distance: <span id="rd-val">${GameContext.renderDistance}</span> chunks</label>
+          <label class="ui-label">Render Distance: <span id="rd-val">${this.session.renderDistance}</span> chunks</label>
           <input
             class="ui-slider"
             id="rd-slider"
             min="2"
-            max="32"
+            max="${MAX_RENDER_DISTANCE}"
             type="range"
-            value="${GameContext.renderDistance}"
+            value="${this.session.renderDistance}"
           />
           <button class="ui-btn" data-action="save-render-distance">Done</button>
           <button class="ui-btn" data-action="cancel-options">Cancel</button>
@@ -195,21 +221,20 @@ export class UIManager {
     }
   }
 
-  showLoadingScreen(): void {
+  showLoadingScreen(modeLabel = "World"): void {
     this.clearUI();
     this.root.innerHTML = `
       <div class="ui-overlay">
         <div class="ui-panel">
           <div class="ui-title">Generating World...</div>
-          <div>Building Terrain & Structures</div>
+          <div>Preparing ${modeLabel} Mode</div>
         </div>
       </div>
     `;
   }
 
   onWorldReady(): void {
-    if (GameContext.state !== GameState.GENERATING_WORLD) return;
-    GameContext.state = GameState.IN_GAME;
+    if (!this.session.markWorldReady()) return;
     this.clearUI();
   }
 

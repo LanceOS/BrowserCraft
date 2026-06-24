@@ -10,6 +10,7 @@ export class InventoryHud {
   private readonly hotbarSlots: HTMLDivElement[] = [];
   private readonly inventorySlots: HTMLDivElement[] = [];
   private readonly cursorLabel: HTMLDivElement;
+  private readonly hotbar: HTMLDivElement;
   private readonly inventoryPanel: HTMLDivElement;
   private inventoryOpen = false;
 
@@ -32,6 +33,12 @@ export class InventoryHud {
         pointer-events: none;
         font-family: monospace;
         color: #ffffff;
+      }
+      #hud-root[hidden],
+      .hud-hotbar[hidden],
+      .hud-inventory[hidden],
+      .hud-cursor[hidden] {
+        display: none !important;
       }
       .hud-hotbar {
         position: absolute;
@@ -97,14 +104,14 @@ export class InventoryHud {
     `;
     document.head.appendChild(this.styleEl);
 
-    const hotbar = this.root.querySelector("[data-hotbar]") as HTMLDivElement;
+    this.hotbar = this.root.querySelector("[data-hotbar]") as HTMLDivElement;
     this.inventoryPanel = this.root.querySelector("[data-inventory]") as HTMLDivElement;
     this.cursorLabel = this.root.querySelector("[data-cursor]") as HTMLDivElement;
 
     for (let slot = 0; slot < 9; slot++) {
       const el = this.createSlot(slot);
       this.hotbarSlots.push(el);
-      hotbar.appendChild(el);
+      this.hotbar.appendChild(el);
     }
 
     for (let slot = 0; slot < 45; slot++) {
@@ -143,6 +150,8 @@ export class InventoryHud {
     const row = inv.rowFor(playerEntityIndex);
     const visible = gameState === GameState.IN_GAME || gameState === GameState.PAUSED;
     this.root.hidden = !visible;
+    this.hotbar.hidden = !visible;
+    this.inventoryPanel.hidden = !visible || !this.inventoryOpen;
     if (!visible || row === -1) return;
 
     const ids = inv.data.itemIds;

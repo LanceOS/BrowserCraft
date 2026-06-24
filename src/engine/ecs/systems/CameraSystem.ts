@@ -3,10 +3,11 @@ import { PlayerComponentDesc } from "../components/PlayerComponent.js";
 import { TransformDesc } from "../components/Transform.js";
 import { createMat4, invertMat4, lookAtMat4, multiplyMat4, perspectiveMat4 } from "../../math/mat4.js";
 import { createVec3, crossVec3, normalizeVec3 } from "../../math/vec3.js";
+import type { CameraView } from "../../render/CameraView.js";
 
 const WORLD_UP = new Float32Array([0, 1, 0]);
 
-export class CameraSystem {
+export class CameraSystem implements CameraView {
   readonly position = createVec3();
   readonly forward = createVec3(0, 0, -1);
   readonly right = createVec3(1, 0, 0);
@@ -24,15 +25,18 @@ export class CameraSystem {
   constructor(
     private readonly transforms: ComponentStore<typeof TransformDesc>,
     private readonly players: ComponentStore<typeof PlayerComponentDesc>,
-  ) {}
+  ) {
+    perspectiveMat4(this.projectionMatrix, (this.fovDegrees * Math.PI) / 180, this.aspectRatio, 0.1, 1000);
+  }
 
-  resize(aspectRatio: number, fovDegrees: number): void {
+  updateProjection(aspectRatio: number, fovDegrees: number): void {
+    if (this.aspectRatio === aspectRatio && this.fovDegrees === fovDegrees) return;
     this.aspectRatio = aspectRatio;
     this.fovDegrees = fovDegrees;
     perspectiveMat4(this.projectionMatrix, (fovDegrees * Math.PI) / 180, aspectRatio, 0.1, 1000);
   }
 
-  updateMatrices(): void {
+  syncFromPlayer(): void {
     const playerRow = this.players.count > 0 ? this.players.rows().next().value : undefined;
     if (playerRow === undefined) return;
     const entityIndex = this.players.entityAtRow(playerRow);
@@ -61,12 +65,13 @@ export class CameraSystem {
     normalizeVec3(this.right, this.right);
     crossVec3(this.up, this.right, this.forward);
     normalizeVec3(this.up, this.up);
+  }
 
+  updateMatrices(): void {
     this.target[0] = this.position[0] + this.forward[0];
     this.target[1] = this.position[1] + this.forward[1];
     this.target[2] = this.position[2] + this.forward[2];
     lookAtMat4(this.viewMatrix, this.position, this.target, this.up);
-    perspectiveMat4(this.projectionMatrix, (this.fovDegrees * Math.PI) / 180, this.aspectRatio, 0.1, 1000);
     multiplyMat4(this.viewProjectionMatrix, this.projectionMatrix, this.viewMatrix);
     invertMat4(this.inverseViewProjectionMatrix, this.viewProjectionMatrix);
   }

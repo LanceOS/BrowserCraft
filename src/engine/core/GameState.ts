@@ -5,9 +5,3 @@ export const enum GameState {
   IN_GAME,
   PAUSED,
 }
-
-export const GameContext = {
-  state: GameState.BOOTING,
-  worldSeed: 1337,
-  renderDistance: 2,
-};

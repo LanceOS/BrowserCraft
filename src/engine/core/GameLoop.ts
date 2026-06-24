@@ -1,6 +1,7 @@
-import { GameContext, GameState } from "./GameState.js";
+import { GameState } from "./GameState.js";
 import { InputState } from "./InputState.js";
 import { UIManager } from "../../ui/UIManager.js";
+import { GameSession } from "../../game/GameSession.js";
 
 export class GameLoop {
   private readonly fixedStep: number;
@@ -17,6 +18,7 @@ export class GameLoop {
     targetFps: number,
     private readonly ui: UIManager,
     private readonly input: InputState,
+    private readonly session: GameSession,
     private readonly update: (dt: number) => void,
     private readonly render: (alpha: number, timeSeconds: number) => void,
   ) {
@@ -48,8 +50,8 @@ export class GameLoop {
     this.lastTime = time;
     frameDt = Math.min(frameDt, 0.1);
     const updatesEnabled =
-      GameContext.state === GameState.IN_GAME ||
-      GameContext.state === GameState.GENERATING_WORLD;
+      this.session.state === GameState.IN_GAME ||
+      this.session.state === GameState.GENERATING_WORLD;
 
     if (updatesEnabled) {
       this.accumulator += frameDt;

@@ -1,9 +1,15 @@
-import { GameContext, GameState } from "../engine/core/GameState.js";
+import { GameState } from "../engine/core/GameState.js";
 import { InputState } from "../engine/core/InputState.js";
+import { GameSession } from "./GameSession.js";
 
-export function bootstrapPlayerControls(canvas: HTMLCanvasElement, input: InputState): () => void {
+export function bootstrapPlayerControls(
+  canvas: HTMLCanvasElement,
+  input: InputState,
+  session: GameSession,
+  onToggleInventory: () => boolean,
+): () => void {
   const onCanvasClick = (): void => {
-    if (GameContext.state !== GameState.IN_GAME) return;
+    if (session.state !== GameState.IN_GAME) return;
     if (!input.pointerLocked) void canvas.requestPointerLock();
   };
 
@@ -18,7 +24,18 @@ export function bootstrapPlayerControls(canvas: HTMLCanvasElement, input: InputS
     input.mouseDelta[1] += event.movementY;
   };
 
-  const onKeyDown = (event: KeyboardEvent): void => input.setKey(event.code, true);
+  const onKeyDown = (event: KeyboardEvent): void => {
+    input.setKey(event.code, true);
+    if (event.code === "KeyE" && !event.repeat && session.state === GameState.IN_GAME) {
+      const inventoryOpen = onToggleInventory();
+      if (inventoryOpen) {
+        document.exitPointerLock?.();
+        input.clearMovementState();
+      } else {
+        void canvas.requestPointerLock();
+      }
+    }
+  };
   const onKeyUp = (event: KeyboardEvent): void => input.setKey(event.code, false);
   const onMouseDown = (event: MouseEvent): void => input.setMouseButton(event.button, true);
   const onMouseUp = (event: MouseEvent): void => input.setMouseButton(event.button, false);
