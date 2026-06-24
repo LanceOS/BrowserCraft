@@ -1,7 +1,7 @@
 # Implementation Architecture — Clean Code, Design Patterns & Performance
 
-**Version:** 1.0  
-**Scope:** How to implement the RPG, items, flora, stats, character, and transformation systems with clean, decoupled, maintainable, and high-performance code. Design patterns, dependency injection, composition root, avoiding technical debt, profiling-guided optimization.
+**Version:** 2.0 (C++ Port)  
+**Scope:** How to implement the engine, items, flora, stats, character, and transformation systems with clean, decoupled, maintainable, and high-performance C++ code. Design patterns, dependency injection, composition root, avoiding technical debt, profiling-guided optimization.
 
 ---
 
@@ -14,15 +14,16 @@
 3. **Names reveal intent.** `consumeIngredients()` not `processInputs()`. `xpForLevel()` not `calcLvl()`.
 4. **Functions do one thing.** `computeAllStats()` calls six category functions. Each category function does one category. No function exceeds 30 lines.
 5. **No premature abstraction.** Do not extract an interface until there are two concrete implementations. Do not build a plugin system for one plugin.
-6. **Fail fast, fail visibly.** Validate all registry lookups at startup. Throw descriptive errors with context (`Unknown species 42`), not generic `undefined`.
+6. **Fail fast, fail visibly.** Validate all registry lookups at startup. Throw descriptive errors with context (`Unknown species 42`), not generic `nullptr` or -1.
+7. **RAII everywhere.** Resources are owned by objects that release them in destructors. No manual `delete`, no raw `new` outside factories.
 
 ### 1.2 Performance Tenets
 
-1. **Zero GC pressure on hot paths.** No allocations in update loops, per-frame logic, or physics. Pre-allocate everything.
-2. **Flat arrays over objects.** `SoA TypedArray` storage is not optional — it is mandatory for any component that more than one system touches per frame.
+1. **Zero allocations on hot paths.** No `std::vector::push_back` in update loops, physics, or per-frame logic. Pre-allocate everything.
+2. **SoA storage over AoS.** `ComponentStore<T>` with dense/sparse arrays is mandatory for any component that more than one system touches per frame.
 3. **Branchless where possible.** Use bitwise tricks, precomputed lookup tables, and arithmetic over conditionals in inner loops.
-4. **Data-oriented iteration.** Systems iterate component arrays, not entity lists. The `rowsWithAll()` query finds the smallest component store and iterates that, yielding pointer-compatible cache lines.
-5. **Worker isolation.** Expensive computations (worldgen, meshing, pathfinding) live in workers. The main thread never blocks on them.
+4. **Data-oriented iteration.** Systems iterate component rows, not entity lists. The `queryEntities()` function finds the smallest component store and iterates that, yielding contiguous cache lines.
+5. **Worker thread isolation.** Expensive computations (worldgen, meshing) run on `WorkerThreadPool`. The main thread never blocks on them.
 6. **Measure, don't guess.** Every optimization must be justified by a profile. Never optimize a path that accounts for <5% of frame time.
 
 ### 1.3 Technical Debt Prevention
@@ -31,7 +32,7 @@
 2. **No cyclic dependencies.** `src/content/` never imports from `src/engine/systems/`. Systems depend on components, components depend on nothing.
 3. **Dead code is deleted, not commented out.** If a feature is postponed, remove the code. Git history preserves it.
 4. **Tests accompany every registry and formula.** `xpForLevel()` has a test for level 1, 2, 10, 50, 100. `computeCombatStats()` has a test with known input/output pairs.
-5. **Lint rules enforce the architecture.** `no-restricted-imports` prevents `content` from importing `engine/systems`. `max-lines-per-function` caps at 30.
+5. **Header hygiene.** `.hpp` files should expose only public interfaces. Implementation details go in `.cpp` files or anonymous namespaces.
 
 ---
 
@@ -39,75 +40,48 @@
 
 ### 2.1 Composition Root (Dependency Injection Without a Framework)
 
-All object wiring happens in exactly one place: the `Game` constructor (or an `Application` class for the RPG layer). There is no dependency injection container, no service locator, no global singleton.
+All object wiring happens in exactly one place: the `Game` constructor in `src/game/Game.hpp`. There is no dependency injection container, no service locator, no global singleton.
 
-```typescript
-// /src/game/Game.ts — Composition Root (conceptual RPG extension)
+```cpp
+// src/game/Game.cpp — Composition Root (conceptual C++ extension)
 
-export class Game {
-  constructor(config: GameConfig, canvas: HTMLCanvasElement) {
-    // 1. Infrastructure — no business logic
-    const blocks = new BlockRegistry(4096);
-    new VanillaBlockFactory().registerAll(blocks);
-    
-    const pool = SharedPool.create(/* ... */);
-    const workers = spawnWorkers(/* ... */);
-    const world = new World(pool, workers, blocks, config);
-    const renderer = new Renderer(gl, blocks, config);
+Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
+  : m_window(window), m_config(config),
+    m_session(config.renderDistance),
+    m_blocks(4096),
+    m_worldGenPipeline(config.worldSeed),
+    m_transforms(m_entityManager.capacity()),
+    m_bodies(m_entityManager.capacity()),
+    m_players(m_entityManager.capacity())
+{
+  // 1. Infrastructure — no business logic
+  registerVanillaBlocks(m_blocks);
 
-    // 2. Content registries — data definitions
-    const itemRegistry = createDefaultItemRegistry(blocks);
-    const floraRegistry = createDefaultFloraRegistry(blocks);
-    const classRegistry = new ClassRegistry();
-    const speciesRegistry = new SpeciesRegistry();
-    const backgroundRegistry = new BackgroundRegistry();
-    const processRegistry = createDefaultProcessRegistry(itemRegistry);
-    const questRegistry = new QuestRegistry();
-    const spellRegistry = new SpellRegistry();
+  int32_t poolCap = ...;
+  m_pool = SharedPool::create(poolCap, makeDims(config));
+  m_world.reset(new World(...));
+  m_renderer = std::make_unique<Renderer>(window, m_blocks, config);
 
-    // 3. ECS — entities are just IDs
-    const em = new EntityManager(1 << 12);
-    const transforms = new ComponentStore(TransformDesc, em.capacity);
-    const bodies = new ComponentStore(RigidBodyDesc, em.capacity);
-    const characters = new ComponentStore(CharacterDesc, em.capacity);
-    const inventories = new ComponentStore(InventoryComponentDesc, em.capacity);
-    const health = new ComponentStore(HealthDesc, em.capacity);
-    // ... more components
+  // 2. Content registries — data definitions
+  ItemRegistry itemRegistry;
+  FloraRegistry floraRegistry;
+  ClassRegistry classRegistry;
+  SpeciesRegistry speciesRegistry;
 
-    // 4. Factories — assemble entities from data
-    const characterFactory = new CharacterFactoryImpl(
-      em, characters, speciesRegistry, classRegistry, backgroundRegistry,
-    );
-    const mobFactory = new EnhancedMobFactory(
-      em, transforms, bodies, health, /* ... */, itemRegistry,
-    );
+  // 3. ECS — entities are just IDs
+  EntityManager em{1 << 12};
+  ComponentStore<cmp::Transform> transforms(em.capacity());
+  ComponentStore<cmp::RigidBody> bodies(em.capacity());
+  ComponentStore<cmp::Health> health(em.capacity());
 
-    // 5. Systems — operate on components
-    const physics = new PhysicsSystem(em, transforms, bodies, world);
-    const leveling = new LevelingSystem(characters);
-    const casting = new SpellCastingSystem(characters, spellRegistry);
-    const processExec = new ProcessExecutionSystem(processRegistry, inventories, /* ... */);
-    const cropGrowth = new CropGrowthSystem(world, floraRegistry);
-    const reputation = new ReputationSystem(characters, factionRegistry);
-    const questTracking = new QuestTrackingSystem(characters, questRegistry);
+  // 4. Factories — assemble entities from data
+  EnhancedMobFactory mobFactory(em, transforms, bodies, health, /*...*/);
 
-    const systems = new SystemManager<Game>();
-    systems.add(physics);
-    systems.add(leveling);
-    systems.add(casting);
-    systems.add(processExec);
-    systems.add(cropGrowth);
-    systems.add(reputation);
-    systems.add(questTracking);
-    // Systems added in dependency order — SystemManager sorts by stage
-
-    // 6. Store references needed at runtime
-    this.world = world;
-    this.renderer = renderer;
-    this.systems = systems;
-    this.characterFactory = characterFactory;
-    // ... no other references — everything is wired
-  }
+  // 5. Systems — operate on components
+  SystemManager<Game> systems;
+  systems.add(std::make_unique<PhysicsSystem>(em, transforms, bodies, *m_world));
+  systems.add(std::make_unique<CropGrowthSystem>(*m_world, floraRegistry));
+  // Systems added in dependency order — SystemManager sorts by stage
 }
 ```
 
@@ -125,15 +99,15 @@ Used wherever a family of related objects needs to be created without specifying
 │ CharacterFactory    │────▶│ CharacterFactoryImpl     │
 │ (interface)         │     │  - composes species/     │
 │  createCharacter()  │     │    class/background      │
-│  rollRandomParams() │     │  - writes SoA directly   │
+│  rollRandomParams() │     │  - writes components     │
 └─────────────────────┘     └──────────────────────────┘
                                     │
                     ┌───────────────┼───────────────┐
                     ▼               ▼               ▼
           ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-          │ SpeciesRegistry │  │ ClassRegistry │  │ BackgroundReg. │
-          │  (data)         │  │  (data)       │  │  (data)        │
-          └─────────────────┘  └───────────────┘  └─────────────────┘
+          │ SpeciesReg.  │  │ ClassReg.   │  │ BkgdReg.    │
+          │  (data)      │  │  (data)     │  │  (data)     │
+          └───────────────┘  └─────────────┘  └─────────────┘
 ```
 
 Each registry is a plain data map loaded at startup. Factories are stateless — they compose data from registries and write into components.
@@ -141,14 +115,14 @@ Each registry is a plain data map loaded at startup. Factories are stateless —
 **Why this avoids technical debt:**
 - Adding a new species, class, or background requires zero new code — only new data entries.
 - The factory interface allows swapping implementations (e.g., a `DebugCharacterFactory` for testing).
-- No switch statements on type — the `ClassRegistry.get()` lookup is O(1).
+- No switch statements on type — the `ClassRegistry::get()` lookup is O(1).
 
 ### 2.3 Strategy Pattern (Stateless Computations)
 
 Stat formulas use the Strategy pattern internally: each derived stat category is a pure function that can be tested, replaced, or composed independently.
 
-```typescript
-// /src/content/stats/StatFormulas.ts
+```cpp
+// /src/content/stats/StatFormulas.hpp
 
 // Each category is a pure function — same inputs always produce same outputs.
 // No state. No side effects. No allocations.
@@ -180,63 +154,34 @@ registerStatCategory("magic", computeMagicStats);
 
 Systems communicate significant events through a typed event bus. This prevents direct coupling between systems.
 
-```typescript
-// /src/engine/core/EventBus.ts — Already exists in the codebase.
+```cpp
+// src/engine/core/EventBus.hpp — Type-erased event bus (already exists)
 
-// Define the event contract at the composition root level:
-export interface GameEvents {
-  'character.levelUp': { entityIndex: number; newLevel: number; stats: CharacterStats };
-  'item.crafted': { entityIndex: number; recipeId: string; outputItemId: number };
-  'block.broken': { worldX: number; worldY: number; worldZ: number; blockId: number; toolId?: number };
-  'quest.completed': { entityIndex: number; questId: number; rewards: QuestReward[] };
-  'mob.killed': { killerEntityIndex: number; targetEntityIndex: number; xpValue: number };
-  'spell.cast': { entityIndex: number; spellId: number; manaCost: number };
-  'reputation.changed': { entityIndex: number; factionId: number; oldValue: number; newValue: number };
-}
+// Events are plain structs forwarded to listeners:
+struct LevelUpEvent {
+  int32_t entityIndex;
+  int32_t newLevel;
+  // ...
+};
 
 // Usage in systems:
-export class LevelingSystem {
-  constructor(
-    private readonly characters: ComponentStore<typeof CharacterDesc>,
-    private readonly eventBus: EventBus<GameEvents>,
-  ) {}
+class LevelingSystem {
+public:
+  LevelingSystem(ComponentStore<cmp::Character>& characters, EventBus& eventBus)
+    : m_characters(characters), m_eventBus(eventBus) {}
 
-  addExperience(entityIndex: number, amount: number): void {
-    const row = this.characters.rowFor(entityIndex);
-    if (row === -1) return;
-    
-    const result = LevelingSystem.addExperience(
-      this.characters.data.experience[row],
-      this.characters.data.level[row],
-      amount,
-    );
-
-    this.characters.data.experience[row] = result.newXp;
-    
-    if (result.leveledUp) {
-      this.characters.data.level[row] = result.newLevel;
-      // Recompute derived stats
-      // Emit event so other systems react (quest tracking, UI, etc.)
-      this.eventBus.emit('character.levelUp', {
-        entityIndex,
-        newLevel: result.newLevel,
-        stats: this.characters.data,
-      });
-    }
+  void addExperience(int32_t entityIndex, float amount) {
+    auto* row = m_characters.tryGet(entityIndex);
+    if (!row) return;
+    row->experience += amount;
+    // Emit event so other systems react
+    m_eventBus.emit(LevelUpEvent{entityIndex, row->level});
   }
-}
 
-// Other systems listen without knowing about LevelingSystem:
-export class QuestTrackingSystem {
-  constructor(eventBus: EventBus<GameEvents>) {
-    eventBus.on('mob.killed', (payload) => {
-      this.progressKillObjectives(payload.killerEntityIndex, payload.targetEntityIndex);
-    });
-    eventBus.on('item.crafted', (payload) => {
-      this.progressCraftObjectives(payload.entityIndex, payload.outputItemId);
-    });
-  }
-}
+private:
+  ComponentStore<cmp::Character>& m_characters;
+  EventBus& m_eventBus;
+};
 ```
 
 **Why this avoids technical debt:**
@@ -248,69 +193,20 @@ export class QuestTrackingSystem {
 
 The existing `ComponentStore` with SoA TypedArrays is the cornerstone of performance. The RPG systems extend this pattern:
 
-```typescript
-// CORRECT — SoA TypedArray, iteration is cache-friendly
-export function updateManaRegen(characters: ComponentStore<typeof CharacterDesc>): void {
-  const mana = characters.data.mana;
-  const maxMana = characters.data.maxMana;
-  const manaRegen = characters.data.manaRegen;
-
-  for (const row of characters.rows()) {
-    // Sequential memory access — CPU prefetcher loves this
-    mana[row] = Math.min(maxMana[row], mana[row] + manaRegen[row] * dt);
-  }
+```cpp
+// CORRECT — SoA via ComponentStore<T>, iteration is cache-friendly
+void updateManaRegen(ComponentStore<cmp::Character>& characters, float dt) {
+  characters.forEach([](int32_t, int32_t, cmp::Character& c) {
+    c.mana = std::min(c.maxMana, c.mana + c.manaRegen * dt);
+  });
 }
-
-// WRONG — AoS object array, cache misses per entity
-// for (const entity of entities) {
-//   entity.mana = Math.min(entity.maxMana, entity.mana + entity.manaRegen * dt);
-// }
 ```
 
 ### 2.6 Command Pattern (Inventory & Process Actions)
 
 Player actions (craft, smelt, repair, move item) are modeled as command objects. This enables undo, replay, and network synchronization.
 
-```typescript
-// /src/game/commands/CommandTypes.ts
-
-export interface GameCommand {
-  readonly type: string;
-  readonly timestamp: number;
-  readonly playerEntityIndex: number;
-  execute(): boolean;
-  undo?(): void;
-}
-
-export class CraftCommand implements GameCommand {
-  readonly type = "craft";
-  readonly timestamp: number;
-
-  constructor(
-    readonly playerEntityIndex: number,
-    readonly processId: string,
-    private readonly processSystem: ProcessExecutionSystem,
-    private readonly eventBus: EventBus<GameEvents>,
-  ) {
-    this.timestamp = performance.now();
-  }
-
-  execute(): boolean {
-    const success = this.processSystem.executeById(
-      this.processId,
-      this.playerEntityIndex,
-    );
-    if (success) {
-      this.eventBus.emit('item.crafted', {
-        entityIndex: this.playerEntityIndex,
-        recipeId: this.processId,
-        outputItemId: /* lookup from process registry */,
-      });
-    }
-    return success;
-  }
-}
-```
+Commands are function objects in C++ — see the original design doc for concepts.
 
 **Why this avoids technical debt:**
 - Commands can be serialized for replay debugging.
@@ -336,7 +232,7 @@ src/
 │
 ├── world/               ← NO imports from game/ or content/
 │   ├── blocks/          ← Data definitions, no logic
-│   └── Chunk.ts, World.ts, BlockRegistry.ts
+│   └── Chunk.hpp, World.hpp, BlockRegistry.hpp
 │
 ├── content/             ← Imports from engine/ and world/ only
 │   ├── items/           ← Item definitions, factories
@@ -352,7 +248,7 @@ src/
 │   └── loot/            ← Loot table definitions
 │
 ├── game/                ← Imports everything (composition root)
-│   ├── Game.ts          ← Only file that wires all systems together
+│   ├── Game.cpp         ← Only file that wires all systems together (composition root)
 │   ├── inventory/       ← Inventory interaction logic
 │   └── commands/        ← Command pattern implementations
 │
@@ -361,7 +257,7 @@ src/
 │   ├── station/         ← Crafting station screens
 │   └── hud/             ← HUD elements
 │
-└── main.ts              ← Bootstrap, imports Game
+└── main.cpp             ← Bootstrap, creates Game
 ```
 
 ### 3.2 What Breaks If You Import Wrong
@@ -484,7 +380,7 @@ function getInnateAbility(speciesId: SpeciesId): readonly number[] {
 For incomplete features, use feature flags rather than commented-out code or unfinished implementations:
 
 ```typescript
-// /src/engine/core/FeatureFlags.ts
+// /src/engine/core/Config.hpp
 
 export const FEATURE_FLAGS = {
   /** Enable the spell casting system (WIP). */
@@ -511,7 +407,7 @@ When the feature is complete, remove the flag and the dead branch. Never leave a
 ### 4.4 Defensive Registry Access
 
 ```typescript
-// /src/content/classes/ClassRegistry.ts
+// /src/content/classes/ClassRegistry.hpp
 
 export class ClassRegistry {
   private readonly classes = new Map<number, ClassDefinition>();
@@ -616,7 +512,7 @@ Cold Path (on event, <50ms):
 For any formula used more than 100 times per second, precompute a lookup table at startup:
 
 ```typescript
-// /src/content/stats/XpLookup.ts
+// /src/content/stats/XpLookup.hpp
 
 /**
  * XP table is computed once at startup and reused for the entire session.
@@ -668,7 +564,7 @@ export const XP_LOOKUP = new XpLookup(999);
 Every system emits timing data that can be toggled at runtime:
 
 ```typescript
-// /src/engine/core/Profiler.ts
+// /src/engine/core/Profiler.hpp
 
 export class Profiler {
   private readonly timings = new Map<string, number[]>();
@@ -727,7 +623,7 @@ export class PhysicsSystem {
 ### 6.1 Good: Stateless Pure Function
 
 ```typescript
-// /src/content/stats/DiminishedValue.ts
+// /src/content/stats/DiminishedValue.hpp
 // Pure function: same inputs, same outputs. No side effects. No state.
 // Testable in isolation. Cacheable. Parallelizable.
 
@@ -740,7 +636,7 @@ export function diminish(rawValue: number, softCap: number = 30): number {
 ### 6.2 Good: Single Responsibility System
 
 ```typescript
-// /src/engine/ecs/systems/ManaRegenSystem.ts
+// /src/engine/ecs/systems/ManaRegenSystem.hpp
 // Does exactly one thing: tick mana regen for all characters.
 // Does not touch HP, stamina, or anything else.
 
@@ -800,7 +696,7 @@ SaveManager             → persistence (separate from update loop entirely)
 ### 6.4 Good: Defensive Copy for Public APIs
 
 ```typescript
-// /src/content/classes/ClassRegistry.ts
+// /src/content/classes/ClassRegistry.hpp
 
 export class ClassRegistry {
   private readonly classes = new Map<number, ClassDefinition>();
@@ -821,7 +717,7 @@ export class ClassRegistry {
 ### 6.5 Good: Small, Focused Interfaces
 
 ```typescript
-// /src/content/flora/FloraTypes.ts
+// /src/content/flora/FloraTypes.hpp
 
 // Each interface captures exactly one concern
 export interface LightRequirements {
@@ -860,7 +756,7 @@ export interface FloraProperties {
 ## 7. Implementation Roadmap — Debt-Free Ordering
 
 ### Phase 1: Foundation (No game logic yet)
-1. `StatFormulas.ts` — pure functions, zero dependencies, fully tested
+1. `StatFormulas.hpp` — pure functions, zero dependencies, fully tested
 2. `ClassRegistry`, `SpeciesRegistry`, `BackgroundRegistry` — data definitions
 3. `CharacterDesc` component — SoA TypedArray, extends existing ECS
 4. `CharacterFactoryImpl` — assembles entities from registries
@@ -910,44 +806,13 @@ export interface FloraProperties {
 
 ### 8.2 Testing Patterns
 
-```typescript
-// /tests/stat-system.test.ts — Pure function test
-describe('diminish()', () => {
-  it('returns same value below soft cap', () => {
-    expect(diminish(10)).toBe(10);
-    expect(diminish(30)).toBe(30);
-  });
-
-  it('applies diminishing returns above soft cap', () => {
-    expect(diminish(40)).toBeCloseTo(36, 0); // 30 + 10 * (30/40) = 37.5, let's compute: 30 + 10 * 30/(10+30) = 30 + 10*30/40 = 30 + 7.5 = 37.5
-    expect(diminish(80)).toBeLessThan(60);    // asymptotically approaches 60
-    expect(diminish(1000)).toBeLessThan(60);
-  });
-});
-
-// /tests/character-factory.test.ts — Factory integration test
-describe('CharacterFactoryImpl', () => {
-  it('creates a level 5 warrior elf with correct stats', () => {
-    const em = new EntityManager(100);
-    const store = new ComponentStore(CharacterDesc, 100);
-    const factory = new CharacterFactoryImpl(em, store, speciesRegistry, classRegistry, backgroundRegistry);
-
-    const result = factory.createCharacter({
-      characterName: 'TestElf',
-      speciesId: SpeciesId.ELF,
-      classId: ClassId.WARRIOR,
-      backgroundId: BackgroundId.SOLDIER,
-      level: 5,
-      appearance: defaultAppearance(),
-    });
-
-    const row = store.rowFor(result.entityIndex);
-    expect(store.data.level[row]).toBe(5);
-    expect(store.data.baseStrength[row]).toBeGreaterThan(10);
-    expect(store.data.baseDexterity[row]).toBeGreaterThan(store.data.baseIntelligence[row]);
-    expect(store.data.speciesId[row]).toBe(SpeciesId.ELF);
-  });
-});
+```cpp
+// tests/test_stat_system.cpp — Catch2 test
+TEST_CASE("xpForLevel produces correct values", "[stats]") {
+  REQUIRE(xpForLevel(1) == 0);
+  REQUIRE(xpForLevel(2) == 100);
+  REQUIRE(xpForLevel(10) == 4500);
+}
 ```
 
 ---
@@ -956,9 +821,9 @@ describe('CharacterFactoryImpl', () => {
 
 | Pattern | Where Used | Why |
 |:--------|:-----------|:----|
-| **Composition Root** | `Game.ts` | Single place where all objects are wired. No DI container needed. |
+| **Composition Root** | `Game.cpp` | Single place where all objects are wired. No DI container needed. |
 | **Abstract Factory** | `CharacterFactory`, `MobFactory`, `ItemFactory` | Encapsulates complex object creation. Swap implementations for testing. |
-| **Strategy** | `StatFormulas.ts` category functions | Each formula is independently testable and replaceable. |
+| **Strategy** | `StatFormulas.hpp` category functions | Each formula is independently testable and replaceable. |
 | **Observer (EventBus)** | Cross-system communication | `QuestTrackingSystem` listens to `mob.killed` without knowing about combat. |
 | **Command** | `CraftCommand`, `MoveItemCommand` | Enables undo, replay, network replication. |
 | **Data-Oriented ECS** | All `ComponentStore` usage | Cache-friendly iteration. Zero GC pressure. |
@@ -971,37 +836,27 @@ describe('CharacterFactoryImpl', () => {
 
 ## 10. Enforcement Tools
 
-```jsonc
-// .eslintrc.json — Architecture enforcement
-{
-  "rules": {
-    "max-lines-per-function": ["warn", 30],
-    "max-params": ["error", 4],
-    "no-switch-case-fall-through": "error",
-    "no-else-return": "error",
-    "prefer-const": "error",
-    "no-restricted-imports": [
-      "error",
-      {
-        "patterns": [
-          { "group": ["src/game/*"], "from": "src/engine/*", "message": "Engine must not import game." },
-          { "group": ["src/content/*"], "from": "src/engine/*", "message": "Engine must not import content." },
-          { "group": ["src/engine/ecs/systems/*"], "from": "src/engine/ecs/components/*", "message": "Components must not import systems." }
-        ]
-      }
-    ]
-  }
-}
+```cmake
+# CMakeLists.txt — Compiler warnings enforce architecture
+target_compile_options(voxel_app PRIVATE
+  -Wall -Wextra -Wpedantic
+  -Werror=shadow -Werror=return-type
+  -Wno-unused-parameter
+)
+
+# Layer enforcement is manual (code review), but the directory layout
+# mirrors the TypeScript original — engine/ never includes from game/ or content/
 ```
 
-```jsonc
-// tsconfig.json — Strict mode prevents common debt patterns
-{
-  "compilerOptions": {
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
+```cmake
+# CMakeLists.txt — Strict compiler flags prevent common debt patterns
+target_compile_options(voxel_app PRIVATE
+  -Wall -Wextra -Wpedantic
+  -Werror=return-type -Werror=unused-result
+  $<$<CONFIG:Release>:-O2 -DNDEBUG>
+  $<$<CONFIG:Debug>:-g -O0 -DDEBUG>
+)
+target_compile_features(voxel_app PRIVATE cxx_std_20)
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true

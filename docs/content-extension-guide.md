@@ -4,11 +4,11 @@ This guide explains how to extend the content that exists in the current codebas
 
 The main extension surfaces are:
 
-- blocks via [`src/world/BlockFactory.ts`](../src/world/BlockFactory.ts)
-- recipes via [`src/content/crafting/CraftingRegistry.ts`](../src/content/crafting/CraftingRegistry.ts)
-- structures via [`src/content/structures/StructureRegistry.ts`](../src/content/structures/StructureRegistry.ts)
-- biomes via [`src/engine/workers/worldgen/BiomeSampler.ts`](../src/engine/workers/worldgen/BiomeSampler.ts)
-- mobs via [`src/content/mobs/MobFactory.ts`](../src/content/mobs/MobFactory.ts)
+- blocks via [`cpp-voxel/src/game/Game.cpp`](../cpp-voxel/src/game/Game.cpp) (registered inline)
+- recipes via [`cpp-voxel/src/content/crafting/CraftingRegistry.hpp`](../cpp-voxel/src/content/crafting/CraftingRegistry.hpp)
+- structures via (to be ported)
+- biomes via [`cpp-voxel/src/content/biomes/BiomeData.hpp`](../cpp-voxel/src/content/biomes/BiomeData.hpp)
+- mobs via [`cpp-voxel/src/content/mobs/MobFactory.hpp`](../cpp-voxel/src/content/mobs/MobFactory.hpp)
 
 ## Before You Add Content
 
@@ -25,7 +25,7 @@ If you add new content, update the code path that the runtime actually uses.
 
 ## Adding A Block
 
-Current block definitions live in [`VanillaBlockFactory`](../src/world/BlockFactory.ts), which registers `BlockDefinition` objects into [`BlockRegistry`](../src/world/BlockRegistry.ts).
+Current block definitions are registered in [`Game.cpp`](../cpp-voxel/src/game/Game.cpp) (blocks registered inline), which registers `BlockDefinition` objects.
 
 ### Block Definition Shape
 
@@ -37,13 +37,13 @@ A block definition needs:
 - `material`
 - `collision`
 
-The data shape lives in [`src/world/blocks/BlockDefinition.ts`](../src/world/blocks/BlockDefinition.ts).
+The data shape lives in [`cpp-voxel/src/world/BlockDefinition.hpp`](../cpp-voxel/src/world/BlockDefinition.hpp).
 
 ### Steps
 
 1. Pick a new block ID that does not collide with an existing registration in `VanillaBlockFactory`.
-2. Add or reuse a texture layer in [`src/world/blocks/TextureLayers.ts`](../src/world/blocks/TextureLayers.ts).
-3. Add a matching texture source in [`Renderer`](../src/engine/render/Renderer.ts) if the new texture layer is brand new.
+2. Add or reuse a texture layer in [`cpp-voxel/src/world/BlockDefinition.hpp`](../cpp-voxel/src/world/BlockDefinition.hpp).
+3. Add a matching texture source in [`Renderer`](../cpp-voxel/src/engine/render/Renderer.hpp) if the new texture layer is brand new.
 4. Register the block in `VanillaBlockFactory`.
 5. Set the right material flags:
    - `opaque`
@@ -70,7 +70,7 @@ External texture assets are not wired yet. Texture layers are currently synthesi
 
 ## Adding A Recipe
 
-Recipes are registered in [`createDefaultCraftingRegistry()`](../src/content/crafting/CraftingRegistry.ts).
+Recipes are registered in [`CraftingRegistry`](../cpp-voxel/src/content/crafting/CraftingRegistry.hpp).
 
 There are two recipe types:
 
@@ -109,11 +109,11 @@ The player crafting grid is 2x2, stored in inventory slots `40..43`, with output
 
 If you add a recipe, add or update tests in:
 
-- [`tests/crafting-system.test.mjs`](../tests/crafting-system.test.mjs)
+- [`cpp-voxel/tests/`](../cpp-voxel/tests/) (C++ test files)
 
 ## Adding A Structure
 
-Structures are currently created inside [`StructureFactory`](../src/content/structures/StructureRegistry.ts).
+Structures are currently created inside `StructureFactory` (to be ported).
 
 The runtime path is:
 
@@ -138,7 +138,7 @@ Each structure is created from raw packed block tuples:
 2. Build a `rawBlocks` array using repeated `(x, y, z, blockId)` entries.
 3. Call `createBlueprint(id, sizeX, sizeY, sizeZ, rawBlocks)`.
 4. Register the blueprint in `this.blueprints`.
-5. If needed, update the planner logic in [`VillagePlanner`](../src/content/structures/VillagePlanner.ts) so the new blueprint is selected under the right conditions.
+5. If needed, update the planner logic in `VillagePlanner` (to be ported) so the new blueprint is selected under the right conditions.
 
 ### Current Caveat
 
@@ -148,8 +148,8 @@ There is no external structure file format yet. Structures are still hard-coded 
 
 Biomes need extra care because there are two biome-related surfaces in the repo:
 
-- [`src/content/biomes/BiomeRegistry.ts`](../src/content/biomes/BiomeRegistry.ts)
-- [`src/engine/workers/worldgen/BiomeSampler.ts`](../src/engine/workers/worldgen/BiomeSampler.ts)
+- [`cpp-voxel/src/content/biomes/BiomeData.hpp`](../cpp-voxel/src/content/biomes/BiomeData.hpp)
+- (worldgen uses [`BiomeData`](../cpp-voxel/src/content/biomes/BiomeData.hpp) directly)
 
 The current worldgen pipeline actually uses `BiomeSampler`, not `BiomeRegistry`.
 
@@ -174,7 +174,7 @@ The content-side biome registry is not currently the source of truth for world g
 
 ## Adding A Mob
 
-Mob creation is centralized in [`MobFactory`](../src/content/mobs/MobFactory.ts).
+Mob creation is centralized in [`MobFactory`](../cpp-voxel/src/content/mobs/MobFactory.hpp).
 
 The current system is data-driven through the `MOB_CONFIGS` table and component writes. There are no per-mob classes yet.
 
@@ -209,7 +209,7 @@ If you add a new gameplay concept that mobs need, update both the component defi
 
 ## Extending Creative Inventory
 
-If you add content that should be easy to test in-game, seed it into creative mode through [`Game.seedCreativeInventory()`](../src/game/Game.ts).
+If you add content that should be easy to test in-game, seed it into creative mode through `Game` (see [`Game`](../cpp-voxel/src/game/Game.hpp)).
 
 That method currently populates hotbar slots with starter blocks and items when a creative session starts.
 

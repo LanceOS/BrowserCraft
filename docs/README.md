@@ -1,5 +1,10 @@
 # Docs Index
 
+> **Note:** The engine has been converted from TypeScript to C++.
+> The C++ source lives in [`../cpp-voxel/src/`](../cpp-voxel/src/).
+> All documentation below references the original TypeScript for design concepts;
+> see the C++ headers and source files in `cpp-voxel/src/` for the current implementation.
+
 This directory now contains two kinds of documentation:
 
 - current implementation docs, which are written against the code that exists today
@@ -9,7 +14,7 @@ If you are trying to understand or extend the repo, start with the current imple
 
 ## Start Here
 
-- [`../README.md`](../README.md): repo overview, scripts, runtime requirements, and top-level architecture
+- [`../cpp-voxel/README.md`](../cpp-voxel/README.md): C++ project overview, build instructions, and architecture
 - [`chunk-and-worker-lifecycle.md`](chunk-and-worker-lifecycle.md): chunk state flow across `World`, `SharedPool`, workers, save/load, and renderer upload
 - [`rendering-pipeline.md`](rendering-pipeline.md): camera/time UBOs, texture array setup, chunk upload, sky pass, and frustum culling
 - [`input-ui-inventory-flow.md`](input-ui-inventory-flow.md): controls, pointer lock, menu state, inventory, crafting, and HUD behavior

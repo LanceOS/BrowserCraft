@@ -1,21 +1,23 @@
 # Rendering Pipeline
 
+> **C++ Port:** This engine now uses OpenGL 4.6 Core instead of WebGL2. See `cpp-voxel/src/engine/render/` for the current implementation.
+
 This document describes how the current renderer turns chunk data into a frame on screen.
 
 The core files are:
 
-- [`src/game/Game.ts`](../src/game/Game.ts)
-- [`src/engine/render/Renderer.ts`](../src/engine/render/Renderer.ts)
-- [`src/engine/render/ChunkMesh.ts`](../src/engine/render/ChunkMesh.ts)
-- [`src/engine/render/Texture2DArray.ts`](../src/engine/render/Texture2DArray.ts)
-- [`src/engine/render/FrustumCuller.ts`](../src/engine/render/FrustumCuller.ts)
-- [`src/engine/render/shaders/chunk.ts`](../src/engine/render/shaders/chunk.ts)
-- [`src/engine/render/shaders/sky.ts`](../src/engine/render/shaders/sky.ts)
-- [`src/engine/ecs/systems/TimeSystem.ts`](../src/engine/ecs/systems/TimeSystem.ts)
+- [`cpp-voxel/src/game/Game.hpp`](../cpp-voxel/src/game/Game.hpp)
+- [`cpp-voxel/src/engine/render/Renderer.hpp`](../cpp-voxel/src/engine/render/Renderer.hpp)
+- [`cpp-voxel/src/engine/render/ChunkMesh.hpp`](../cpp-voxel/src/engine/render/ChunkMesh.hpp)
+- [`cpp-voxel/src/engine/render/Texture2DArray.hpp`](../cpp-voxel/src/engine/render/Texture2DArray.hpp)
+- [`cpp-voxel/src/engine/math/Frustum.hpp`](../cpp-voxel/src/engine/math/Frustum.hpp)
+- [`cpp-voxel/src/engine/render/shaders/ShaderSources.hpp`](../cpp-voxel/src/engine/render/shaders/ShaderSources.hpp)
+- [`cpp-voxel/src/engine/render/shaders/ShaderSources.hpp`](../cpp-voxel/src/engine/render/shaders/ShaderSources.hpp)
+- (removed, time UBO handled by Renderer)
 
 ## Frame Entry Point
 
-Rendering begins in [`Game.render()`](../src/game/Game.ts):
+Rendering begins in [`Game.render()`](../cpp-voxel/src/game/Game.hpp):
 
 1. sync UI state
 2. resize the canvas to its display size
@@ -24,7 +26,7 @@ Rendering begins in [`Game.render()`](../src/game/Game.ts):
 5. render particles
 6. render the inventory HUD
 
-The main 3D draw call path is all inside [`Renderer.render()`](../src/engine/render/Renderer.ts).
+The main 3D draw call path is all inside [`Renderer.render()`](../cpp-voxel/src/engine/render/Renderer.hpp).
 
 ## Renderer Responsibilities
 
@@ -43,11 +45,11 @@ It does not own world generation, meshing, or gameplay state. It consumes comple
 
 Textures are currently generated in code rather than loaded from external assets.
 
-[`Renderer`](../src/engine/render/Renderer.ts):
+[`Renderer`](../cpp-voxel/src/engine/render/Renderer.hpp):
 
-- defines a `LAYER_COLORS` map keyed by [`Tex`](../src/world/blocks/TextureLayers.ts)
+- defines a `LAYER_COLORS` map keyed by [`Tex`](../cpp-voxel/src/world/BlockDefinition.hpp)
 - synthesizes 16x16 RGBA layers with `makeLayer(...)`
-- uploads every layer into a [`Texture2DArray`](../src/engine/render/Texture2DArray.ts)
+- uploads every layer into a [`Texture2DArray`](../cpp-voxel/src/engine/render/Texture2DArray.hpp)
 - generates mipmaps once after seeding
 
 This means that adding a new block texture layer currently requires:
@@ -76,11 +78,11 @@ The renderer binds two std140 uniform blocks:
 - camera right vector
 - camera up vector
 
-The data is assembled in [`uploadCameraBlock()`](../src/engine/render/Renderer.ts).
+The data is assembled in [`uploadCameraBlock()`](../cpp-voxel/src/engine/render/Renderer.hpp).
 
 ### Time Block
 
-[`TimeSystem`](../src/engine/ecs/systems/TimeSystem.ts) owns `TIME_BLOCK_FLOATS = 8`, which packs:
+(Time UBO is now handled by `Renderer` directly — see [`Renderer`](../cpp-voxel/src/engine/render/Renderer.hpp).)
 
 - elapsed time
 - sun angle
@@ -103,7 +105,7 @@ The current layout is:
 4. `a_texLayer` as `float`
 5. `a_lightData` as `float`
 
-[`ChunkMesh.upload()`](../src/engine/render/ChunkMesh.ts) binds these as vertex attributes `0` through `4`.
+[`ChunkMesh.upload()`](../cpp-voxel/src/engine/render/ChunkMesh.hpp) binds these as vertex attributes `0` through `4`.
 
 `a_lightData` is stored as a float on the CPU side, then rounded back to an integer in the vertex shader and passed through as `flat uint v_packedLight`.
 
@@ -158,7 +160,7 @@ If a chunk reports zero vertices or indices, it is still marked uploaded so the 
 
 ## Frustum Culling
 
-`Renderer` uses [`FrustumCuller`](../src/engine/render/FrustumCuller.ts) to reject chunk AABBs before drawing.
+`Renderer` uses the frustum culler (see [`Frustum`](../cpp-voxel/src/engine/math/Frustum.hpp)) to reject chunk AABBs before drawing.
 
 For each chunk:
 
@@ -169,7 +171,7 @@ The culler extracts six planes from the camera matrix and tests each chunk AABB 
 
 ## Sky Pass
 
-The sky uses a dedicated shader pair in [`src/engine/render/shaders/sky.ts`](../src/engine/render/shaders/sky.ts).
+The sky uses a dedicated shader pair (see [`ShaderSources`](../cpp-voxel/src/engine/render/shaders/ShaderSources.hpp)).
 
 The renderer creates a fullscreen triangle once at startup. Each frame it:
 
@@ -205,7 +207,7 @@ This is why lighting changes at two levels:
 
 ## Camera Data Expectations
 
-`Renderer` expects a [`CameraView`](../src/engine/render/CameraView.ts) that already contains:
+`Renderer` expects a camera view that already contains:
 
 - projection matrix
 - view matrix
@@ -224,4 +226,4 @@ If you need to change rendering data flow, these are the common touch points:
 - changing vertex layout: update `SharedPool`, mesher output, `ChunkMesh.upload()`, and both chunk shaders
 - adding a new texture layer: update `Tex`, `Renderer` texture seeding, and the block definition that uses it
 - changing camera UBO shape: update `Renderer`, `CameraView` producers, and any shader reading `CameraBlock`
-- changing time UBO shape: update `TimeSystem` and both `sky.ts` and `chunk.ts`
+- changing time UBO shape: update `Renderer` and both shader sources in `ShaderSources.hpp`
