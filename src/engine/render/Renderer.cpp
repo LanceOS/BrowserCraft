@@ -1,10 +1,10 @@
 #include "Renderer.hpp"
 #include "shaders/ShaderSources.hpp"
 #include "world/daynight/DayNightCycle.hpp"
+#include "engine/assets/AssetManager.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
-
 namespace voxel {
 
 Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config)
@@ -13,7 +13,7 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
     m_skyShader(shaders::skyVertex, shaders::skyFragment),
     m_cameraUbo(0, CAMERA_BLOCK_FLOATS * sizeof(float)),
     m_timeUbo(2, TIME_BLOCK_FLOATS * sizeof(float)),
-    m_textures(16, 16, config.textureArrayLayers)
+    m_textures(16, 16, std::max(1, AssetManager::get().getTextureLayerCount()))
 {
   m_chunkShader.bindUniformBlock("CameraBlock", 0);
   m_chunkShader.bindUniformBlock("TimeBlock", 2);
@@ -259,23 +259,15 @@ void Renderer::renderSky() {
 }
 
 void Renderer::seedTextureArray() {
-  // Create placeholder solid-color textures for each layer.
-  // In the full engine, TexturePipeline generates these from assets.
-  int32_t layers = m_config.textureArrayLayers;
-  std::vector<uint8_t> pixels(16 * 16 * 4);
+  int32_t layers = AssetManager::get().getTextureLayerCount();
+  if (layers == 0) return;
 
-  // Simple palette for different texture indices
+  const auto& pixelData = AssetManager::get().getTextureData();
+  size_t bytesPerLayer = 16 * 16 * 4;
+
   for (int32_t layer = 0; layer < layers; ++layer) {
-    uint8_t r = static_cast<uint8_t>((layer * 37 + 80) % 256);
-    uint8_t g = static_cast<uint8_t>((layer * 53 + 120) % 256);
-    uint8_t b = static_cast<uint8_t>((layer * 71 + 160) % 256);
-    for (int i = 0; i < 16 * 16; ++i) {
-      pixels[i * 4 + 0] = r;
-      pixels[i * 4 + 1] = g;
-      pixels[i * 4 + 2] = b;
-      pixels[i * 4 + 3] = 255;
-    }
-    m_textures.uploadLayer(layer, pixels.data(), 16, 16);
+    const uint8_t* layerData = pixelData.data() + (layer * bytesPerLayer);
+    m_textures.uploadLayer(layer, layerData, 16, 16);
   }
   m_textures.generateMipmaps();
 }

@@ -1,0 +1,36 @@
+{
+    "textures": {
+        "grass_top": "grass_top.png",
+        "grass_side": "grass_side.png",
+        "dirt": "dirt.png",
+        "stone": "stone.png"
+    },
+    "blocks": [
+        {
+            "id": 1,
+            "name": "Grass",
+            "is_opaque": true,
+            "faces": {
+                "top": "grass_top",
+                "bottom": "dirt",
+                "side": "grass_side"
+            }
+        },
+        {
+            "id": 2,
+            "name": "Dirt",
+            "is_opaque": true,
+            "faces": {
+                "all": "dirt"
+            }
+        },
+        {
+            "id": 3,
+            "name": "Stone",
+            "is_opaque": true,
+            "faces": {
+                "all": "stone"
+            }
+        }
+    ]
+}

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <filesystem>
 #include <thread>
+#include "engine/assets/AssetManager.hpp"
 
 namespace voxel {
 
@@ -23,35 +24,23 @@ static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
 
 // ---- Block registration ----
 static void registerVanillaBlocks(BlockRegistry& blocks) {
-  blocks.register_(BlockDefinition{.id=1,.name="stone",.textures={1,1,1},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=2,.name="grass",.textures={2,3,4},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=3,.name="dirt",.textures={4,4,4},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=4,.name="cobblestone",.textures={5,5,5},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=5,.name="wood_planks",.textures={6,6,6},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=7,.name="bedrock",.textures={19,19,19},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=8,.name="water",.textures={20,20,20},
-    .material={.opaque=false,.transparent=true,.liquid=true},.collision=EMPTY_BLOCK_AABB});
-  blocks.register_(BlockDefinition{.id=9,.name="still_water",.textures={20,20,20},
-    .material={.opaque=false,.transparent=true,.liquid=true},.collision=EMPTY_BLOCK_AABB});
-  blocks.register_(BlockDefinition{.id=10,.name="lava",.textures={21,21,21},
-    .material={.opaque=false,.transparent=true,.liquid=true,.lightEmission=15}});
-  blocks.register_(BlockDefinition{.id=12,.name="sand",.textures={11,11,11},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=14,.name="gold_ore",.textures={15,15,15},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=15,.name="iron_ore",.textures={14,14,14},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=16,.name="coal_ore",.textures={13,13,13},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=17,.name="log",.textures={7,7,8},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=18,.name="leaves",.textures={9,9,9},
-    .material={.opaque=false,.transparent=true,.foliage=true}});
-  blocks.register_(BlockDefinition{.id=20,.name="glass",.textures={10,10,10},
-    .material={.opaque=false,.transparent=true}});
-  blocks.register_(BlockDefinition{.id=41,.name="gold_block",.textures={36,36,36},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=42,.name="iron_block",.textures={37,37,37},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=49,.name="obsidian",.textures={27,27,27},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=56,.name="diamond_ore",.textures={16,16,16},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=57,.name="diamond_block",.textures={35,35,35},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=58,.name="crafting_table",.textures={28,6,29},.material={.opaque=true}});
-  blocks.register_(BlockDefinition{.id=89,.name="glowstone",.textures={43,43,43},
-    .material={.opaque=true,.lightEmission=15}});
+  AssetManager::get().loadAssets();
+  
+  for (const auto& [id, def] : AssetManager::get().getBlockDefs()) {
+    if (id == 0) continue; // Skip air
+    
+    BlockDefinition bd;
+    bd.id = def.id;
+    bd.name = def.name;
+    bd.textures.top = def.tex_top;
+    bd.textures.bottom = def.tex_bottom;
+    bd.textures.side = def.tex_side;
+    bd.material.opaque = def.is_opaque;
+    if (!def.is_opaque) {
+        bd.material.transparent = true;
+    }
+    blocks.register_(std::move(bd));
+  }
 }
 
 Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
