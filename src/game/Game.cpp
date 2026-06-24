@@ -9,22 +9,10 @@
 namespace voxel {
 
 namespace {
-constexpr float kDayCycleSeconds = 3600.0f;
-constexpr float kSunAngularSpeed = 6.28318530718f / kDayCycleSeconds;
-constexpr float kMiddayTimeSeconds = kDayCycleSeconds * 0.5f;
-constexpr float kNightLightMin = 0.20f;
 constexpr float kMouseSensitivity = 0.0025f;
 constexpr float kMaxPitch = 1.553343f; // ~89 degrees
 constexpr float kJumpSpeed = 8.0f;
 constexpr float kSwimSpeed = 3.5f;
-
-auto computeDaylightFactor(float timeSeconds) -> float {
-  float angle = timeSeconds * kSunAngularSpeed - 1.57079632679f; // -pi/2
-  float daylight = std::sin(angle) * 0.5f + 0.5f;
-  daylight = std::max(0.0f, std::min(1.0f, daylight));
-
-  return kNightLightMin + (1.0f - kNightLightMin) * daylight;
-}
 
 } // namespace
 
@@ -229,7 +217,7 @@ void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh)
 
   configureSaveWorld(slotId, startFresh);
   m_session.startSingleplayer(mode);
-  m_worldTimeSeconds = kMiddayTimeSeconds;
+  m_dayNightCycle.setTime(daynight::kMiddayTimeSeconds);
 
   m_spawnedToSurface = false;
   m_camera.position = glm::vec3(0.0f, 80.0f, 50.0f);
@@ -469,10 +457,7 @@ void Game::processGenJobs() {
 void Game::update(float dt) {
   if (m_session.state() == GameState::InGame ||
       m_session.state() == GameState::GeneratingWorld) {
-    m_worldTimeSeconds += dt;
-    if (m_worldTimeSeconds >= kDayCycleSeconds) {
-      m_worldTimeSeconds -= kDayCycleSeconds;
-    }
+    m_dayNightCycle.advance(dt);
 
     if (m_session.state() == GameState::InGame) {
       applyPlayerControls(dt);
@@ -515,12 +500,12 @@ void Game::update(float dt) {
 }
 
 void Game::render(float, float) {
-  const float worldTimeSeconds = m_worldTimeSeconds;
+  const float worldTimeSeconds = m_dayNightCycle.time();
   updateCamera();
   if (m_session.state() == GameState::InGame ||
       m_session.state() == GameState::Paused ||
       m_session.state() == GameState::GeneratingWorld) {
-    float daylightFactor = computeDaylightFactor(worldTimeSeconds);
+    float daylightFactor = m_dayNightCycle.daylight();
     m_renderer->render(*m_world, m_camera, worldTimeSeconds, daylightFactor);
   } else {
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
@@ -554,7 +539,7 @@ void Game::run() {
       }
 
       m_ui->beginFrame();
-      render(0.0f, m_worldTimeSeconds);
+      render(0.0f, m_dayNightCycle.time());
       m_ui->endFrame();
 
       glfwSwapBuffers(m_window);

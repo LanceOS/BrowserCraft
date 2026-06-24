@@ -1,15 +1,11 @@
 #include "Renderer.hpp"
 #include "shaders/ShaderSources.hpp"
+#include "world/daynight/DayNightCycle.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
 
 namespace voxel {
-
-namespace {
-constexpr float kDayCycleSeconds = 3600.0f;
-constexpr float kSunAngularSpeed = 6.28318530718f / kDayCycleSeconds;
-} // namespace
 
 Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config)
   : m_window(window), m_config(config),
@@ -72,7 +68,7 @@ void Renderer::render(World& world, const CameraView& camera,
 
   // Upload time block
   {
-    float sunAngle = timeSeconds * kSunAngularSpeed;
+    float sunAngle = daynight::computeSunAngle(timeSeconds);
     float dayFac = daylightFactor;
     float timeData[8] = {
       timeSeconds,           // u_timeElapsed

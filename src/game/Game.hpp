@@ -24,6 +24,7 @@
 #include "world/World.hpp"
 #include "engine/render/Renderer.hpp"
 #include "engine/render/CameraView.hpp"
+#include "world/daynight/DayNightCycle.hpp"
 #include "ui/UIManager.hpp"
 #include "game/GameSession.hpp"
 #include "game/BlockInteractionAudio.hpp"
@@ -101,6 +102,7 @@ private:
   std::unique_ptr<WorkerThreadPool> m_meshPool;
   WorldGenPipeline m_worldGenPipeline;
   std::mt19937 m_worldSeedRng;
+  daynight::DayNightCycle m_dayNightCycle;
 
   // Save
   std::unique_ptr<SaveManager> m_saveManager;
@@ -120,7 +122,6 @@ private:
   SystemManager<Game> m_systems;
   bool m_spawnedToSurface = false;
   int32_t m_playerEntityId = 0;
-  float m_worldTimeSeconds = 0.0f;
 };
 
 } // namespace voxel
