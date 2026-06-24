@@ -6,9 +6,9 @@ import { FrustumCuller } from "./FrustumCuller.js";
 import { ChunkMesh } from "./ChunkMesh.js";
 import { chunkVertexShaderSource, chunkFragmentShaderSource } from "./shaders/chunk.js";
 import { skyVertexShaderSource, skyFragmentShaderSource } from "./shaders/sky.js";
+import type { CameraView } from "./CameraView.js";
 import type { BlockRegistry } from "../../world/BlockRegistry.js";
 import type { World } from "../../world/World.js";
-import type { Camera } from "./Camera.js";
 import { Tex } from "../../world/blocks/TextureLayers.js";
 
 const CAMERA_BLOCK_FLOATS = 80;
@@ -86,6 +86,8 @@ export class Renderer {
   private readonly frustum = new FrustumCuller();
   private readonly meshes = new Map<string, ChunkMesh>();
   private readonly cameraBlock = new Float32Array(CAMERA_BLOCK_FLOATS);
+  private readonly frustumMin = new Float32Array(3);
+  private readonly frustumMax = new Float32Array(3);
   private readonly skyVao: WebGLVertexArrayObject;
   private readonly skyVbo: WebGLBuffer;
 
@@ -135,10 +137,12 @@ export class Renderer {
     this.textures.bind(unit);
   }
 
-  render(world: World, camera: Camera, timeSeconds: number, skyDarkness: number): void {
+  resizeCanvasToDisplaySize(): number {
     this.resizeCanvas();
-    camera.resize(this.gl.canvas.width / this.gl.canvas.height, this.config.fovDegrees);
-    camera.updateMatrices();
+    return this.gl.canvas.width / this.gl.canvas.height;
+  }
+
+  render(world: World, camera: CameraView, timeSeconds: number, skyDarkness: number): void {
 
     this.syncChunks(world);
 
@@ -158,20 +162,18 @@ export class Renderer {
 
     this.frustum.extractFrom(camera.viewProjectionMatrix);
 
-    const min = new Float32Array(3);
-    const max = new Float32Array(3);
     for (const [key, chunk] of world.entries()) {
       const mesh = this.meshes.get(key);
       if (!mesh || mesh.indexCount === 0) continue;
 
-      min[0] = chunk.chunkX * this.config.chunkSize;
-      min[1] = 0;
-      min[2] = chunk.chunkZ * this.config.chunkSize;
-      max[0] = min[0] + this.config.chunkSize;
-      max[1] = this.config.worldHeight;
-      max[2] = min[2] + this.config.chunkSize;
+      this.frustumMin[0] = chunk.chunkX * this.config.chunkSize;
+      this.frustumMin[1] = 0;
+      this.frustumMin[2] = chunk.chunkZ * this.config.chunkSize;
+      this.frustumMax[0] = this.frustumMin[0] + this.config.chunkSize;
+      this.frustumMax[1] = this.config.worldHeight;
+      this.frustumMax[2] = this.frustumMin[2] + this.config.chunkSize;
 
-      if (!this.frustum.testAABB(min, max)) continue;
+      if (!this.frustum.testAABB(this.frustumMin, this.frustumMax)) continue;
 
       this.gl.uniform3f(
         this.chunkShader.uniform("u_chunkTranslation"),
@@ -225,7 +227,7 @@ export class Renderer {
   }
 
   private uploadCameraBlock(
-    camera: Camera,
+    camera: CameraView,
     timeSeconds: number,
     skyDarkness: number,
     skyR: number,

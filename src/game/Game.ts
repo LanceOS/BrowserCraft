@@ -1,5 +1,5 @@
 import type { GameConfig } from "../engine/core/Config.js";
-import { GameContext, GameState } from "../engine/core/GameState.js";
+import { GameState } from "../engine/core/GameState.js";
 import { GameLoop } from "../engine/core/GameLoop.js";
 import { InputState } from "../engine/core/InputState.js";
 import { SharedPool } from "../engine/alloc/SharedPool.js";
@@ -35,29 +35,22 @@ import { Renderer } from "../engine/render/Renderer.js";
 import { MobFactory, MobType } from "../content/mobs/MobFactory.js";
 import { bootstrapPlayerControls } from "./PlayerBootstrap.js";
 import { UIManager } from "../ui/UIManager.js";
-import { InventoryHud } from "../ui/InventoryHud.js";
-import { InventoryControllerSystem, type InventoryAction } from "./inventory/InventoryControllerSystem.js";
-import { CraftingSystem } from "./inventory/CraftingSystem.js";
-import { createDefaultCraftingRegistry } from "../content/crafting/CraftingRegistry.js";
-import type { CursorItem } from "./inventory/CursorItem.js";
 import { AudioRegistry } from "../content/audio/AudioRegistry.js";
-import { SoundId } from "../content/audio/AudioRegistry.js";
 import { BlockInteractionAudio } from "./BlockInteractionAudio.js";
 import { SaveManager } from "../engine/save/SaveManager.js";
+import { GameSession } from "./GameSession.js";
+import { PlayerInteractionController } from "./PlayerInteractionController.js";
 
 export class Game {
   private readonly gl: WebGL2RenderingContext;
   private readonly renderer: Renderer;
   private readonly world: World;
   private readonly input = new InputState();
+  private readonly session: GameSession;
+  private readonly ui: UIManager;
   private readonly disposePlayerControls: () => void;
   private readonly loop: GameLoop;
   private readonly systems = new SystemManager<Game>();
-  private readonly ui = new UIManager();
-  private readonly hud: InventoryHud;
-  private readonly inventoryController = new InventoryControllerSystem();
-  private readonly craftingSystem = new CraftingSystem(createDefaultCraftingRegistry());
-  private readonly cursor: CursorItem = { itemId: 0, count: 0, metadata: 0 };
   private readonly entityManager = new EntityManager(1 << 12);
   private readonly transforms = new ComponentStore(TransformDesc, this.entityManager.capacity);
   private readonly bodies = new ComponentStore(RigidBodyDesc, this.entityManager.capacity);
@@ -79,10 +72,9 @@ export class Game {
   private readonly redstoneSystem: RedstoneSystem<Game>;
   private readonly particleSystem: ParticleSystem<Game>;
   private readonly blockAudio: BlockInteractionAudio;
+  private readonly playerInteractions: PlayerInteractionController;
   private readonly playerEntityId: number;
   private readonly playerEntityIndex: number;
-  private lastPrimaryMouseDown = false;
-  private lastSecondaryMouseDown = false;
 
   constructor(
     private readonly config: GameConfig,
@@ -99,9 +91,8 @@ export class Game {
     }
 
     this.gl = gl;
-    GameContext.renderDistance = config.renderDistance;
-    GameContext.worldSeed = config.worldSeed;
-    this.hud = new InventoryHud(this.handleInventoryAction);
+    this.session = new GameSession(config.renderDistance);
+    this.ui = new UIManager(this.session);
 
     const blocks = new BlockRegistry(4096);
     new VanillaBlockFactory().registerAll(blocks);
@@ -139,11 +130,26 @@ export class Game {
       this.audioRegistry,
     );
     this.blockAudio = new BlockInteractionAudio(this.audioPool, this.audioRegistry, blocks);
-    this.disposePlayerControls = bootstrapPlayerControls(canvas, this.input);
 
     this.playerEntityId = this.entityManager.allocate();
     this.playerEntityIndex = EntityManager.indexOf(this.playerEntityId);
     this.initializePlayer();
+    this.cameraSystem.syncFromPlayer();
+    this.playerInteractions = new PlayerInteractionController(
+      this.input,
+      this.inventories,
+      this.players,
+      this.bodies,
+      this.world,
+      this.blockAudio,
+      this.particleSystem,
+      this.redstoneSystem,
+      this.audioRegistry,
+      this.audioPool,
+      this.cameraSystem,
+      this.playerEntityIndex,
+    );
+    this.disposePlayerControls = bootstrapPlayerControls(canvas, this.input, this.session);
     this.seedPlayerInventory();
 
     const mobs = new MobFactory(
@@ -168,13 +174,13 @@ export class Game {
     this.systems.add(new HealthSystem(this.health));
     this.systems.add(this.redstoneSystem);
     this.systems.add(this.particleSystem);
-    this.systems.add(this.audioSystem);
     this.systems.add(new MobRenderSystem());
 
     this.loop = new GameLoop(
       config.targetFps,
       this.ui,
       this.input,
+      this.session,
       (dt) => this.update(dt),
       (_alpha, timeSeconds) => this.render(timeSeconds),
     );
@@ -195,7 +201,7 @@ export class Game {
     void this.audioContext.close();
     this.renderer.dispose();
     this.ui.dispose();
-    this.hud.dispose();
+    this.playerInteractions.dispose();
     void this.gl;
   }
 
@@ -272,180 +278,50 @@ export class Game {
       ids[base + slot] = itemId;
       counts[base + slot] = count;
     }
-    this.craftingSystem.updatePlayerCraftingOutput(this.inventories, row);
+    this.playerInteractions.refreshCraftingOutput();
   }
 
   private update(dt: number): void {
-    this.config.renderDistance = GameContext.renderDistance;
-    if (GameContext.state !== GameState.IN_GAME) {
-      this.hud.setInventoryOpen(false);
-    }
+    const state = this.session.state;
+    this.config.renderDistance = this.session.renderDistance;
+    this.playerInteractions.syncState(state);
+    this.playerInteractions.syncHotbarSelection();
 
-    this.syncHotbarSelection();
-
-    if (GameContext.state === GameState.GENERATING_WORLD) {
+    if (state === GameState.GENERATING_WORLD) {
       this.timeSystem.update(dt);
-      this.cameraSystem.updateMatrices();
+      this.cameraSystem.syncFromPlayer();
       this.world.update(this.cameraSystem.position);
       this.saveManager.update(dt);
       if (this.world.isReady()) this.ui.onWorldReady();
       return;
     }
 
-    if (GameContext.state !== GameState.IN_GAME) return;
+    if (state !== GameState.IN_GAME) return;
 
-    if (this.input.isPressedCode("KeyE")) this.toggleInventory();
+    if (this.input.isPressedCode("KeyE")) this.playerInteractions.toggleInventory();
 
-    if (this.hud.isOpen()) {
-      this.stopPlayerMotion();
+    if (this.playerInteractions.isInventoryOpen()) {
+      this.playerInteractions.stopPlayerMotion();
     } else {
       this.systems.update(this, dt);
     }
 
+    this.cameraSystem.syncFromPlayer();
     if (this.input.pointerLocked) void this.audioPool.resume();
     this.timeSystem.update(dt);
-    this.cameraSystem.updateMatrices();
+    this.audioSystem.update(this, dt);
     this.world.update(this.cameraSystem.position);
     this.saveManager.update(dt);
-    this.handleDebugInteractions();
+    this.playerInteractions.handleDebugInteractions();
   }
 
   private render(timeSeconds: number): void {
-    if (GameContext.state !== GameState.IN_GAME && this.hud.isOpen()) {
-      this.hud.setInventoryOpen(false);
-    }
+    this.playerInteractions.syncState(this.session.state);
+    const aspectRatio = this.renderer.resizeCanvasToDisplaySize();
+    this.cameraSystem.updateProjection(aspectRatio, this.config.fovDegrees);
+    this.cameraSystem.updateMatrices();
     this.renderer.render(this.world, this.cameraSystem, timeSeconds, this.timeSystem.skyDarkness);
     this.particleSystem.render();
-    const playerRow = this.players.rowFor(this.playerEntityIndex);
-    const selected = playerRow === -1 ? 0 : this.players.data.selectedHotbarSlot[playerRow];
-    this.hud.render(this.inventories, this.playerEntityIndex, this.cursor, selected, GameContext.state);
-  }
-
-  private toggleInventory(): void {
-    const next = !this.hud.isOpen();
-    this.hud.setInventoryOpen(next);
-    if (next) {
-      document.exitPointerLock?.();
-      this.input.clearMovementState();
-    }
-  }
-
-  private syncHotbarSelection(): void {
-    const playerRow = this.players.rowFor(this.playerEntityIndex);
-    if (playerRow === -1) return;
-
-    for (let i = 0; i < 9; i++) {
-      if (this.input.isPressedCode(`Digit${i + 1}`)) {
-        this.players.data.selectedHotbarSlot[playerRow] = i;
-      }
-    }
-  }
-
-  private stopPlayerMotion(): void {
-    const bodyRow = this.bodies.rowFor(this.playerEntityIndex);
-    if (bodyRow === -1) return;
-    this.bodies.data.velocity[bodyRow * 3 + 0] = 0;
-    this.bodies.data.velocity[bodyRow * 3 + 1] = 0;
-    this.bodies.data.velocity[bodyRow * 3 + 2] = 0;
-  }
-
-  private readonly handleInventoryAction = (action: InventoryAction): void => {
-    if (GameContext.state !== GameState.IN_GAME) return;
-    if (!this.hud.isOpen()) return;
-
-    const row = this.inventories.rowFor(this.playerEntityIndex);
-    if (row === -1) return;
-
-    if (action.slotIndex === 44) {
-      this.takeCraftingOutput(row, action);
-      return;
-    }
-
-    this.inventoryController.handleAction(this.inventories, this.playerEntityIndex, action, this.cursor);
-    if (action.slotIndex >= 40 && action.slotIndex <= 43) {
-      this.craftingSystem.updatePlayerCraftingOutput(this.inventories, row);
-    }
-  };
-
-  private takeCraftingOutput(row: number, action: InventoryAction): void {
-    const base = row * 45 + 44;
-    const ids = this.inventories.data.itemIds;
-    const counts = this.inventories.data.itemCounts;
-    const meta = this.inventories.data.itemMetadata;
-    const outputId = ids[base];
-    const outputCount = counts[base];
-    const outputMeta = meta[base];
-    if (outputId === 0 || outputCount === 0) return;
-
-    const takeCount = action.button === "right" ? 1 : outputCount;
-    if (this.cursor.itemId === 0) {
-      this.cursor.itemId = outputId;
-      this.cursor.count = takeCount;
-      this.cursor.metadata = outputMeta;
-    } else if (this.cursor.itemId === outputId && this.cursor.metadata === outputMeta && this.cursor.count + takeCount <= 64) {
-      this.cursor.count += takeCount;
-    } else {
-      return;
-    }
-
-    this.craftingSystem.consumePlayerCraftingGrid(this.inventories, row);
-  }
-
-  private handleDebugInteractions(): void {
-    const target = this.getDebugInteractionTarget();
-    const mouseDown = this.input.mouseButtons[0] === 1;
-    if (mouseDown && !this.lastPrimaryMouseDown && this.input.pointerLocked && target) {
-      this.blockAudio.onBlockBroken(target.x, target.y, target.z, target.blockId);
-      this.particleSystem.spawnBlockBreak(target.x, target.y, target.z, target.blockId);
-    }
-    this.lastPrimaryMouseDown = mouseDown;
-
-    const secondaryDown = this.input.mouseButtons[2] === 1;
-    if (secondaryDown && !this.lastSecondaryMouseDown && this.input.pointerLocked) {
-      this.toggleDebugRedstoneRig();
-    }
-    this.lastSecondaryMouseDown = secondaryDown;
-  }
-
-  private getDebugInteractionTarget(): { x: number; y: number; z: number; blockId: number } | null {
-    const x = Math.floor(this.cameraSystem.position[0]);
-    const z = Math.floor(this.cameraSystem.position[2]);
-    const y = Math.max(0, Math.floor(this.cameraSystem.position[1] - 1.8));
-    const blockId = this.world.getBlockIdAt(x, y, z) || this.world.getBlockIdAt(x, y - 1, z);
-    if (blockId === 0) return null;
-    return { x, y, z, blockId };
-  }
-
-  private toggleDebugRedstoneRig(): void {
-    const target = this.getDebugInteractionTarget();
-    if (!target) return;
-
-    const baseY = target.y + 1;
-    const torchX = target.x - 1;
-    const wireX = target.x;
-    const lampX = target.x + 1;
-
-    const torchBlock = this.world.getBlockIdAt(torchX, baseY, target.z);
-    const wireBlock = this.world.getBlockIdAt(wireX, baseY, target.z);
-    const lampBlock = this.world.getBlockIdAt(lampX, baseY, target.z);
-    const hasRig = (torchBlock === 75 || torchBlock === 76) && wireBlock === 55 && lampBlock === 123;
-
-    if (!hasRig) {
-      this.world.setBlockIdAt(torchX, baseY, target.z, 76);
-      this.world.setBlockIdAt(wireX, baseY, target.z, 55);
-      this.world.setBlockIdAt(lampX, baseY, target.z, 123);
-      this.world.setRedstonePackedAt(torchX, baseY, target.z, 15);
-      this.world.setRedstonePackedAt(wireX, baseY, target.z, 0);
-      this.world.setRedstonePackedAt(lampX, baseY, target.z, 0);
-      this.redstoneSystem.triggerAtWorld(torchX, baseY, target.z, 15);
-    } else {
-      const nextOn = torchBlock !== 76;
-      this.world.setBlockIdAt(torchX, baseY, target.z, nextOn ? 76 : 75);
-      this.world.setRedstonePackedAt(torchX, baseY, target.z, nextOn ? 15 : 0);
-      this.redstoneSystem.triggerAtWorld(torchX, baseY, target.z, nextOn ? 15 : 0);
-    }
-
-    const click = this.audioRegistry.get(SoundId.CLICK);
-    if (click) this.audioPool.playUI(click, 0.25);
+    this.playerInteractions.render(this.session.state);
   }
 }

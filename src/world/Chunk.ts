@@ -13,6 +13,7 @@ export class Chunk {
   state: ChunkState = "queuedGen";
   vertexCount = 0;
   indexCount = 0;
+  needsRemesh = false;
 
   constructor(
     readonly chunkX: number,

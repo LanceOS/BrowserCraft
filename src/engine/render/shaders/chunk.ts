@@ -13,7 +13,7 @@ layout(std140) uniform CameraBlock {
   vec4 u_camUp;
 };
 
-layout(std140, binding = 2) uniform TimeBlock {
+layout(std140) uniform TimeBlock {
   float u_timeElapsed;
   float u_sunAngle;
   float u_darkness;
@@ -55,6 +55,7 @@ void main() {
 export const chunkFragmentShaderSource = `#version 300 es
 precision highp float;
 precision highp int;
+precision highp sampler2DArray;
 
 layout(std140) uniform CameraBlock {
   mat4 u_proj;
@@ -67,7 +68,7 @@ layout(std140) uniform CameraBlock {
   vec4 u_camUp;
 };
 
-layout(std140, binding = 2) uniform TimeBlock {
+layout(std140) uniform TimeBlock {
   float u_timeElapsed;
   float u_sunAngle;
   float u_darkness;

@@ -45,6 +45,9 @@ export function decompressRLE(src: Uint8Array, dst: Uint8Array): void {
     const control = src[srcIdx++];
     if (control < 128) {
       const literalLen = control + 1;
+      if (srcIdx + literalLen > src.length || dstIdx + literalLen > dst.length) {
+        throw new Error("Corrupt RLE payload");
+      }
       dst.set(src.subarray(srcIdx, srcIdx + literalLen), dstIdx);
       srcIdx += literalLen;
       dstIdx += literalLen;
@@ -52,12 +55,15 @@ export function decompressRLE(src: Uint8Array, dst: Uint8Array): void {
     }
 
     const runLen = control - 128 + 3;
+    if (srcIdx >= src.length || dstIdx + runLen > dst.length) {
+      throw new Error("Corrupt RLE payload");
+    }
     const value = src[srcIdx++];
     dst.fill(value, dstIdx, dstIdx + runLen);
     dstIdx += runLen;
   }
 
-  if (dstIdx !== dst.length) {
+  if (dstIdx !== dst.length || srcIdx !== src.length) {
     throw new Error("Corrupt RLE payload");
   }
 }

@@ -47,6 +47,10 @@ export function serializeChunkData(
 }
 
 export function deserializeChunkData(buffer: ArrayBuffer): DeserializedChunkData {
+  if (buffer.byteLength < SAVE_HEADER_BYTES) {
+    throw new Error("Save payload is smaller than the header");
+  }
+
   const view = new DataView(buffer);
   const header: SerializedChunkHeader = {
     magic: view.getUint32(0, true),
@@ -64,6 +68,13 @@ export function deserializeChunkData(buffer: ArrayBuffer): DeserializedChunkData
   }
   if (header.version !== SAVE_VERSION) {
     throw new Error(`Unsupported save version ${header.version}`);
+  }
+  const sectionBytes = header.voxelBytes + header.lightBytes + header.redstoneBytes;
+  if (header.payloadSize !== sectionBytes) {
+    throw new Error("Save payload header is inconsistent");
+  }
+  if (SAVE_HEADER_BYTES + header.payloadSize !== buffer.byteLength) {
+    throw new Error("Save payload size does not match the provided buffer");
   }
 
   const voxels = new Uint8Array(buffer, SAVE_HEADER_BYTES, header.voxelBytes);

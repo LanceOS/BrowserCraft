@@ -4,7 +4,7 @@ import { TransformDesc } from "../components/Transform.js";
 import { AudioEmitterDesc } from "../components/AudioEmitter.js";
 import { AudioNodePool } from "../../audio/AudioNodePool.js";
 import { AudioRegistry, SoundId } from "../../../content/audio/AudioRegistry.js";
-import { CameraSystem } from "./CameraSystem.js";
+import type { AudioListenerView } from "../../render/CameraView.js";
 
 type ModernAudioListener = AudioListener & {
   readonly positionX: AudioParam;
@@ -38,7 +38,7 @@ export class AudioSystem<TState> implements System<TState> {
   constructor(
     private readonly transforms: ComponentStore<typeof TransformDesc>,
     private readonly emitters: ComponentStore<typeof AudioEmitterDesc>,
-    private readonly camera: CameraSystem,
+    private readonly camera: AudioListenerView,
     private readonly ctx: AudioContext,
     private readonly pool: AudioNodePool,
     private readonly registry: AudioRegistry,

@@ -25,7 +25,7 @@ layout(std140) uniform CameraBlock {
   vec4 u_camUp;
 };
 
-layout(std140, binding = 2) uniform TimeBlock {
+layout(std140) uniform TimeBlock {
   float u_timeElapsed;
   float u_sunAngle;
   float u_darkness;
