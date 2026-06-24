@@ -15,6 +15,12 @@ export interface WorldGenJobMessage extends ChunkJobMessage {
 export interface MeshJobMessage {
   readonly kind: "mesh";
   readonly slotIndex: number;
+  readonly neighborSlotIndices?: {
+    readonly negX?: number;
+    readonly posX?: number;
+    readonly negZ?: number;
+    readonly posZ?: number;
+  };
 }
 
 export interface WorldGenDoneMessage {

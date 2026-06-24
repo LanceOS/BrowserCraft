@@ -39,6 +39,12 @@ ctx.onmessage = (event: MessageEvent<WorkerInboundMessage>) => {
   const slot = pool.view(job.slotIndex);
   if (Atomics.load(slot.status, 0) !== ChunkSlotStatus.MESHING) return;
   const emissionMap = lightEmissionMap;
+  const neighbors = {
+    negX: job.neighborSlotIndices?.negX === undefined ? undefined : pool.view(job.neighborSlotIndices.negX),
+    posX: job.neighborSlotIndices?.posX === undefined ? undefined : pool.view(job.neighborSlotIndices.posX),
+    negZ: job.neighborSlotIndices?.negZ === undefined ? undefined : pool.view(job.neighborSlotIndices.negZ),
+    posZ: job.neighborSlotIndices?.posZ === undefined ? undefined : pool.view(job.neighborSlotIndices.posZ),
+  };
 
   LightPropagator.calculate(
     slot.voxels,
@@ -50,7 +56,7 @@ ctx.onmessage = (event: MessageEvent<WorkerInboundMessage>) => {
     },
     transparentBlocks,
   );
-  const success = greedyMeshChunk(slot, pool.dimensions, blocks);
+  const success = greedyMeshChunk(slot, pool.dimensions, blocks, neighbors);
   Atomics.store(slot.status, 0, ChunkSlotStatus.MESH_READY);
 
   const message: MeshDoneMessage = {

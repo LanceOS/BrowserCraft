@@ -84,6 +84,7 @@ export class Game {
   private readonly playerEntityId: number;
   private readonly playerEntityIndex: number;
   private appliedStartRequestId = 0;
+  private placedPlayerAtWorldSpawn = false;
   private readonly initialState: GameState;
   private readonly initialGameMode: GameMode;
 
@@ -307,7 +308,11 @@ export class Game {
       this.cameraSystem.syncFromPlayer();
       this.world.update(this.cameraSystem.position);
       this.saveManager.update(dt);
-      if (this.world.isReady()) this.ui.onWorldReady();
+      if (this.world.isReady()) {
+        this.placePlayerAtWorldSpawn();
+        this.cameraSystem.syncFromPlayer();
+        this.ui.onWorldReady();
+      }
       return;
     }
 
@@ -348,6 +353,7 @@ export class Game {
   }
 
   private resetPlayerState(mode: GameMode): void {
+    this.placedPlayerAtWorldSpawn = false;
     const transformRow = this.transforms.rowFor(this.playerEntityIndex);
     if (transformRow !== -1) {
       this.transforms.data.position[transformRow * 3 + 0] = this.config.chunkSize * 0.5;
@@ -376,6 +382,81 @@ export class Game {
       this.health.data.hp[healthRow] = this.health.data.maxHp[healthRow];
       this.health.data.regenCd[healthRow] = 0;
     }
+  }
+
+  private placePlayerAtWorldSpawn(): void {
+    if (this.placedPlayerAtWorldSpawn) return;
+    const transformRow = this.transforms.rowFor(this.playerEntityIndex);
+    if (transformRow === -1) return;
+
+    const spawn = this.findSafeSpawnPosition();
+    const spawnX = spawn?.x ?? this.config.chunkSize * 0.5;
+    const spawnY = spawn?.y ?? 82;
+    const spawnZ = spawn?.z ?? this.config.chunkSize * 0.5;
+    const transformBase = transformRow * 3;
+    this.transforms.data.position[transformBase + 0] = spawnX;
+    this.transforms.data.position[transformBase + 1] = spawnY;
+    this.transforms.data.position[transformBase + 2] = spawnZ;
+
+    const bodyRow = this.bodies.rowFor(this.playerEntityIndex);
+    if (bodyRow !== -1) {
+      const bodyBase = bodyRow * 3;
+      this.bodies.data.velocity[bodyBase + 0] = 0;
+      this.bodies.data.velocity[bodyBase + 1] = 0;
+      this.bodies.data.velocity[bodyBase + 2] = 0;
+      this.bodies.data.onGround[bodyRow] = 0;
+      this.bodies.data.isFluid[bodyRow] = 0;
+    }
+
+    this.placedPlayerAtWorldSpawn = true;
+  }
+
+  private findSafeSpawnPosition(): { x: number; y: number; z: number } | null {
+    const centerX = Math.floor(this.config.chunkSize * 0.5);
+    const centerZ = Math.floor(this.config.chunkSize * 0.5);
+    const maxRadius = Math.max(
+      centerX,
+      centerZ,
+      this.config.chunkSize - centerX - 1,
+      this.config.chunkSize - centerZ - 1,
+    );
+    let waterCandidate: { x: number; y: number; z: number } | null = null;
+
+    for (let radius = 0; radius <= maxRadius; radius++) {
+      for (let dz = -radius; dz <= radius; dz++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== radius) continue;
+          const worldX = centerX + dx;
+          const worldZ = centerZ + dz;
+          if (worldX < 0 || worldX >= this.config.chunkSize || worldZ < 0 || worldZ >= this.config.chunkSize) {
+            continue;
+          }
+
+          const candidate = this.findSpawnCandidate(worldX, worldZ);
+          if (!candidate) continue;
+          const spawn = { x: worldX + 0.5, y: candidate.y, z: worldZ + 0.5 };
+          if (candidate.isDry) return spawn;
+          waterCandidate ??= spawn;
+        }
+      }
+    }
+
+    return waterCandidate;
+  }
+
+  private findSpawnCandidate(worldX: number, worldZ: number): { y: number; isDry: boolean } | null {
+    for (let y = this.config.worldHeight - 2; y >= 0; y--) {
+      if (!this.world.isSolid(worldX, y, worldZ)) continue;
+      let spawnY = y + 1;
+      let skippedFluid = false;
+      while (spawnY < this.config.worldHeight - 2 && this.world.isFluid(worldX, spawnY, worldZ)) {
+        skippedFluid = true;
+        spawnY++;
+      }
+      return { y: spawnY + 0.05, isDry: !skippedFluid };
+    }
+
+    return null;
   }
 
   private resetPlayerInventory(): void {

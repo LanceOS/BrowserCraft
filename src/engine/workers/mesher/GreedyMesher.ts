@@ -14,10 +14,18 @@ const enum Axis {
   Z = 2,
 }
 
+export interface NeighborChunkSlots {
+  readonly negX?: ChunkSlot;
+  readonly posX?: ChunkSlot;
+  readonly negZ?: ChunkSlot;
+  readonly posZ?: ChunkSlot;
+}
+
 export function greedyMeshChunk(
   slot: ChunkSlot,
   dims: { sizeX: number; sizeY: number; sizeZ: number; vertexStrideFloats: number },
   blocks: BlockRegistry,
+  neighborSlots: NeighborChunkSlots = {},
 ): boolean {
   const { sizeX, sizeY, sizeZ, vertexStrideFloats } = dims;
   const voxels = slot.voxels;
@@ -30,9 +38,30 @@ export function greedyMeshChunk(
   const maxVertices = vertices.length / vertexStrideFloats;
   const maxIndices = indices.length;
 
+  const clampX = (x: number): number => Math.max(0, Math.min(sizeX - 1, x));
+  const clampZ = (z: number): number => Math.max(0, Math.min(sizeZ - 1, z));
+  const voxelAt = (source: ChunkSlot, x: number, y: number, z: number): number => (
+    source.voxels[(y * sizeZ + z) * sizeX + x]
+  );
+  const lightAt = (source: ChunkSlot, x: number, y: number, z: number): number => (
+    source.light[(y * sizeZ + z) * sizeX + x]
+  );
+
   const get = (x: number, y: number, z: number): number => {
-    if (x < 0 || x >= sizeX || y < 0 || y >= sizeY || z < 0 || z >= sizeZ) return 0;
-    return voxels[(y * sizeZ + z) * sizeX + x];
+    if (y < 0 || y >= sizeY) return 0;
+    if (x < 0) {
+      return neighborSlots.negX ? voxelAt(neighborSlots.negX, sizeX - 1, y, clampZ(z)) : 0;
+    }
+    if (x >= sizeX) {
+      return neighborSlots.posX ? voxelAt(neighborSlots.posX, 0, y, clampZ(z)) : 0;
+    }
+    if (z < 0) {
+      return neighborSlots.negZ ? voxelAt(neighborSlots.negZ, x, y, sizeZ - 1) : 0;
+    }
+    if (z >= sizeZ) {
+      return neighborSlots.posZ ? voxelAt(neighborSlots.posZ, x, y, 0) : 0;
+    }
+    return voxelAt(slot, x, y, z);
   };
 
   const toIndex = (x: number, y: number, z: number): number => (y * sizeZ + z) * sizeX + x;
@@ -49,6 +78,8 @@ export function greedyMeshChunk(
   const faceMaskValue = (
     a: number,
     b: number,
+    aOwned: boolean,
+    bOwned: boolean,
     ax: number,
     ay: number,
     az: number,
@@ -57,16 +88,27 @@ export function greedyMeshChunk(
     bz: number,
   ): number => {
     if (shouldCullFace(a, b, blocks)) return 0;
-    if (a !== 0) return encodeSurface(a, getVisualVariant(a, toIndex(ax, ay, az)));
-    if (b !== 0) return -encodeSurface(b, getVisualVariant(b, toIndex(bx, by, bz)));
+    if (aOwned && a !== 0) return encodeSurface(a, getVisualVariant(a, toIndex(ax, ay, az)));
+    if (bOwned && b !== 0) return -encodeSurface(b, getVisualVariant(b, toIndex(bx, by, bz)));
     return 0;
   };
 
   const getLight = (x: number, y: number, z: number): number => {
-    if (x < 0 || x >= sizeX || z < 0 || z >= sizeZ) return 0;
-    if (y < 0) return 0;
+    if (y < 0) return packLight(0, 0);
     if (y >= sizeY) return packLight(MAX_LIGHT, 0);
-    return light[(y * sizeZ + z) * sizeX + x];
+    if (x < 0) {
+      return neighborSlots.negX ? lightAt(neighborSlots.negX, sizeX - 1, y, clampZ(z)) : lightAt(slot, 0, y, clampZ(z));
+    }
+    if (x >= sizeX) {
+      return neighborSlots.posX ? lightAt(neighborSlots.posX, 0, y, clampZ(z)) : lightAt(slot, sizeX - 1, y, clampZ(z));
+    }
+    if (z < 0) {
+      return neighborSlots.negZ ? lightAt(neighborSlots.negZ, x, y, sizeZ - 1) : lightAt(slot, x, y, 0);
+    }
+    if (z >= sizeZ) {
+      return neighborSlots.posZ ? lightAt(neighborSlots.posZ, x, y, 0) : lightAt(slot, x, y, sizeZ - 1);
+    }
+    return lightAt(slot, x, y, z);
   };
 
   const occludes = (blockId: number): number => {
@@ -93,11 +135,15 @@ export function greedyMeshChunk(
       let n = 0;
       for (x[v] = 0; x[v] < sizeV; x[v]++) {
         for (x[u] = 0; x[u] < sizeU; x[u]++) {
-          const a = x[d] >= 0 ? get(x[0], x[1], x[2]) : 0;
-          const b = x[d] + 1 < sizeD ? get(x[0] + q[0], x[1] + q[1], x[2] + q[2]) : 0;
+          const aOwned = x[d] >= 0;
+          const bOwned = x[d] + 1 < sizeD;
+          const a = get(x[0], x[1], x[2]);
+          const b = get(x[0] + q[0], x[1] + q[1], x[2] + q[2]);
           mask[n++] = faceMaskValue(
             a,
             b,
+            aOwned,
+            bOwned,
             x[0],
             x[1],
             x[2],
@@ -135,6 +181,9 @@ export function greedyMeshChunk(
             height++;
           }
 
+          x[u] = i;
+          x[v] = j;
+
           const du = [0, 0, 0];
           const dv = [0, 0, 0];
           du[u] = width;
@@ -155,7 +204,9 @@ export function greedyMeshChunk(
           const layer = getTextureLayer(blockId, variant, block, d, sign);
           const ao = computeCornerAO(get, occludes, x, du, dv, d, u, v, sign, width, height);
           const packedLight = computeCornerLight(getLight, x, du, dv, d, u, v, sign);
-          const flip = ao[0] + ao[2] > ao[1] + ao[3];
+          const cornerW = (i: number): number =>
+            ao[i] + getSkyLight(packedLight[i]) + getBlockLight(packedLight[i]);
+          const flip = Math.abs(cornerW(1) - cornerW(3)) <= Math.abs(cornerW(0) - cornerW(2));
 
           if (vertexCount + 4 > maxVertices || indexCount + 6 > maxIndices) {
             slot.vertexCount[0] = vertexCount;
@@ -339,8 +390,8 @@ const computeCornerLight = (
     const l1 = getLight(s1[0] | 0, s1[1] | 0, s1[2] | 0);
     const l2 = getLight(s2[0] | 0, s2[1] | 0, s2[2] | 0);
     const l3 = getLight(c[0] | 0, c[1] | 0, c[2] | 0);
-    const sky = (getSkyLight(l0) + getSkyLight(l1) + getSkyLight(l2) + getSkyLight(l3)) >> 2;
-    const block = (getBlockLight(l0) + getBlockLight(l1) + getBlockLight(l2) + getBlockLight(l3)) >> 2;
+    const sky = Math.round((getSkyLight(l0) + getSkyLight(l1) + getSkyLight(l2) + getSkyLight(l3)) / 4);
+    const block = Math.round((getBlockLight(l0) + getBlockLight(l1) + getBlockLight(l2) + getBlockLight(l3)) / 4);
     return packLight(sky, block);
   };
 
