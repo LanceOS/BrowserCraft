@@ -71,17 +71,19 @@ auto main() -> int {
   voxel::gl::loadGLFunctions();
   std::cout << "OpenGL loaded\n";
 
+  CallbackContext ctx;
+  g_inputContext = &ctx;
+
+  // Register input callbacks before UI backend installs/overrides callbacks so it can chain correctly.
+  glfwSetKeyCallback(window, onKey);
+  glfwSetMouseButtonCallback(window, onMouseButton);
+  glfwSetCursorPosCallback(window, onCursor);
+
   // Create and run game
   auto config = makeConfig();
   voxel::Game game(window, config, {.initialState = voxel::GameState::MainMenu});
   auto& input = game.input();
-  CallbackContext ctx{&input, 0.0, 0.0, true};
-  g_inputContext = &ctx;
-
-  // Input callbacks
-  glfwSetKeyCallback(window, onKey);
-  glfwSetMouseButtonCallback(window, onMouseButton);
-  glfwSetCursorPosCallback(window, onCursor);
+  ctx.input = &input;
 
   game.run();
   g_inputContext = nullptr;
