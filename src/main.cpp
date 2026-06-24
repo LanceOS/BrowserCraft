@@ -13,6 +13,7 @@ struct CallbackContext {
   bool firstMouse = true;
 };
 
+// @see notes/imGui-window-user-pointer-conflict.md
 CallbackContext* g_inputContext = nullptr;
 
   voxel::GameConfig makeConfig() {
