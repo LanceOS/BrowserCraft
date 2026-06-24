@@ -142,18 +142,18 @@ export class Renderer {
     return this.gl.canvas.width / this.gl.canvas.height;
   }
 
-  render(world: World, camera: CameraView, timeSeconds: number, skyDarkness: number): void {
+  render(world: World, camera: CameraView, timeSeconds: number, daylightFactor: number): void {
 
     this.syncChunks(world);
 
     this.gl.viewport(0, 0, this.gl.canvas.width, this.gl.canvas.height);
-    const skyR = 0.08 + 0.5 * skyDarkness;
-    const skyG = 0.1 + 0.64 * skyDarkness;
-    const skyB = 0.16 + 0.74 * skyDarkness;
+    const skyR = 0.08 + 0.5 * daylightFactor;
+    const skyG = 0.1 + 0.64 * daylightFactor;
+    const skyB = 0.16 + 0.74 * daylightFactor;
     this.gl.clearColor(0, 0, 0, 1);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
 
-    this.uploadCameraBlock(camera, timeSeconds, skyDarkness, skyR, skyG, skyB);
+    this.uploadCameraBlock(camera, timeSeconds, daylightFactor, skyR, skyG, skyB);
     this.renderSky();
 
     this.chunkShader.use();
@@ -229,7 +229,7 @@ export class Renderer {
   private uploadCameraBlock(
     camera: CameraView,
     timeSeconds: number,
-    skyDarkness: number,
+    daylightFactor: number,
     skyR: number,
     skyG: number,
     skyB: number,
@@ -242,9 +242,9 @@ export class Renderer {
     this.cameraBlock[65] = camera.position[1];
     this.cameraBlock[66] = camera.position[2];
     this.cameraBlock[67] = timeSeconds;
-    this.cameraBlock[68] = skyR * (0.55 + 0.45 * skyDarkness);
-    this.cameraBlock[69] = skyG * (0.55 + 0.45 * skyDarkness);
-    this.cameraBlock[70] = skyB * (0.6 + 0.4 * skyDarkness);
+    this.cameraBlock[68] = skyR * (0.55 + 0.45 * daylightFactor);
+    this.cameraBlock[69] = skyG * (0.55 + 0.45 * daylightFactor);
+    this.cameraBlock[70] = skyB * (0.6 + 0.4 * daylightFactor);
     this.cameraBlock[71] = this.config.renderDistance * this.config.chunkSize * 1.8;
     this.cameraBlock[72] = camera.right[0];
     this.cameraBlock[73] = camera.right[1];
