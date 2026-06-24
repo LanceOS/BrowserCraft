@@ -13,6 +13,8 @@ struct CallbackContext {
   bool firstMouse = true;
 };
 
+CallbackContext* g_inputContext = nullptr;
+
   voxel::GameConfig makeConfig() {
     voxel::GameConfig cfg{};
     cfg.chunkSize = 16; cfg.worldHeight = 256; cfg.renderDistance = 4;
@@ -22,20 +24,20 @@ struct CallbackContext {
     return cfg;
   }
 
-  void onKey(GLFWwindow* window, int key, int, int action, int) {
-    auto* ctx = static_cast<CallbackContext*>(glfwGetWindowUserPointer(window));
+  void onKey(GLFWwindow*, int key, int, int action, int) {
+    auto* ctx = g_inputContext;
     if (!ctx || !ctx->input) return;
     ctx->input->setKeyByCode(key, action != GLFW_RELEASE);
   }
 
-  void onMouseButton(GLFWwindow* window, int button, int action, int) {
-    auto* ctx = static_cast<CallbackContext*>(glfwGetWindowUserPointer(window));
+  void onMouseButton(GLFWwindow*, int button, int action, int) {
+    auto* ctx = g_inputContext;
     if (!ctx || !ctx->input) return;
     ctx->input->setMouseButton(button, action == GLFW_PRESS);
   }
 
-  void onCursor(GLFWwindow* window, double x, double y) {
-    auto* ctx = static_cast<CallbackContext*>(glfwGetWindowUserPointer(window));
+  void onCursor(GLFWwindow*, double x, double y) {
+    auto* ctx = g_inputContext;
     if (!ctx || !ctx->input) return;
 
     if (ctx->firstMouse) {
@@ -73,7 +75,7 @@ auto main() -> int {
   voxel::Game game(window, config, {.initialState = voxel::GameState::MainMenu});
   auto& input = game.input();
   CallbackContext ctx{&input, 0.0, 0.0, true};
-  glfwSetWindowUserPointer(window, &ctx);
+  g_inputContext = &ctx;
 
   // Input callbacks
   glfwSetKeyCallback(window, onKey);
@@ -81,6 +83,7 @@ auto main() -> int {
   glfwSetCursorPosCallback(window, onCursor);
 
   game.run();
+  g_inputContext = nullptr;
 
   glfwDestroyWindow(window);
   glfwTerminate();
