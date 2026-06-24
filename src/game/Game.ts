@@ -158,6 +158,7 @@ export class Game {
       this.players,
       this.bodies,
       this.world,
+      blocks,
       this.blockAudio,
       this.particleSystem,
       this.redstoneSystem,

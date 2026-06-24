@@ -2,10 +2,11 @@
 
 import { ChunkSlotStatus, SharedPool } from "../../alloc/SharedPool.js";
 import type { WorkerInboundMessage, WorkerOutboundMessage, WorkerInitMessage, WorldGenJobMessage } from "../messages.js";
-import { BiomeId, BiomeSampler } from "./BiomeSampler.js";
+import { BiomeSampler } from "./BiomeSampler.js";
 import { CaveCarver } from "./CaveCarver.js";
 import { OreDistributor } from "./OreDistributor.js";
 import { SimplexNoise } from "./SimplexNoise.js";
+import { BiomeRegistry } from "../../../content/biomes/BiomeRegistry.js";
 import { StructureFactory } from "../../../content/structures/StructureRegistry.js";
 import { VillagePlanner } from "../../../content/structures/VillagePlanner.js";
 
@@ -26,9 +27,9 @@ export class WorldGenPipeline {
   private static readonly BEDROCK = 7;
   private static readonly WATER = 8;
 
-  constructor(seed: number) {
+  constructor(seed: number, biomeRegistry = new BiomeRegistry()) {
     this.densityNoise = new SimplexNoise(seed);
-    this.biomeSampler = new BiomeSampler(seed);
+    this.biomeSampler = new BiomeSampler(seed, biomeRegistry);
     this.caveCarver = new CaveCarver(seed);
     this.oreDist = new OreDistributor(seed);
     this.villagePlanner = new VillagePlanner(new StructureFactory().getAll());
@@ -49,9 +50,8 @@ export class WorldGenPipeline {
         const worldX = baseX + x;
         const worldZ = baseZ + z;
         const heightMap = this.biomeSampler.noise2D(worldX * 0.01, worldZ * 0.01);
-        const baseHeight = Math.floor(64 + heightMap * 16);
-        const biome = this.biomeSampler.sampleBiome(worldX, worldZ);
-        const rule = this.biomeSampler.getRule(biome);
+        const rule = this.biomeSampler.sampleBiome(worldX, worldZ);
+        const baseHeight = Math.floor(64 + heightMap * 16 + rule.heightBias);
 
         for (let y = 0; y < sizeY; y++) {
           const index = (y * sizeZ + z) * sizeX + x;
@@ -62,7 +62,7 @@ export class WorldGenPipeline {
           }
 
           if (y > baseHeight) {
-            voxels[index] = y <= 64 && biome !== BiomeId.DESERT ? WorldGenPipeline.WATER : 0;
+            voxels[index] = y <= 64 && rule.name !== "desert" ? WorldGenPipeline.WATER : 0;
             continue;
           }
 

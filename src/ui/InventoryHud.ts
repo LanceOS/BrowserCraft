@@ -4,6 +4,8 @@ import { InventoryComponentDesc } from "../engine/ecs/components/InventoryCompon
 import type { CursorItem } from "../game/inventory/CursorItem.js";
 import type { InventoryAction } from "../game/inventory/InventoryControllerSystem.js";
 
+export type ItemNameResolver = (itemId: number) => string | undefined;
+
 export class InventoryHud {
   private readonly root: HTMLDivElement;
   private readonly styleEl: HTMLStyleElement;
@@ -14,7 +16,10 @@ export class InventoryHud {
   private readonly inventoryPanel: HTMLDivElement;
   private inventoryOpen = false;
 
-  constructor(private readonly onAction: (action: InventoryAction) => void) {
+  constructor(
+    private readonly onAction: (action: InventoryAction) => void,
+    private readonly resolveItemName: ItemNameResolver = () => undefined,
+  ) {
     this.root = document.createElement("div");
     this.root.id = "hud-root";
     this.root.innerHTML = `
@@ -81,10 +86,14 @@ export class InventoryHud {
         outline: 3px solid #ffd85a;
       }
       .hud-slot-label {
-        font-size: 10px;
+        font-size: 9px;
         text-align: center;
         line-height: 1.1;
         padding: 2px;
+        max-width: 100%;
+        max-height: 3.3em;
+        overflow: hidden;
+        overflow-wrap: anywhere;
       }
       .hud-slot-count {
         position: absolute;
@@ -169,7 +178,7 @@ export class InventoryHud {
 
     if (cursor.itemId !== 0 && cursor.count > 0) {
       this.cursorLabel.hidden = false;
-      this.cursorLabel.textContent = `Cursor: ${cursor.itemId} x${cursor.count}`;
+      this.cursorLabel.textContent = `Cursor: ${this.displayNameFor(cursor.itemId)} x${cursor.count}`;
     } else {
       this.cursorLabel.hidden = true;
     }
@@ -193,9 +202,18 @@ export class InventoryHud {
       slot.title = "";
       return;
     }
-    label.textContent = String(itemId);
+    const name = this.displayNameFor(itemId);
+    label.textContent = name;
     countEl.textContent = count > 1 ? String(count) : "";
-    slot.title = `Item ${itemId}${metadata ? `:${metadata}` : ""}`;
+    slot.title = `${name}${metadata ? `:${metadata}` : ""}`;
+  }
+
+  private displayNameFor(itemId: number): string {
+    const rawName = this.resolveItemName(itemId);
+    if (!rawName) return `Item ${itemId}`;
+    return rawName
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   private readonly onMouseDown = (event: MouseEvent): void => {

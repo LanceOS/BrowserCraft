@@ -1,22 +1,11 @@
 /// <reference lib="webworker" />
 
-import { compressRLE, decompressRLE } from "../save/RLE.js";
-import { estimateMaxCompressedSize } from "../save/SaveFormat.js";
-import type { SaveWorkerInboundMessage, SaveWorkerOutboundMessage } from "../save/SaveMessages.js";
+import type { SaveWorkerInboundMessage } from "../save/SaveMessages.js";
+import { handleSaveWorkerMessage, type RegionRecord, type RegionStore } from "../save/SaveWorkerCore.js";
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 const DB_NAME = "VoxelSaveDB";
 const STORE_NAME = "regions";
-
-interface StoredChunkRecord {
-  readonly rawSize: number;
-  readonly buffer: ArrayBuffer;
-}
-
-interface RegionRecord {
-  readonly id: string;
-  readonly chunks: Record<string, StoredChunkRecord>;
-}
 
 const openDatabase = (): Promise<IDBDatabase> =>
   new Promise((resolve, reject) => {
@@ -32,13 +21,6 @@ const openDatabase = (): Promise<IDBDatabase> =>
   });
 
 const dbPromise = openDatabase();
-
-const regionKey = (worldId: string, regionX: number, regionZ: number): string => `${worldId}|${regionX}|${regionZ}`;
-const localChunkKey = (chunkX: number, chunkZ: number): string => {
-  const localX = ((chunkX % 32) + 32) % 32;
-  const localZ = ((chunkZ % 32) + 32) % 32;
-  return `${localX}:${localZ}`;
-};
 
 const getRegion = (db: IDBDatabase, id: string): Promise<RegionRecord | undefined> =>
   new Promise((resolve, reject) => {
@@ -58,65 +40,24 @@ const putRegion = (db: IDBDatabase, record: RegionRecord): Promise<void> =>
 
 ctx.onmessage = async (event: MessageEvent<SaveWorkerInboundMessage>) => {
   const msg = event.data;
-
   try {
     const db = await dbPromise;
-    if (msg.type === "SAVE_CHUNK") {
-      const source = new Uint8Array(msg.rawBuffer);
-      const compressed = new Uint8Array(estimateMaxCompressedSize(source.byteLength));
-      const compressedLength = compressRLE(source, compressed);
-      const id = regionKey(msg.worldId, msg.regionX, msg.regionZ);
-      const chunkKey = localChunkKey(msg.chunkX, msg.chunkZ);
-      const existing = (await getRegion(db, id)) ?? { id, chunks: {} };
-      const next: RegionRecord = {
-        id,
-        chunks: {
-          ...existing.chunks,
-          [chunkKey]: {
-            rawSize: source.byteLength,
-            buffer: compressed.buffer.slice(0, compressedLength),
-          },
-        },
-      };
-      await putRegion(db, next);
-      const response: SaveWorkerOutboundMessage = {
-        type: "SAVE_COMPLETE",
-        chunkX: msg.chunkX,
-        chunkZ: msg.chunkZ,
-      };
-      ctx.postMessage(response);
-      return;
-    }
-
-    const id = regionKey(msg.worldId, msg.regionX, msg.regionZ);
-    const region = await getRegion(db, id);
-    const chunk = region?.chunks[localChunkKey(msg.chunkX, msg.chunkZ)];
-    if (!chunk) {
-      const response: SaveWorkerOutboundMessage = {
-        type: "LOAD_FAILED",
-        chunkX: msg.chunkX,
-        chunkZ: msg.chunkZ,
-      };
-      ctx.postMessage(response);
-      return;
-    }
-
-    const decompressed = new Uint8Array(chunk.rawSize);
-    decompressRLE(new Uint8Array(chunk.buffer), decompressed);
-    const response: SaveWorkerOutboundMessage = {
-      type: "LOAD_SUCCESS",
-      chunkX: msg.chunkX,
-      chunkZ: msg.chunkZ,
-      buffer: decompressed.buffer,
+    const store: RegionStore = {
+      getRegion: (id) => getRegion(db, id),
+      putRegion: (record) => putRegion(db, record),
     };
-    ctx.postMessage(response, [decompressed.buffer]);
+    const result = await handleSaveWorkerMessage(msg, store);
+    if (result.transfer) {
+      ctx.postMessage(result.message, result.transfer);
+    } else {
+      ctx.postMessage(result.message);
+    }
   } catch (error) {
-    const response: SaveWorkerOutboundMessage = {
+    ctx.postMessage({
       type: msg.type === "SAVE_CHUNK" ? "SAVE_ERROR" : "LOAD_ERROR",
       chunkX: msg.chunkX,
       chunkZ: msg.chunkZ,
       reason: error instanceof Error ? error.message : String(error),
-    };
-    ctx.postMessage(response);
+    });
   }
 };
