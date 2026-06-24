@@ -2,7 +2,12 @@
 
 namespace voxel::gl {
 
-#define LOAD(name) name = reinterpret_cast<decltype(name)>(glfwGetProcAddress(#name))
+#define LOAD(name) do { \
+    name = reinterpret_cast<decltype(name)>(glfwGetProcAddress("gl" #name)); \
+    if (!name) { \
+      throw std::runtime_error("Failed to load GL function: gl" #name); \
+    } \
+  } while(0)
 
 PFN_CreateShader CreateShader;
 PFN_ShaderSource ShaderSource;
