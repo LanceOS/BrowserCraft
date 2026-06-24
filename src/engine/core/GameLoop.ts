@@ -29,7 +29,6 @@ export class GameLoop {
     if (this.running) return;
     this.running = true;
     this.lastTime = performance.now();
-    this.ui.showMainMenu();
     document.addEventListener("keydown", this.onEscape);
     this.frameHandle = requestAnimationFrame(this.tick);
   }

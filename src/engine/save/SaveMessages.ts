@@ -1,5 +1,6 @@
 export interface SaveChunkMessage {
   readonly type: "SAVE_CHUNK";
+  readonly worldId: string;
   readonly chunkX: number;
   readonly chunkZ: number;
   readonly regionX: number;
@@ -9,6 +10,7 @@ export interface SaveChunkMessage {
 
 export interface LoadChunkMessage {
   readonly type: "LOAD_CHUNK";
+  readonly worldId: string;
   readonly chunkX: number;
   readonly chunkZ: number;
   readonly regionX: number;

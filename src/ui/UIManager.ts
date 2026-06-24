@@ -1,12 +1,20 @@
 import { GameState } from "../engine/core/GameState.js";
-import { GameSession, MAX_RENDER_DISTANCE } from "../game/GameSession.js";
+import { GameSession, MAX_RENDER_DISTANCE, type GameMode } from "../game/GameSession.js";
+
+export interface UIManagerCallbacks {
+  readonly onStartSingleplayer?: (gameMode: GameMode) => void;
+  readonly onQuitToTitle?: () => void;
+}
 
 export class UIManager {
   private readonly root: HTMLDivElement;
   private readonly styleEl: HTMLStyleElement;
   private previousState: GameState = GameState.MAIN_MENU;
 
-  constructor(private readonly session: GameSession) {
+  constructor(
+    private readonly session: GameSession,
+    private readonly callbacks: UIManagerCallbacks = {},
+  ) {
     this.root = document.createElement("div");
     this.root.id = "ui-root";
     document.body.appendChild(this.root);
@@ -87,10 +95,18 @@ export class UIManager {
         this.showGameModeMenu();
         break;
       case "start-survival":
+        if (this.callbacks.onStartSingleplayer) {
+          this.callbacks.onStartSingleplayer("survival");
+          break;
+        }
         this.session.startSingleplayer("survival");
         this.showLoadingScreen("Survival");
         break;
       case "start-creative":
+        if (this.callbacks.onStartSingleplayer) {
+          this.callbacks.onStartSingleplayer("creative");
+          break;
+        }
         this.session.startSingleplayer("creative");
         this.showLoadingScreen("Creative");
         break;
@@ -98,6 +114,10 @@ export class UIManager {
         this.showMainMenu();
         break;
       case "start-singleplayer":
+        if (this.callbacks.onStartSingleplayer) {
+          this.callbacks.onStartSingleplayer("survival");
+          break;
+        }
         this.session.startSingleplayer("survival");
         this.showLoadingScreen();
         break;
@@ -119,6 +139,7 @@ export class UIManager {
         if (this.session.resume()) this.clearUI();
         break;
       case "quit-to-title":
+        this.callbacks.onQuitToTitle?.();
         this.session.returnToTitle();
         document.exitPointerLock?.();
         this.showMainMenu();

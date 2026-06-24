@@ -33,7 +33,7 @@ const openDatabase = (): Promise<IDBDatabase> =>
 
 const dbPromise = openDatabase();
 
-const regionKey = (regionX: number, regionZ: number): string => `${regionX}|${regionZ}`;
+const regionKey = (worldId: string, regionX: number, regionZ: number): string => `${worldId}|${regionX}|${regionZ}`;
 const localChunkKey = (chunkX: number, chunkZ: number): string => {
   const localX = ((chunkX % 32) + 32) % 32;
   const localZ = ((chunkZ % 32) + 32) % 32;
@@ -65,7 +65,7 @@ ctx.onmessage = async (event: MessageEvent<SaveWorkerInboundMessage>) => {
       const source = new Uint8Array(msg.rawBuffer);
       const compressed = new Uint8Array(estimateMaxCompressedSize(source.byteLength));
       const compressedLength = compressRLE(source, compressed);
-      const id = regionKey(msg.regionX, msg.regionZ);
+      const id = regionKey(msg.worldId, msg.regionX, msg.regionZ);
       const chunkKey = localChunkKey(msg.chunkX, msg.chunkZ);
       const existing = (await getRegion(db, id)) ?? { id, chunks: {} };
       const next: RegionRecord = {
@@ -88,7 +88,7 @@ ctx.onmessage = async (event: MessageEvent<SaveWorkerInboundMessage>) => {
       return;
     }
 
-    const id = regionKey(msg.regionX, msg.regionZ);
+    const id = regionKey(msg.worldId, msg.regionX, msg.regionZ);
     const region = await getRegion(db, id);
     const chunk = region?.chunks[localChunkKey(msg.chunkX, msg.chunkZ)];
     if (!chunk) {

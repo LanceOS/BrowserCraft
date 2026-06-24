@@ -41,6 +41,14 @@ import { SaveManager } from "../engine/save/SaveManager.js";
 import { GameSession, MAX_RENDER_DISTANCE, type GameMode } from "./GameSession.js";
 import { PlayerInteractionController } from "./PlayerInteractionController.js";
 
+export interface GameOptions {
+  readonly initialState?: GameState;
+  readonly initialGameMode?: GameMode;
+  readonly onStartSingleplayer?: (gameMode: GameMode) => void;
+  readonly onQuitToTitle?: () => void;
+  readonly saveSlotId?: string;
+}
+
 export class Game {
   private readonly gl: WebGL2RenderingContext;
   private readonly renderer: Renderer;
@@ -76,10 +84,13 @@ export class Game {
   private readonly playerEntityId: number;
   private readonly playerEntityIndex: number;
   private appliedStartRequestId = 0;
+  private readonly initialState: GameState;
+  private readonly initialGameMode: GameMode;
 
   constructor(
     private readonly config: GameConfig,
     private readonly canvas: HTMLCanvasElement,
+    options: GameOptions = {},
   ) {
     const gl = canvas.getContext("webgl2", {
       alpha: false,
@@ -93,12 +104,12 @@ export class Game {
 
     this.gl = gl;
     this.session = new GameSession(config.renderDistance);
-    this.ui = new UIManager(this.session);
+    this.initialState = options.initialState ?? GameState.MAIN_MENU;
+    this.initialGameMode = options.initialGameMode ?? "survival";
 
     const blocks = new BlockRegistry(4096);
     new VanillaBlockFactory().registerAll(blocks);
 
-    // Size the shared chunk pool for the largest render distance the options menu allows.
     const pool = SharedPool.create((MAX_RENDER_DISTANCE * 2 + 1) ** 2 + 8, {
       sizeX: config.chunkSize,
       sizeY: config.worldHeight,
@@ -115,8 +126,12 @@ export class Game {
     this.renderer = new Renderer(gl, blocks, config);
     this.timeSystem = new TimeSystem(this.renderer.getTimeUbo());
     const saveWorker = new Worker(new URL("../engine/workers/SaveWorker.js", import.meta.url), { type: "module" });
-    this.saveManager = new SaveManager(saveWorker, pool, this.world);
+    this.saveManager = new SaveManager(saveWorker, pool, this.world, options.saveSlotId ?? "default");
     this.world.attachSaveManager(this.saveManager);
+    this.ui = new UIManager(this.session, {
+      onStartSingleplayer: options.onStartSingleplayer,
+      onQuitToTitle: options.onQuitToTitle ?? (() => this.saveManager.flushPending()),
+    });
     this.audioContext = new AudioContext();
     this.audioRegistry = new AudioRegistry();
     this.audioRegistry.seedBuiltinSounds(this.audioContext);
@@ -195,7 +210,18 @@ export class Game {
   }
 
   start(): void {
+    if (this.initialState === GameState.GENERATING_WORLD) {
+      this.session.startSingleplayer(this.initialGameMode);
+      this.ui.showLoadingScreen(this.initialGameMode === "creative" ? "Creative" : "Survival");
+    } else {
+      this.session.enterMainMenu();
+      this.ui.showMainMenu();
+    }
     this.loop.start();
+  }
+
+  getRenderDistance(): number {
+    return this.session.renderDistance;
   }
 
   dispose(): void {
