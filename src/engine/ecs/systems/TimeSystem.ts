@@ -1,6 +1,7 @@
 import { UniformBuffer } from "../../render/UniformBuffer.js";
 
 const MORNING_TIME_OF_DAY = 0.25;
+const NIGHT_DAYLIGHT_THRESHOLD = 0.3;
 
 const wrapTimeOfDay = (timeOfDay: number): number => {
   const normalized = timeOfDay % 1;
@@ -44,7 +45,7 @@ export class TimeSystem {
   }
 
   get isNight(): boolean {
-    return this.daylightFactorValue < 0.5;
+    return this.daylightFactorValue < NIGHT_DAYLIGHT_THRESHOLD;
   }
 
   skipToMorning(): void {

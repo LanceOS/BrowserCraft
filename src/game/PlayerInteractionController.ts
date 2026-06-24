@@ -11,14 +11,27 @@ import type { AudioListenerView } from "../engine/render/CameraView.js";
 import { AudioRegistry, SoundId } from "../content/audio/AudioRegistry.js";
 import { createDefaultCraftingRegistry } from "../content/crafting/CraftingRegistry.js";
 import { World } from "../world/World.js";
-import { InventoryHud } from "../ui/InventoryHud.js";
+import type { BlockRegistry } from "../world/BlockRegistry.js";
+import { InventoryHud, type ItemNameResolver } from "../ui/InventoryHud.js";
 import { BlockInteractionAudio } from "./BlockInteractionAudio.js";
 import { CraftingSystem } from "./inventory/CraftingSystem.js";
 import type { CursorItem } from "./inventory/CursorItem.js";
 import { InventoryControllerSystem, type InventoryAction } from "./inventory/InventoryControllerSystem.js";
 
+export interface InventoryHudPort {
+  dispose(): void;
+  isOpen(): boolean;
+  setInventoryOpen(open: boolean): void;
+  render: InventoryHud["render"];
+}
+
+export type InventoryHudFactory = (
+  onAction: (action: InventoryAction) => void,
+  resolveItemName: ItemNameResolver,
+) => InventoryHudPort;
+
 export class PlayerInteractionController {
-  private readonly hud: InventoryHud;
+  private readonly hud: InventoryHudPort;
   private readonly inventoryController = new InventoryControllerSystem();
   private readonly craftingSystem = new CraftingSystem(createDefaultCraftingRegistry());
   private readonly cursor: CursorItem = { itemId: 0, count: 0, metadata: 0 };
@@ -31,6 +44,7 @@ export class PlayerInteractionController {
     private readonly players: ComponentStore<typeof PlayerComponentDesc>,
     private readonly bodies: ComponentStore<typeof RigidBodyDesc>,
     private readonly world: World,
+    private readonly blocks: BlockRegistry,
     private readonly blockAudio: BlockInteractionAudio,
     private readonly particleSystem: ParticleSystem<unknown>,
     private readonly redstoneSystem: RedstoneSystem<unknown>,
@@ -38,8 +52,9 @@ export class PlayerInteractionController {
     private readonly audioPool: AudioNodePool,
     private readonly camera: AudioListenerView,
     private readonly playerEntityIndex: number,
+    hudFactory: InventoryHudFactory = (onAction, resolveItemName) => new InventoryHud(onAction, resolveItemName),
   ) {
-    this.hud = new InventoryHud(this.handleInventoryAction);
+    this.hud = hudFactory(this.handleInventoryAction, (itemId) => this.blocks.tryGet(itemId)?.name);
   }
 
   dispose(): void {
