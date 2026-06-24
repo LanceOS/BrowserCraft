@@ -41,22 +41,18 @@ The main 3D draw call path is all inside [`Renderer.render()`](../cpp-voxel/src/
 
 It does not own world generation, meshing, or gameplay state. It consumes completed chunk meshes from `World`.
 
-## Texture Source
+## Texture Source (Planned Data-Driven Refactor)
 
-Textures are currently generated in code rather than loaded from external assets.
+> **Architecture Note:** Textures are currently generated in code via hardcoded enumerations, which violates data-driven design principles. A centralized **Asset Manager** is planned to replace this.
 
-[`Renderer`](../cpp-voxel/src/engine/render/Renderer.hpp):
+Currently, [`Renderer`](../cpp-voxel/src/engine/render/Renderer.hpp):
 
 - defines a `LAYER_COLORS` map keyed by [`Tex`](../cpp-voxel/src/world/BlockDefinition.hpp)
 - synthesizes 16x16 RGBA layers with `makeLayer(...)`
 - uploads every layer into a [`Texture2DArray`](../cpp-voxel/src/engine/render/Texture2DArray.hpp)
 - generates mipmaps once after seeding
 
-This means that adding a new block texture layer currently requires:
-
-1. adding a new `Tex` enum value
-2. supplying a matching layer color or texture source in `Renderer`
-3. pointing block definitions at that layer
+This means that adding a new block texture layer currently requires C++ changes. The planned refactor will migrate to a system where textures and materials are loaded from JSON/PNG files at startup, so adding a new texture requires zero code changes.
 
 ## Uniform Buffers
 
@@ -130,21 +126,20 @@ The renderer does not rebuild mesh topology. It only uploads the finished arrays
 
 `Renderer.render(world, camera, timeSeconds, daylightFactor)` follows this sequence:
 
-1. `syncChunks(world)`
+1. `syncChunks(world)` (or map persistent buffers for workers)
 2. set viewport
 3. clear color and depth
 4. upload the camera UBO
 5. draw the sky
 6. bind chunk shader and block texture array
-7. extract frustum planes from the camera view-projection matrix
-8. iterate visible chunk entries from `World`
-9. frustum-test each chunk AABB
-10. set `u_chunkTranslation`
-11. draw the chunk mesh
+7. **Compute Shader Culling**: extract frustum planes and dispatch compute shader to cull chunks and populate the indirect draw buffer on the GPU.
+8. **Multi-Draw Indirect**: issue a single `glMultiDrawElementsIndirect` to draw all visible chunks.
 
-## Chunk Upload Path
+## Chunk Upload Path (Planned Persistent Mapping)
 
-`syncChunks(world)` has two responsibilities:
+> **Optimization Note:** The current synchronous upload in the main thread introduces latency. A migration to **Persistent Mapped Buffers** (`glBufferStorage` with `GL_MAP_PERSISTENT_BIT`) is planned.
+
+Currently, `syncChunks(world)` has two responsibilities:
 
 - drop GPU meshes for chunks that no longer exist in `World`
 - upload new `meshReady` chunks into `ChunkMesh` objects
@@ -153,21 +148,23 @@ Upload works like this:
 
 1. fetch the slot views from `world.getChunkSlot(chunk)`
 2. create exact subarrays from `slot.vertices` and `slot.indices`
-3. upload them into the chunk's VAO/VBO/EBO wrapper
+3. upload them into the chunk's VAO/VBO/EBO wrapper using `glBufferSubData`
 4. mark the chunk uploaded
 
-If a chunk reports zero vertices or indices, it is still marked uploaded so the lifecycle can progress cleanly.
+In the persistent mapped architecture, worker threads will write their meshes directly into the GPU-visible memory, and `syncChunks` will simply acknowledge the new byte offsets for the compute culler.
 
-## Frustum Culling
+## Frustum Culling (Planned Compute Shader)
 
-`Renderer` uses the frustum culler (see [`Frustum`](../cpp-voxel/src/engine/math/Frustum.hpp)) to reject chunk AABBs before drawing.
+> **Optimization Note:** CPU culling will be replaced by GPU Compute Shader culling to prepare for Multi-Draw Indirect.
+
+Currently, `Renderer` uses the frustum culler (see [`Frustum`](../cpp-voxel/src/engine/math/Frustum.hpp)) to reject chunk AABBs before drawing.
 
 For each chunk:
 
 - `min = [chunkX * chunkSize, 0, chunkZ * chunkSize]`
 - `max = [minX + chunkSize, worldHeight, minZ + chunkSize]`
 
-The culler extracts six planes from the camera matrix and tests each chunk AABB conservatively.
+The culler extracts six planes from the camera matrix and tests each chunk AABB conservatively on the CPU. Under the planned architecture, the CPU simply passes these planes to a compute shader, which performs this math in parallel for all chunks and fills an indirect draw buffer.
 
 ## Sky Pass
 
