@@ -1,14 +1,16 @@
 #include "WorldGenPipeline.hpp"
 #include <cmath>
+#include <algorithm>
 #include <cstring>
 
 namespace voxel {
 
-WorldGenPipeline::WorldGenPipeline(uint32_t seed)
+WorldGenPipeline::WorldGenPipeline(uint32_t seed, const WorldGenerationConfig& config)
   : m_densityNoise(seed),
     m_biomeSampler(seed),
     m_caveCarver(seed),
-    m_oreDist(seed)
+    m_oreDist(seed),
+    m_config(config)
 {}
 
 void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
@@ -21,9 +23,16 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
       float worldX = static_cast<float>(baseX + x);
       float worldZ = static_cast<float>(baseZ + z);
 
-      float heightMap = m_biomeSampler.noise2D(worldX * 0.01f, worldZ * 0.01f);
+      const auto& settings = m_config;
+      float biomeHeight = m_biomeSampler.noise2D(worldX * settings.baseHeightScale,
+                                                worldZ * settings.baseHeightScale);
+      float detailHeight = m_densityNoise.noise2D(worldX * settings.detailHeightScale,
+                                                 worldZ * settings.detailHeightScale);
       const auto& rule = m_biomeSampler.sampleBiome(worldX, worldZ);
-      int32_t baseHeight = static_cast<int32_t>(64.0f + heightMap * 16.0f + rule.heightBias);
+      int32_t baseHeight = static_cast<int32_t>(
+        settings.baseHeight + biomeHeight * settings.baseHeightAmplitude + detailHeight * settings.detailHeightAmplitude + rule.heightBias);
+      baseHeight = std::clamp(baseHeight, 1, sizeY - 2);
+      int32_t seaLevel = settings.seaLevel;
 
       for (int32_t y = 0; y < sizeY; ++y) {
         int32_t index = (y * sizeZ + z) * sizeX + x;
@@ -34,12 +43,15 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
         }
 
         if (y > baseHeight) {
-          voxels[index] = (y <= 64 && rule.name != "desert") ? WATER : 0;
+          voxels[index] = (y <= seaLevel && rule.name != "desert") ? WATER : 0;
           continue;
         }
 
-        float depthFactor = static_cast<float>(baseHeight - y) * 0.05f;
-        float noise3D = m_densityNoise.noise3D(worldX * 0.03f, static_cast<float>(y) * 0.03f, worldZ * 0.03f);
+        float depthFactor = static_cast<float>(baseHeight - y) * settings.densityDepthScale;
+        float noise3D = m_densityNoise.noise3D(
+          worldX * settings.densityNoiseScale,
+          static_cast<float>(y) * settings.densityNoiseScale,
+          worldZ * settings.densityNoiseScale);
 
         if (noise3D + depthFactor < 0.0f && y < baseHeight - 5) {
           voxels[index] = 0; // air pocket

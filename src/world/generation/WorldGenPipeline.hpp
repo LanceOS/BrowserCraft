@@ -2,17 +2,28 @@
 
 #include <cstdint>
 #include "SimplexNoise.hpp"
-#include "../../../content/biomes/BiomeSampler.hpp"
+#include "content/biomes/BiomeSampler.hpp"
 #include "CaveCarver.hpp"
 #include "OreDistributor.hpp"
 
 namespace voxel {
 
+struct WorldGenerationConfig {
+  float baseHeight = 64.0f;
+  float baseHeightScale = 0.01f;
+  float baseHeightAmplitude = 16.0f;
+  float detailHeightScale = 0.03f;
+  float detailHeightAmplitude = 4.0f;
+  int32_t seaLevel = 64;
+  float densityNoiseScale = 0.03f;
+  float densityDepthScale = 0.05f;
+};
+
 /// Full world generation pipeline for a single chunk.
 /// Call generate() with a ChunkSlot to fill its voxels, light, and redstone arrays.
 class WorldGenPipeline {
 public:
-  WorldGenPipeline(uint32_t seed);
+  explicit WorldGenPipeline(uint32_t seed, const WorldGenerationConfig& config = {});
 
   /// Generate terrain into the given voxel array.
   void generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
@@ -32,6 +43,7 @@ private:
   biome::BiomeSampler m_biomeSampler;
   CaveCarver m_caveCarver;
   OreDistributor m_oreDist;
+  WorldGenerationConfig m_config;
 };
 
 } // namespace voxel

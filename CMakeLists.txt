@@ -73,10 +73,10 @@ add_library(voxel_engine STATIC
   src/engine/audio/AudioEngine.cpp
   src/engine/threading/WorkerThreadPool.cpp
   src/engine/save/SaveManager.cpp
-  src/engine/workers/worldgen/SimplexNoise.cpp
-  src/engine/workers/worldgen/CaveCarver.cpp
-  src/engine/workers/worldgen/OreDistributor.cpp
-  src/engine/workers/worldgen/WorldGenPipeline.cpp
+  src/world/generation/SimplexNoise.cpp
+  src/world/generation/CaveCarver.cpp
+  src/world/generation/OreDistributor.cpp
+  src/world/generation/WorldGenPipeline.cpp
   src/engine/workers/mesher/GreedyMesher.cpp
   src/content/biomes/BiomeSampler.cpp
   src/game/GameSession.cpp

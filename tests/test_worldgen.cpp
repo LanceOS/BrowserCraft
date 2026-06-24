@@ -1,5 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
-#include "engine/workers/worldgen/WorldGenPipeline.hpp"
+#include "world/generation/WorldGenPipeline.hpp"
 
 TEST_CASE("WorldGenPipeline generates terrain", "[worldgen]") {
   voxel::WorldGenPipeline pipeline(42);

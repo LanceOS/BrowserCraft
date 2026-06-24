@@ -19,7 +19,7 @@
 #include "engine/audio/AudioEngine.hpp"
 #include "engine/threading/WorkerThreadPool.hpp"
 #include "engine/save/SaveManager.hpp"
-#include "engine/workers/worldgen/WorldGenPipeline.hpp"
+#include "world/generation/WorldGenPipeline.hpp"
 #include "world/BlockRegistry.hpp"
 #include "world/World.hpp"
 #include "engine/render/Renderer.hpp"
