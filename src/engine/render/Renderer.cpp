@@ -6,6 +6,11 @@
 
 namespace voxel {
 
+namespace {
+constexpr float kDayCycleSeconds = 3600.0f;
+constexpr float kSunAngularSpeed = 6.28318530718f / kDayCycleSeconds;
+} // namespace
+
 Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config)
   : m_window(window), m_config(config),
     m_chunkShader(shaders::chunkVertex, shaders::chunkFragment),
@@ -67,7 +72,7 @@ void Renderer::render(World& world, const CameraView& camera,
 
   // Upload time block
   {
-    float sunAngle = timeSeconds * 0.05f;
+    float sunAngle = timeSeconds * kSunAngularSpeed;
     float dayFac = daylightFactor;
     float timeData[8] = {
       timeSeconds,           // u_timeElapsed

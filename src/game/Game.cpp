@@ -9,7 +9,9 @@
 namespace voxel {
 
 namespace {
-constexpr float kSunAngularSpeed = 0.05f;
+constexpr float kDayCycleSeconds = 3600.0f;
+constexpr float kSunAngularSpeed = 6.28318530718f / kDayCycleSeconds;
+constexpr float kMiddayTimeSeconds = kDayCycleSeconds * 0.5f;
 constexpr float kNightLightMin = 0.20f;
 constexpr float kMouseSensitivity = 0.0025f;
 constexpr float kMaxPitch = 1.553343f; // ~89 degrees
@@ -69,6 +71,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     m_session(config.renderDistance),
     m_blocks(4096),
     m_worldGenPipeline(config.worldSeed),
+    m_worldSeedRng(std::random_device{}()),
     m_transforms(m_entityManager.capacity()),
     m_bodies(m_entityManager.capacity()),
     m_players(m_entityManager.capacity()),
@@ -167,6 +170,10 @@ Game::~Game() {
   if (m_saveManager) m_saveManager->flushPending();
 }
 
+auto Game::makeRandomWorldSeed() -> uint32_t {
+  return m_worldSeedRng();
+}
+
 void Game::initECS() { createPlayer(); }
 
 void Game::createPlayer() {
@@ -215,8 +222,14 @@ void Game::configureSaveWorld(const std::string& slotId, bool startFresh) {
 }
 
 void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh) {
+  if (startFresh) {
+    m_config.worldSeed = makeRandomWorldSeed();
+    m_worldGenPipeline = WorldGenPipeline(m_config.worldSeed);
+  }
+
   configureSaveWorld(slotId, startFresh);
   m_session.startSingleplayer(mode);
+  m_worldTimeSeconds = kMiddayTimeSeconds;
 
   m_spawnedToSurface = false;
   m_camera.position = glm::vec3(0.0f, 80.0f, 50.0f);
@@ -456,6 +469,11 @@ void Game::processGenJobs() {
 void Game::update(float dt) {
   if (m_session.state() == GameState::InGame ||
       m_session.state() == GameState::GeneratingWorld) {
+    m_worldTimeSeconds += dt;
+    if (m_worldTimeSeconds >= kDayCycleSeconds) {
+      m_worldTimeSeconds -= kDayCycleSeconds;
+    }
+
     if (m_session.state() == GameState::InGame) {
       applyPlayerControls(dt);
       syncCameraFromPlayer();
@@ -496,13 +514,14 @@ void Game::update(float dt) {
   }
 }
 
-void Game::render(float, float timeSeconds) {
+void Game::render(float, float) {
+  const float worldTimeSeconds = m_worldTimeSeconds;
   updateCamera();
   if (m_session.state() == GameState::InGame ||
       m_session.state() == GameState::Paused ||
       m_session.state() == GameState::GeneratingWorld) {
-    float daylightFactor = computeDaylightFactor(timeSeconds);
-    m_renderer->render(*m_world, m_camera, timeSeconds, daylightFactor);
+    float daylightFactor = computeDaylightFactor(worldTimeSeconds);
+    m_renderer->render(*m_world, m_camera, worldTimeSeconds, daylightFactor);
   } else {
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -535,7 +554,7 @@ void Game::run() {
       }
 
       m_ui->beginFrame();
-      render(0.0f, time);
+      render(0.0f, m_worldTimeSeconds);
       m_ui->endFrame();
 
       glfwSwapBuffers(m_window);

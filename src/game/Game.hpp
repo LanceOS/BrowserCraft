@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GLFW/glfw3.h>
+#include <random>
 #include <memory>
 #include <string>
 #include <thread>
@@ -75,6 +76,7 @@ private:
   void startWorld(GameMode mode, const std::string& slotId, bool startFresh);
   void updateCamera();
   void processGenJobs();
+  auto makeRandomWorldSeed() -> uint32_t;
   void processMeshJobs();
 
   GLFWwindow* m_window;
@@ -98,6 +100,7 @@ private:
   std::unique_ptr<WorkerThreadPool> m_genPool;
   std::unique_ptr<WorkerThreadPool> m_meshPool;
   WorldGenPipeline m_worldGenPipeline;
+  std::mt19937 m_worldSeedRng;
 
   // Save
   std::unique_ptr<SaveManager> m_saveManager;
@@ -117,6 +120,7 @@ private:
   SystemManager<Game> m_systems;
   bool m_spawnedToSurface = false;
   int32_t m_playerEntityId = 0;
+  float m_worldTimeSeconds = 0.0f;
 };
 
 } // namespace voxel

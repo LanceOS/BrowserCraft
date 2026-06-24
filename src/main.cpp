@@ -20,7 +20,7 @@ CallbackContext* g_inputContext = nullptr;
   voxel::GameConfig makeConfig() {
     voxel::GameConfig cfg{};
     cfg.chunkSize = 16; cfg.worldHeight = 256; cfg.renderDistance = 4;
-    cfg.worldSeed = 42; cfg.maxVertsPerChunk = 50000;
+    cfg.maxVertsPerChunk = 50000;
     cfg.maxIndicesPerChunk = 100000; cfg.vertexStrideFloats = 10;
     cfg.textureArrayLayers = 64;
     return cfg;
