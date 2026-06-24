@@ -11,7 +11,7 @@
 
 The Day/Night cycle governs the visual atmosphere, lighting intensity, and mob spawning rules of the world. A full cycle completes in 20 minutes (1200 seconds), mirroring the 1.5.2 era.
 
-Rather than updating thousands of block light values dynamically on the CPU, the engine utilizes a **Deferred Sky Darkening** approach. The `TimeSystem` calculates the sun's angle and a global `skyDarkness` multiplier (0.0 = night, 1.0 = day). This multiplier is uploaded to a UBO and evaluated in the fragment shader, dynamically dimming the baked "Sky Light" vertex data in real-time.
+Rather than updating thousands of block light values dynamically on the CPU, the engine utilizes a **Deferred Sky Darkening** approach. The `TimeSystem` calculates the sun's angle and a global `daylightFactor` multiplier (0.0 = night, 1.0 = day). This multiplier is uploaded to a UBO and evaluated in the fragment shader, dynamically dimming the baked "Sky Light" vertex data in real-time.
 
 The sky itself is rendered as a procedural fullscreen gradient (with a sun/moon disc) drawn over a depth-cleared background, bypassing the need for complex sphere geometry or texture atlases.
 
@@ -28,7 +28,7 @@ The `TimeSystem` is an ECS system that owns the authoritative world time. It cal
 Offset  Size  Field           Type
 0       4     u_time          float (Total elapsed time in seconds)
 4       4     u_sunAngle      float (Radians, 0 = midnight, PI/2 = noon)
-8       4     u_darkness      float (0.0 = night, 1.0 = day)
+8       4     u_daylight      float (0.0 = night, 1.0 = day)
 12      4     u_lightLevel    float (Effective global sky light 0..15)
 16      12    u_sunDir        vec3 (Normalized direction of sunlight)
 28      4     u_pad           float (Alignment padding)
@@ -157,7 +157,7 @@ layout(std140, binding = 0) uniform CameraBlock {
 layout(std140, binding = 2) uniform TimeBlock {
   float u_timeElapsed;
   float u_sunAngle;
-  float u_darkness; // 0 = night, 1 = day
+  float u_daylight; // 0 = night, 1 = day
   float u_lightLevel;
   vec3 u_sunDir;
   float u_pad;
@@ -183,29 +183,29 @@ void main() {
     vec3 daySky = mix(daySkyBot, daySkyTop, skyGradient);
     
     // 4. Dusk/Dawn blending
-    // u_darkness peaks at 1 during noon, 0 at night. Edges are transitions.
-    float duskFactor = 1.0 - abs(u_darkness - 0.5) * 2.0; // Peaks at 0.5 darkness
+    // u_daylight peaks at 1 during day, 0 at night. Edges are transitions.
+    float duskFactor = 1.0 - abs(u_daylight - 0.5) * 2.0; // Peaks at 0.5 daylight
     duskFactor = smoothstep(0.0, 1.0, duskFactor);
     
-    vec3 finalSky = mix(nightSky, daySky, u_darkness);
+    vec3 finalSky = mix(nightSky, daySky, u_daylight);
     finalSky = mix(finalSky, duskColor, duskFactor * 0.6);
     
     // 5. Sun Rendering
     float sunDot = dot(viewDir, u_sunDir);
     float sunDisc = smoothstep(0.995, 0.999, sunDot);
-    vec3 sunColor = mix(vec3(1.0, 0.6, 0.2), vec3(1.0, 1.0, 0.9), u_darkness);
+    vec3 sunColor = mix(vec3(1.0, 0.6, 0.2), vec3(1.0, 1.0, 0.9), u_daylight);
     finalSky = mix(finalSky, sunColor, sunDisc);
     
     // 6. Moon Rendering (Opposite of Sun)
     float moonDot = dot(viewDir, -u_sunDir);
     float moonDisc = smoothstep(0.995, 0.999, moonDot);
-    finalSky = mix(finalSky, vec3(0.8, 0.8, 0.9), moonDisc * (1.0 - u_darkness));
+    finalSky = mix(finalSky, vec3(0.8, 0.8, 0.9), moonDisc * (1.0 - u_daylight));
     
     // 7. Stars at night
-    if (u_darkness < 0.3) {
+    if (u_daylight < 0.3) {
         // Simple hash-based star noise
         float starNoise = fract(sin(dot(viewDir.xz * 100.0, vec2(12.9898, 78.233))) * 43758.5453);
-        float star = step(0.998, starNoise) * (1.0 - u_darkness * 3.0);
+        float star = step(0.998, starNoise) * (1.0 - u_daylight * 3.0);
         finalSky += vec3(star);
     }
     
@@ -218,7 +218,7 @@ void main() {
 
 ## 4. Dynamic Terrain Lighting Integration
 
-The chunk fragment shader (defined in the Lighting doc) uses the `u_darkness` and `u_sunDir` from the `TimeBlock` UBO to dynamically shade the world.
+The chunk fragment shader (defined in the Lighting doc) uses the `u_daylight` and `u_sunDir` from the `TimeBlock` UBO to dynamically shade the world.
 
 * **Sky Light Dimming:** The baked Sky Light (0-15) is multiplied by `u_lightLevel / 15.0`. At night, this drops sky light to 4 (moonlight). Block light (torches) remains unaffected.
 * **Directional Sun:** `u_sunDir` provides a cheap directional light source. Surfaces facing the sun receive extra brightness during the day.
@@ -229,7 +229,7 @@ The chunk fragment shader (defined in the Lighting doc) uses the `u_darkness` an
 layout(std140, binding = 2) uniform TimeBlock {
   float u_timeElapsed;
   float u_sunAngle;
-  float u_darkness;
+  float u_daylight;
   float u_lightLevel; // 4 to 15
   vec3 u_sunDir;
   float u_pad;
@@ -250,14 +250,14 @@ void main() {
     // 3. Directional Sun (additive, only during day)
     vec3 N = normalize(v_normal);
     float sunDot = max(dot(N, u_sunDir), 0.0);
-    float sunEffect = sunDot * u_darkness * 0.3; // 30% brightness boost in direct sunlight
+    float sunEffect = sunDot * u_daylight * 0.3; // 30% brightness boost in direct sunlight
     
     // 4. Apply to texture
     vec4 albedo = texture(u_blockTextures, vec3(v_uv, floor(v_texLayer + 0.5)));
     vec3 lit = albedo.rgb * (finalLight + sunEffect + 0.1);
     
     // 5. Smooth Fog transition (Fog turns blackish at night)
-    vec3 fogColor = mix(vec3(0.0, 0.0, 0.0), u_fogColor.rgb, u_darkness);
+    vec3 fogColor = mix(vec3(0.0, 0.0, 0.0), u_fogColor.rgb, u_daylight);
     fragColor = vec4(mix(lit, fogColor, v_fogFactor), albedo.a);
 }
 ```
@@ -329,5 +329,4 @@ export class DaylightSensorSystem {
 2. **Procedural Skybox:** Rendering a fullscreen triangle with a depth of 1.0 eliminates overdraw and geometry processing. The GLSL fragment shader reconstructs the view ray via the inverse projection-view matrix to procedurally generate gradients, the sun disc, the moon, and stars.
 3. **Deferred Sky Lighting:** Instead of re-running the BFS Light Propagation worker every frame (which would melt the CPU), the time of day dynamically scales the baked Sky Light in the fragment shader. Night time drops sky light to 20% (moonlight), while torches (Block Light) remain unaffected.
 4. **ECS Gameplay Hooks:** The `DaylightSensorSystem` queries the `TimeSystem` state and voxel raycasts to apply damage to hostile mobs, fulfilling the classic gameplay loop where Skeletons and Zombies burn at dawn.
-
 

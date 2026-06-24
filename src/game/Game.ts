@@ -332,7 +332,7 @@ export class Game {
     const aspectRatio = this.renderer.resizeCanvasToDisplaySize();
     this.cameraSystem.updateProjection(aspectRatio, this.config.fovDegrees);
     this.cameraSystem.updateMatrices();
-    this.renderer.render(this.world, this.cameraSystem, timeSeconds, this.timeSystem.skyDarkness);
+    this.renderer.render(this.world, this.cameraSystem, timeSeconds, this.timeSystem.daylightFactor);
     this.particleSystem.render();
     this.playerInteractions.render(this.session.state);
   }

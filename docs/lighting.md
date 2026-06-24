@@ -237,7 +237,7 @@ private sampleSmoothLight(
 
 ## 5. Time System & Day/Night Cycle
 
-The `TimeSystem` runs on the main thread and updates a global UBO (`TimeBlock`). It calculates the sun angle and determines the global "sky darkness" multiplier.
+The `TimeSystem` runs on the main thread and updates a global UBO (`TimeBlock`). It calculates the sun angle and determines the global daylight factor.
 
 A full day lasts 20 minutes (1200 seconds), mirroring Minecraft.
 
@@ -253,7 +253,7 @@ export class TimeSystem {
   // UBO Layout (std140, 16 bytes):
   // 0: float u_timeOfDay (0.0 to 1.0)
   // 4: float u_sunAngle (radians)
-  // 8: float u_skyDarkness (0.0 = night, 1.0 = day)
+  // 8: float u_daylight (0.0 = night, 1.0 = day)
   // 12: float u_pad
   private readonly uboData: ArrayBuffer;
   private readonly uboF32: Float32Array;
@@ -271,12 +271,12 @@ export class TimeSystem {
     
     // Sky darkness: 1.0 during day, 0.0 at night. Smooth transition.
     // sin(sunAngle) is -1 at midnight, 1 at noon.
-    let skyDarkness = Math.max(0, Math.sin(sunAngle));
-    skyDarkness = Math.pow(skyDarkness, 0.5); // Ease curve
+    let daylightFactor = Math.max(0, Math.sin(sunAngle));
+    daylightFactor = Math.pow(daylightFactor, 0.5); // Ease curve
     
     this.uboF32[0] = this.timeOfDay;
     this.uboF32[1] = sunAngle;
-    this.uboF32[2] = skyDarkness;
+    this.uboF32[2] = daylightFactor;
     this.uboF32[3] = 0;
     
     this.ubo.upload(this.uboData);
@@ -305,7 +305,7 @@ layout(std140, binding = 0) uniform CameraBlock {
 layout(std140, binding = 2) uniform TimeBlock {
   float u_timeOfDay;
   float u_sunAngle;
-  float u_skyDarkness; // 0 = night, 1 = day
+  float u_daylight; // 0 = night, 1 = day
   float u_pad;
 };
 
@@ -327,7 +327,7 @@ void main() {
   
   // 2. Apply Day/Night cycle to Sky Light
   // At night, sky light drops to ~20% (moonlight)
-  float effectiveSky = skyLight * mix(0.2, 1.0, u_skyDarkness);
+  float effectiveSky = skyLight * mix(0.2, 1.0, u_daylight);
   
   // 3. Combine lights (Max of sky and block)
   float finalLight = max(effectiveSky, blockLight);
@@ -342,7 +342,7 @@ void main() {
   float ndl = max(dot(N, L), 0.0);
   
   // Sun only affects surfaces during the day
-  float sunEffect = ndl * u_skyDarkness * 0.3; 
+  float sunEffect = ndl * u_daylight * 0.3; 
   
   // 6. Final color composition
   vec3 lit = albedo.rgb * (finalLight + sunEffect + 0.1); // 0.1 ambient baseline
@@ -358,6 +358,5 @@ void main() {
 1. **Zero-Copy Worker Baking:** Light propagation (BFS + Sky cast) runs entirely in the `MesherWorker`. It mutates the `SharedArrayBuffer` directly, avoiding main-thread stalls.
 2. **Smooth Lighting:** The `GreedyMesher` samples a 4-voxel area for every vertex corner, averaging the packed light nibbles. This produces the classic 1.5.2 gradient lighting on terrain faces.
 3. **Bit-Packed Data:** Storing Sky and Block light in a single byte (`Uint8Array`) halves memory overhead compared to a `Uint16Array`, improving CPU cache line utilization during the BFS flood fill.
-4. **Time UBO:** The Day/Night cycle is driven by a 16-byte UBO uploaded once per frame. The fragment shader lerps the sky light contribution between 20% (moonlight) and 100% (daylight) using `u_skyDarkness`.
-
+4. **Time UBO:** The Day/Night cycle is driven by a 16-byte UBO uploaded once per frame. The fragment shader lerps the sky light contribution between 20% (moonlight) and 100% (daylight) using `u_daylight`.
 

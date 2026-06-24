@@ -28,7 +28,7 @@ layout(std140) uniform CameraBlock {
 layout(std140) uniform TimeBlock {
   float u_timeElapsed;
   float u_sunAngle;
-  float u_darkness;
+  float u_daylight;
   float u_lightLevel;
   vec3 u_sunDir;
   float u_pad;
@@ -49,24 +49,24 @@ void main() {
 
   float skyGradient = clamp(viewDir.y * 2.0, 0.0, 1.0);
   vec3 daySky = mix(daySkyBot, daySkyTop, skyGradient);
-  float duskFactor = 1.0 - abs(u_darkness - 0.5) * 2.0;
+  float duskFactor = 1.0 - abs(u_daylight - 0.5) * 2.0;
   duskFactor = smoothstep(0.0, 1.0, duskFactor);
 
-  vec3 finalSky = mix(nightSky, daySky, u_darkness);
+  vec3 finalSky = mix(nightSky, daySky, u_daylight);
   finalSky = mix(finalSky, duskColor, duskFactor * 0.6);
 
   float sunDot = dot(viewDir, normalize(u_sunDir));
   float sunDisc = smoothstep(0.995, 0.999, sunDot);
-  vec3 sunColor = mix(vec3(1.0, 0.6, 0.2), vec3(1.0, 1.0, 0.9), u_darkness);
+  vec3 sunColor = mix(vec3(1.0, 0.6, 0.2), vec3(1.0, 1.0, 0.9), u_daylight);
   finalSky = mix(finalSky, sunColor, sunDisc);
 
   float moonDot = dot(viewDir, -normalize(u_sunDir));
   float moonDisc = smoothstep(0.995, 0.999, moonDot);
-  finalSky = mix(finalSky, vec3(0.8, 0.8, 0.9), moonDisc * (1.0 - u_darkness));
+  finalSky = mix(finalSky, vec3(0.8, 0.8, 0.9), moonDisc * (1.0 - u_daylight));
 
-  if (u_darkness < 0.3) {
+  if (u_daylight < 0.3) {
     float starNoise = fract(sin(dot(viewDir.xz * 100.0, vec2(12.9898, 78.233))) * 43758.5453);
-    float star = step(0.998, starNoise) * (1.0 - u_darkness * 3.0);
+    float star = step(0.998, starNoise) * (1.0 - u_daylight * 3.0);
     finalSky += vec3(star);
   }
 

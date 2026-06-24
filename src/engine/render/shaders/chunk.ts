@@ -16,7 +16,7 @@ layout(std140) uniform CameraBlock {
 layout(std140) uniform TimeBlock {
   float u_timeElapsed;
   float u_sunAngle;
-  float u_darkness;
+  float u_daylight;
   float u_lightLevel;
   vec3 u_sunDir;
   float u_pad;
@@ -71,7 +71,7 @@ layout(std140) uniform CameraBlock {
 layout(std140) uniform TimeBlock {
   float u_timeElapsed;
   float u_sunAngle;
-  float u_darkness;
+  float u_daylight;
   float u_lightLevel;
   vec3 u_sunDir;
   float u_pad;
@@ -100,10 +100,10 @@ void main() {
   float ao = float((v_packedLight >> 16u) & 0x03u) / 3.0;
   float effectiveSky = skyLight * (u_lightLevel / 15.0);
   float finalLight = max(effectiveSky, blockLight);
-  float diffuse = max(dot(normal, normalize(u_sunDir)), 0.0) * u_darkness * 0.3;
+  float diffuse = max(dot(normal, normalize(u_sunDir)), 0.0) * u_daylight * 0.3;
   float aoFactor = mix(0.45, 1.0, ao);
   vec3 lit = albedo.rgb * (finalLight + diffuse + 0.1) * aoFactor;
-  vec3 fogColor = mix(vec3(0.0, 0.0, 0.0), u_fogColor.rgb, u_darkness);
+  vec3 fogColor = mix(vec3(0.0, 0.0, 0.0), u_fogColor.rgb, u_daylight);
   vec3 color = mix(lit, fogColor, v_fogFactor);
   fragColor = vec4(color, albedo.a);
 }
