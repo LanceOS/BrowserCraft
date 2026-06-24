@@ -1,0 +1,12 @@
+{
+  "name": "voxel-sandbox-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "serve": "node scripts/serve.mjs",
+    "start": "npm run build && npm run serve"
+  }
+}
