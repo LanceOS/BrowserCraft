@@ -204,7 +204,9 @@ export function greedyMeshChunk(
           const layer = getTextureLayer(blockId, variant, block, d, sign);
           const ao = computeCornerAO(get, occludes, x, du, dv, d, u, v, sign, width, height);
           const packedLight = computeCornerLight(getLight, x, du, dv, d, u, v, sign);
-          const flip = ao[0] + ao[2] > ao[1] + ao[3];
+          const cornerW = (i: number): number =>
+            ao[i] + getSkyLight(packedLight[i]) + getBlockLight(packedLight[i]);
+          const flip = Math.abs(cornerW(1) - cornerW(3)) <= Math.abs(cornerW(0) - cornerW(2));
 
           if (vertexCount + 4 > maxVertices || indexCount + 6 > maxIndices) {
             slot.vertexCount[0] = vertexCount;
