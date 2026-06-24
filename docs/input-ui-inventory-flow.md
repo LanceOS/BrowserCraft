@@ -1,26 +1,28 @@
 # Input, UI, And Inventory Flow
 
+> **C++ Port:** Input now uses GLFW callbacks. UI uses Dear ImGui. See `cpp-voxel/src/engine/core/InputState.hpp` and `cpp-voxel/src/ui/UIManager.hpp`.
+
 This document explains how player input moves through the current game loop and how that connects to menus, pointer lock, the inventory HUD, and crafting.
 
 Relevant files:
 
-- [`src/engine/core/InputState.ts`](../src/engine/core/InputState.ts)
-- [`src/engine/core/GameLoop.ts`](../src/engine/core/GameLoop.ts)
-- [`src/game/PlayerBootstrap.ts`](../src/game/PlayerBootstrap.ts)
-- [`src/game/GameSession.ts`](../src/game/GameSession.ts)
-- [`src/ui/UIManager.ts`](../src/ui/UIManager.ts)
-- [`src/game/PlayerInteractionController.ts`](../src/game/PlayerInteractionController.ts)
-- [`src/ui/InventoryHud.ts`](../src/ui/InventoryHud.ts)
-- [`src/game/inventory/InventoryControllerSystem.ts`](../src/game/inventory/InventoryControllerSystem.ts)
-- [`src/game/inventory/CraftingSystem.ts`](../src/game/inventory/CraftingSystem.ts)
-- [`src/engine/ecs/systems/PlayerControllerSystem.ts`](../src/engine/ecs/systems/PlayerControllerSystem.ts)
+- [`cpp-voxel/src/engine/core/InputState.hpp`](../cpp-voxel/src/engine/core/InputState.hpp)
+- [`cpp-voxel/src/engine/core/GameLoop.hpp`](../cpp-voxel/src/engine/core/GameLoop.hpp)
+- [`cpp-voxel/src/game/Game.hpp`](../cpp-voxel/src/game/Game.hpp)
+- [`cpp-voxel/src/game/GameSession.hpp`](../cpp-voxel/src/game/GameSession.hpp)
+- [`cpp-voxel/src/ui/UIManager.hpp`](../cpp-voxel/src/ui/UIManager.hpp)
+- (to be ported)
+- [`cpp-voxel/src/ui/UIManager.hpp`](../cpp-voxel/src/ui/UIManager.hpp)
+- (to be ported)
+- (to be ported)
+- (to be ported)
 
 ## Input Ownership
 
 The current stack is intentionally simple:
 
-- DOM events are attached in [`bootstrapPlayerControls()`](../src/game/PlayerBootstrap.ts)
-- those handlers mutate [`InputState`](../src/engine/core/InputState.ts)
+- GLFW callbacks are installed in `Game` construction (see [`Game`](../cpp-voxel/src/game/Game.hpp))
+- those handlers mutate [`InputState`](../cpp-voxel/src/engine/core/InputState.hpp)
 - systems and controllers read from `InputState` during update
 - frame-local transitions are normalized by `InputState.clearFrameState()`
 
@@ -53,7 +55,7 @@ Mapped codes currently include:
 
 ## Event Wiring
 
-[`bootstrapPlayerControls()`](../src/game/PlayerBootstrap.ts) installs these listeners:
+`Game` installs these GLFW callbacks (see [`Game`](../cpp-voxel/src/game/Game.hpp)):
 
 - canvas `click`
 - document `pointerlockchange`
@@ -73,7 +75,7 @@ Key behavior:
 
 ## Game Loop Integration
 
-[`GameLoop`](../src/engine/core/GameLoop.ts) runs a fixed-timestep simulation with a variable render pass.
+[`GameLoop`](../cpp-voxel/src/engine/core/GameLoop.hpp) runs a fixed-timestep simulation with a variable render pass.
 
 Updates are only stepped while the session state is:
 
@@ -89,7 +91,7 @@ Escape is handled separately inside `GameLoop` by forwarding `toggle-pause` to `
 
 ## Session State
 
-[`GameSession`](../src/game/GameSession.ts) is the current authoritative state machine for menu and play transitions.
+[`GameSession`](../cpp-voxel/src/game/GameSession.hpp) is the current authoritative state machine for menu and play transitions.
 
 States:
 
@@ -112,7 +114,7 @@ Current render distance limits are:
 
 ## UI Manager
 
-[`UIManager`](../src/ui/UIManager.ts) renders the menu overlays directly in the DOM.
+[`UIManager`](../cpp-voxel/src/ui/UIManager.hpp) renders the menu overlays using Dear ImGui.
 
 It manages:
 
@@ -133,7 +135,7 @@ Important current behaviors:
 
 ## In-Game Control Flow
 
-During `IN_GAME`, [`Game.update()`](../src/game/Game.ts) does the following input-related work:
+During `IN_GAME`, [`Game.update()`](../cpp-voxel/src/game/Game.hpp) does the following input-related work:
 
 1. sync high-level UI state
 2. sync hotbar selection from numeric keys
@@ -146,7 +148,7 @@ One subtle but important detail is step 4: when the inventory is open, the curre
 
 ## Pointer Lock And Movement
 
-[`PlayerControllerSystem`](../src/engine/ecs/systems/PlayerControllerSystem.ts) only processes movement input while `input.pointerLocked` is true.
+(Player controller system — to be ported)
 
 That means:
 
@@ -158,7 +160,7 @@ This matches the menu and inventory flow: if a player can see and use the cursor
 
 ## Inventory Ownership
 
-Inventory state lives in the ECS through [`InventoryComponentDesc`](../src/engine/ecs/components/InventoryComponent.ts).
+Inventory state lives in the ECS through inventory components (see [`Components`](../cpp-voxel/src/engine/ecs/components/Components.hpp)).
 
 The component stores 45 slots worth of:
 
@@ -176,13 +178,13 @@ Current slot usage is:
 
 ## HUD Rendering
 
-[`InventoryHud`](../src/ui/InventoryHud.ts) owns the DOM for:
+The inventory HUD is rendered by [`UIManager`](../cpp-voxel/src/ui/UIManager.hpp) using Dear ImGui:
 
 - the hotbar
 - the inventory panel
 - the cursor item label
 
-It does not mutate inventory state directly. Instead it emits `InventoryAction` objects back to [`PlayerInteractionController`](../src/game/PlayerInteractionController.ts).
+It does not mutate inventory state directly. Instead it emits actions back to the interaction controller (to be ported).
 
 The HUD is visible only while the session is:
 
@@ -193,7 +195,7 @@ The inventory panel itself is only visible when `inventoryOpen` is true.
 
 ## Inventory Interactions
 
-[`InventoryControllerSystem`](../src/game/inventory/InventoryControllerSystem.ts) handles basic slot logic.
+(Inventory controller system — to be ported)
 
 Supported interactions:
 
@@ -210,7 +212,7 @@ The cursor item is owned by `PlayerInteractionController`, not by the ECS invent
 
 ## Crafting Flow
 
-[`CraftingSystem`](../src/game/inventory/CraftingSystem.ts) evaluates the player's 2x2 crafting grid.
+(Crafting system — to be ported)
 
 Flow:
 
@@ -231,7 +233,7 @@ When the player takes from the output slot:
 
 `PlayerInteractionController.syncHotbarSelection()` watches `Digit1` through `Digit9`.
 
-The selected slot is stored in [`PlayerComponentDesc`](../src/engine/ecs/components/PlayerComponent.ts) as `selectedHotbarSlot`, and the HUD highlights the active hotbar slot based on that value.
+The selected slot is stored in the player component (see [`Components`](../cpp-voxel/src/engine/ecs/components/Components.hpp)) as `selectedHotbarSlot`, and the HUD highlights the active hotbar slot based on that value.
 
 ## Game Modes
 
@@ -240,11 +242,11 @@ The selected slot is stored in [`PlayerComponentDesc`](../src/engine/ecs/compone
 - `creative`: flight enabled, gravity disabled, starter inventory seeded
 - `survival`: gravity enabled, no default starter inventory
 
-Creative starter items are currently seeded directly in [`Game.seedCreativeInventory()`](../src/game/Game.ts).
+Creative starter items are currently seeded directly in `Game` (see [`Game`](../cpp-voxel/src/game/Game.hpp)).
 
 ## Debug Interaction Hooks
 
-[`PlayerInteractionController`](../src/game/PlayerInteractionController.ts) also owns the current debug interaction hooks:
+(Player interaction controller — to be ported) also owns the current debug interaction hooks:
 
 - primary mouse button: trigger block break audio and particles at the debug target
 - secondary mouse button: toggle a simple redstone rig near the debug target
