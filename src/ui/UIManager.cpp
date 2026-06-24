@@ -2,8 +2,34 @@
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
-#include <stdexcept>
 #include <cstring>
+#include <stdexcept>
+#include <algorithm>
+#include <cctype>
+
+namespace {
+auto sanitizeSlotId(std::string slotId) -> std::string {
+  auto isInvalid = [](unsigned char ch) {
+    return ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?' ||
+           ch == '"' || ch == '<' || ch == '>' || ch == '|';
+  };
+
+  slotId.erase(slotId.begin(), std::find_if(slotId.begin(), slotId.end(),
+    [](unsigned char c){ return !std::isspace(c); }));
+
+  slotId.erase(std::find_if(slotId.rbegin(), slotId.rend(),
+    [](unsigned char c){ return !std::isspace(c); }).base(), slotId.end());
+
+  for (auto& ch : slotId) {
+    unsigned char u = static_cast<unsigned char>(ch);
+    if (std::isspace(u) || isInvalid(u) || u < 0x20u) {
+      ch = '_';
+    }
+  }
+
+  return slotId;
+}
+} // namespace
 
 namespace voxel {
 
@@ -138,11 +164,22 @@ void UIManager::renderGameModeMenu() {
   ImGui::SetCursorPosX(80);
   ImGui::InputText("##world_slot", m_slotId.data(), m_slotId.size());
 
-  const std::string slotId = std::string(m_slotId.data());
+  const std::string slotId = sanitizeSlotId(std::string(m_slotId.data()));
+  const bool hasValidSlot = !slotId.empty();
   const GameMode mode = m_gameModeIndex == 1 ? GameMode::Creative : GameMode::Survival;
 
   ImGui::Spacing();
+  if (!hasValidSlot) {
+    ImGui::SetCursorPosX(50);
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "World slot cannot be blank");
+  } else if (slotId != std::string(m_slotId.data())) {
+    ImGui::SetCursorPosX(22);
+    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "Invalid characters were replaced with '_'");
+  }
+
+  ImGui::Spacing();
   ImGui::SetCursorPosX(100);
+  if (!hasValidSlot) ImGui::BeginDisabled();
   if (ImGui::Button("Load World", ImVec2(200, 40))) {
     if (m_callbacks.onStartWorld) m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, false);
   }
@@ -150,6 +187,7 @@ void UIManager::renderGameModeMenu() {
   if (ImGui::Button("Start New World", ImVec2(200, 40))) {
     if (m_callbacks.onStartWorld) m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, true);
   }
+  if (!hasValidSlot) ImGui::EndDisabled();
   ImGui::SetCursorPosX(100);
   if (ImGui::Button("Back", ImVec2(200, 40))) {
     m_state = UIState::MainMenu;
