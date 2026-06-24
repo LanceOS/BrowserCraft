@@ -158,9 +158,11 @@ void World::clear() {
 }
 
 void World::onWorldGenDone(int32_t slotIndex) {
+  // @see notes/world-switch-stale-callbacks.md
   auto it = m_slotToChunk.find(slotIndex);
   if (it == m_slotToChunk.end()) return;
   auto* chunk = it->second;
+  if (chunk->state != ChunkState::Generating) return;
   chunk->state = ChunkState::VoxelsReady;
   chunk->needsRemesh = false;
   markChunkDirty(chunk->chunkX, chunk->chunkZ);
@@ -172,6 +174,7 @@ void World::onMeshDone(int32_t slotIndex, uint32_t vertexCount, uint32_t indexCo
   auto it = m_slotToChunk.find(slotIndex);
   if (it == m_slotToChunk.end()) return;
   auto* chunk = it->second;
+  if (chunk->state != ChunkState::Meshing) return;
   chunk->vertexCount = vertexCount;
   chunk->indexCount = indexCount;
   chunk->state = success ? ChunkState::MeshReady : ChunkState::MeshFailed;
@@ -186,6 +189,7 @@ void World::onSaveLoadSuccess(int32_t chunkX, int32_t chunkZ,
                               size_t dataSize) {
   auto* chunk = m_chunks.getMut(chunkX, chunkZ);
   if (!chunk) return;
+  if (chunk->state != ChunkState::LoadingFromDisk) return;
   auto slot = m_pool.view(chunk->slotIndex);
   *slot.chunkX = chunkX;
   *slot.chunkZ = chunkZ;
@@ -202,6 +206,7 @@ void World::onSaveLoadSuccess(int32_t chunkX, int32_t chunkZ,
 void World::onSaveLoadFailed(int32_t chunkX, int32_t chunkZ) {
   auto* chunk = m_chunks.getMut(chunkX, chunkZ);
   if (!chunk) return;
+  if (chunk->state != ChunkState::LoadingFromDisk) return;
   chunk->state = ChunkState::QueuedGen;
   m_pendingGen.push_back(chunk);
 }
