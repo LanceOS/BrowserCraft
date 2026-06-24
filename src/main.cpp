@@ -6,6 +6,13 @@
 #include "game/Game.hpp"
 
 namespace {
+struct CallbackContext {
+  voxel::InputState* input = nullptr;
+  double lastX = 0.0;
+  double lastY = 0.0;
+  bool firstMouse = true;
+};
+
   voxel::GameConfig makeConfig() {
     voxel::GameConfig cfg{};
     cfg.chunkSize = 16; cfg.worldHeight = 256; cfg.renderDistance = 4;
@@ -13,6 +20,34 @@ namespace {
     cfg.maxIndicesPerChunk = 100000; cfg.vertexStrideFloats = 10;
     cfg.textureArrayLayers = 64;
     return cfg;
+  }
+
+  void onKey(GLFWwindow* window, int key, int, int action, int) {
+    auto* ctx = static_cast<CallbackContext*>(glfwGetWindowUserPointer(window));
+    if (!ctx || !ctx->input) return;
+    ctx->input->setKeyByCode(key, action != GLFW_RELEASE);
+  }
+
+  void onMouseButton(GLFWwindow* window, int button, int action, int) {
+    auto* ctx = static_cast<CallbackContext*>(glfwGetWindowUserPointer(window));
+    if (!ctx || !ctx->input) return;
+    ctx->input->setMouseButton(button, action == GLFW_PRESS);
+  }
+
+  void onCursor(GLFWwindow* window, double x, double y) {
+    auto* ctx = static_cast<CallbackContext*>(glfwGetWindowUserPointer(window));
+    if (!ctx || !ctx->input) return;
+
+    if (ctx->firstMouse) {
+      ctx->lastX = x;
+      ctx->lastY = y;
+      ctx->firstMouse = false;
+      return;
+    }
+
+    ctx->input->addMouseDelta(static_cast<float>(x - ctx->lastX), static_cast<float>(y - ctx->lastY));
+    ctx->lastX = x;
+    ctx->lastY = y;
   }
 }
 
@@ -37,20 +72,13 @@ auto main() -> int {
   auto config = makeConfig();
   voxel::Game game(window, config, {.initialState = voxel::GameState::MainMenu});
   auto& input = game.input();
+  CallbackContext ctx{&input, 0.0, 0.0, true};
+  glfwSetWindowUserPointer(window, &ctx);
 
   // Input callbacks
-  glfwSetKeyCallback(window, [&input](GLFWwindow*, int key, int, int action, int) {
-    input.setKeyByCode(key, action != GLFW_RELEASE);
-  });
-  glfwSetMouseButtonCallback(window, [&input](GLFWwindow*, int btn, int act, int) {
-    input.setMouseButton(btn, act == GLFW_PRESS);
-  });
-  glfwSetCursorPosCallback(window, [&input](GLFWwindow*, double x, double y) {
-    static double lx=0,ly=0; static bool first=true;
-    if (first) { lx = x; ly = y; first = false; }
-    input.addMouseDelta(float(x-lx), float(y-ly));
-    lx=x; ly=y;
-  });
+  glfwSetKeyCallback(window, onKey);
+  glfwSetMouseButtonCallback(window, onMouseButton);
+  glfwSetCursorPosCallback(window, onCursor);
 
   game.run();
 
