@@ -34,7 +34,9 @@ out vec2 v_uv;
 out vec3 v_normal;
 out float v_texLayer;
 out float v_fogFactor;
-flat out uint v_packedLight;
+out float v_skyLight;
+out float v_blockLight;
+out float v_ao;
 
 void main() {
   vec3 worldPos = a_pos + u_chunkTranslation;
@@ -44,7 +46,10 @@ void main() {
   v_uv = a_uv;
   v_normal = a_normal;
   v_texLayer = a_texLayer;
-  v_packedLight = uint(a_lightData + 0.5);
+  uint packedLight = uint(a_lightData + 0.5);
+  v_skyLight = float(packedLight & 0x0Fu) / 15.0;
+  v_blockLight = float((packedLight >> 4u) & 0x0Fu) / 15.0;
+  v_ao = float((packedLight >> 16u) & 0x03u) / 3.0;
 
   float dist = length(u_camTime.xyz - worldPos);
   float fogDistance = u_fogColor.a;
@@ -78,30 +83,34 @@ layout(std140) uniform TimeBlock {
 };
 
 uniform sampler2DArray u_blockTextures;
+uniform int u_opaquePass;
 
 in vec2 v_uv;
 in vec3 v_normal;
 in float v_texLayer;
 in float v_fogFactor;
-flat in uint v_packedLight;
+in float v_skyLight;
+in float v_blockLight;
+in float v_ao;
 
 out vec4 fragColor;
 
 void main() {
-  vec2 tiledUv = fract(v_uv);
-  vec4 albedo = texture(u_blockTextures, vec3(tiledUv, floor(v_texLayer + 0.5)));
+  vec4 albedo = texture(u_blockTextures, vec3(v_uv, floor(v_texLayer + 0.5)));
   if (albedo.a < 0.05) {
     discard;
   }
 
+  // Two-pass transparency: opaque pass discards transparent fragments,
+  // transparent pass discards opaque fragments.
+  if (u_opaquePass == 1 && albedo.a < 0.95) discard;
+  if (u_opaquePass == 0 && albedo.a >= 0.95) discard;
+
   vec3 normal = normalize(v_normal);
-  float skyLight = float(v_packedLight & 0x0Fu) / 15.0;
-  float blockLight = float((v_packedLight >> 4u) & 0x0Fu) / 15.0;
-  float ao = float((v_packedLight >> 16u) & 0x03u) / 3.0;
-  float effectiveSky = skyLight * (u_lightLevel / 15.0);
-  float finalLight = max(effectiveSky, blockLight);
+  float effectiveSky = v_skyLight * (u_lightLevel / 15.0);
+  float finalLight = max(effectiveSky, v_blockLight);
   float diffuse = max(dot(normal, normalize(u_sunDir)), 0.0) * u_daylight * 0.3;
-  float aoFactor = mix(0.45, 1.0, ao);
+  float aoFactor = mix(0.45, 1.0, v_ao);
   vec3 lit = albedo.rgb * (finalLight + diffuse + 0.1) * aoFactor;
   vec3 fogColor = mix(vec3(0.0, 0.0, 0.0), u_fogColor.rgb, u_daylight);
   vec3 color = mix(lit, fogColor, v_fogFactor);

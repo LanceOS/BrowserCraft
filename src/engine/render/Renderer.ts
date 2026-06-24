@@ -89,7 +89,7 @@ export class Renderer {
     const skyR = 0.08 + 0.5 * daylightFactor;
     const skyG = 0.1 + 0.64 * daylightFactor;
     const skyB = 0.16 + 0.74 * daylightFactor;
-    this.gl.clearColor(0, 0, 0, 1);
+    this.gl.clearColor(skyR, skyG, skyB, 1);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
 
     this.uploadCameraBlock(camera, timeSeconds, daylightFactor, skyR, skyG, skyB);
@@ -101,6 +101,8 @@ export class Renderer {
 
     this.frustum.extractFrom(camera.viewProjectionMatrix);
 
+    // Collect visible chunk list so we can render twice
+    const visibleChunks: { key: string; mesh: ChunkMesh; chunkX: number; chunkZ: number }[] = [];
     for (const [key, chunk] of world.entries()) {
       const mesh = this.meshes.get(key);
       if (!mesh || mesh.indexCount === 0) continue;
@@ -113,15 +115,47 @@ export class Renderer {
       this.frustumMax[2] = this.frustumMin[2] + this.config.chunkSize;
 
       if (!this.frustum.testAABB(this.frustumMin, this.frustumMax)) continue;
+      visibleChunks.push({ key, mesh, chunkX: chunk.chunkX, chunkZ: chunk.chunkZ });
+    }
 
+    // Sort far-to-near for correct transparent blending
+    const camChunkX = Math.floor(camera.position[0] / this.config.chunkSize);
+    const camChunkZ = Math.floor(camera.position[2] / this.config.chunkSize);
+    visibleChunks.sort((a, b) => {
+      const da = (a.chunkX - camChunkX) ** 2 + (a.chunkZ - camChunkZ) ** 2;
+      const db = (b.chunkX - camChunkX) ** 2 + (b.chunkZ - camChunkZ) ** 2;
+      return db - da; // far first
+    });
+
+    // Pass 1: opaque only — writes depth, skips transparent fragments
+    this.gl.uniform1i(this.chunkShader.uniform("u_opaquePass"), 1);
+    this.gl.depthMask(true);
+    this.gl.depthFunc(this.gl.LESS);
+    for (const { key, mesh, chunkX, chunkZ } of visibleChunks) {
       this.gl.uniform3f(
         this.chunkShader.uniform("u_chunkTranslation"),
-        chunk.chunkX * this.config.chunkSize,
+        chunkX * this.config.chunkSize,
         0,
-        chunk.chunkZ * this.config.chunkSize,
+        chunkZ * this.config.chunkSize,
       );
       mesh.draw();
     }
+
+    // Pass 2: transparent only — no depth write, blends on top of opaque
+    this.gl.uniform1i(this.chunkShader.uniform("u_opaquePass"), 0);
+    this.gl.depthMask(false);
+    this.gl.depthFunc(this.gl.LEQUAL);
+    for (const { key, mesh, chunkX, chunkZ } of visibleChunks) {
+      this.gl.uniform3f(
+        this.chunkShader.uniform("u_chunkTranslation"),
+        chunkX * this.config.chunkSize,
+        0,
+        chunkZ * this.config.chunkSize,
+      );
+      mesh.draw();
+    }
+    this.gl.depthMask(true);
+    this.gl.depthFunc(this.gl.LESS);
   }
 
   dispose(): void {
@@ -198,11 +232,13 @@ export class Renderer {
 
   private renderSky(): void {
     this.gl.depthMask(false);
+    this.gl.disable(this.gl.DEPTH_TEST);
     this.gl.disable(this.gl.CULL_FACE);
     this.skyShader.use();
     this.gl.bindVertexArray(this.skyVao);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 3);
     this.gl.bindVertexArray(null);
+    this.gl.enable(this.gl.DEPTH_TEST);
     this.gl.depthMask(true);
   }
 

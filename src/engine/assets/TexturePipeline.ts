@@ -92,15 +92,18 @@ export class TexturePipeline {
     return Array.from({ length: layerCount }, (_, layer) => this.createLayerData(layer));
   }
 
-  private makePlaceholderLayer({ r, g, b, a = 255, accent = 0 }: LayerColor): Uint8Array {
+  private makePlaceholderLayer({ r, g, b, a = 255 }: LayerColor): Uint8Array {
     const data = new Uint8Array(this.width * this.height * 4);
+    const noise = (x: number, y: number, c: number): number => {
+      const hash = ((x * 374761393) ^ (y * 668265263) ^ (c * 1274126177)) >>> 0;
+      return (hash & 7) - 3;
+    };
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
         const index = (y * this.width + x) * 4;
-        const tint = ((x + y + accent) & 1) === 0 ? 10 : -10;
-        data[index + 0] = clampByte(r + tint);
-        data[index + 1] = clampByte(g + tint);
-        data[index + 2] = clampByte(b + tint);
+        data[index + 0] = clampByte(r + noise(x, y, 0));
+        data[index + 1] = clampByte(g + noise(x, y, 1));
+        data[index + 2] = clampByte(b + noise(x, y, 2));
         data[index + 3] = a;
       }
     }

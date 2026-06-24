@@ -17,16 +17,16 @@ test("time system calculates daylight and uploads sun direction", () => {
   const ubo = createUniformRecorder();
   const time = new TimeSystem(ubo);
 
-  assert.equal(time.currentTimeOfDay, 0.25);
+  assert.equal(time.currentTimeOfDay, 0.35);
   assert.ok(time.daylightFactor > 0);
   assert.ok(time.lightLevel > 4);
   assert.ok(time.lightLevel <= 15);
 
   const upload = ubo.uploads.at(-1);
   assert.ok(upload);
-  assert.equal(upload[1], time.sunAngle);
-  assert.ok(Math.abs(upload[4] - 1) < 1e-6);
-  assert.ok(Math.abs(upload[5]) < 1e-6);
+  assert.ok(Math.abs(upload[1] - time.sunAngle) < 1e-6);
+  assert.ok(Math.abs(upload[4] - Math.cos(time.sunAngle)) < 1e-6);
+  assert.ok(Math.abs(upload[5] - Math.sin(time.sunAngle)) < 1e-6);
   assert.equal(upload[6], 0.20000000298023224);
 });
 
@@ -34,13 +34,13 @@ test("time system skips night back to morning", () => {
   const ubo = createUniformRecorder();
   const time = new TimeSystem(ubo);
 
-  time.update(1200 * 0.6);
+  time.update(1200 * 0.5);
   assert.equal(time.currentTimeOfDay, 0.85);
   assert.equal(time.isNight, true);
 
   time.skipToMorning();
 
-  assert.equal(time.currentTimeOfDay, 0.25);
+  assert.equal(time.currentTimeOfDay, 0.35);
   assert.equal(time.isNight, false);
   assert.ok(ubo.uploads.length >= 3);
 });

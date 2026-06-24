@@ -134,6 +134,7 @@ export class World {
     if (blockId === 0) slot.redstone[ref.index] = 0;
     this.markChunkDirty(ref.chunk.chunkX, ref.chunk.chunkZ);
     this.requestRemesh(ref.chunk);
+    this.requestBoundaryNeighborRemeshes(ref.chunk, ref.localX, ref.localZ);
     return true;
   }
 
@@ -145,6 +146,7 @@ export class World {
     slot.redstone[ref.index] = packed;
     this.markChunkDirty(ref.chunk.chunkX, ref.chunk.chunkZ);
     this.requestRemesh(ref.chunk);
+    this.requestBoundaryNeighborRemeshes(ref.chunk, ref.localX, ref.localZ);
     return true;
   }
 
@@ -213,6 +215,7 @@ export class World {
     chunk.state = "voxelsReady";
     chunk.needsRemesh = false;
     this.pendingMesh.push(chunk);
+    this.requestNeighborRemeshes(chunk);
   }
 
   onSaveLoadFailed(chunkX: number, chunkZ: number): void {
@@ -302,6 +305,7 @@ export class World {
       const message: MeshJobMessage = {
         kind: "mesh",
         slotIndex: chunk.slotIndex,
+        neighborSlotIndices: this.getMeshNeighborSlotIndices(chunk),
       };
       handle.worker.postMessage(message);
     }
@@ -315,6 +319,7 @@ export class World {
     chunk.needsRemesh = false;
     this.saveManager?.markDirty(chunk.chunkX, chunk.chunkZ);
     this.pendingMesh.push(chunk);
+    this.requestNeighborRemeshes(chunk);
   }
 
   private onMeshDone(handle: WorkerHandle, message: MeshDoneMessage): void {
@@ -328,6 +333,51 @@ export class World {
       chunk.needsRemesh = false;
       this.requestRemesh(chunk);
     }
+  }
+
+  private getMeshNeighborSlotIndices(chunk: Chunk): MeshJobMessage["neighborSlotIndices"] {
+    return {
+      negX: this.getReadyNeighborSlotIndex(chunk, -1, 0),
+      posX: this.getReadyNeighborSlotIndex(chunk, 1, 0),
+      negZ: this.getReadyNeighborSlotIndex(chunk, 0, -1),
+      posZ: this.getReadyNeighborSlotIndex(chunk, 0, 1),
+    };
+  }
+
+  private getReadyNeighborSlotIndex(chunk: Chunk, dx: number, dz: number): number | undefined {
+    const neighbor = this.chunks.get(chunk.chunkX + dx, chunk.chunkZ + dz);
+    return neighbor && this.chunkHasVoxelData(neighbor) ? neighbor.slotIndex : undefined;
+  }
+
+  private chunkHasVoxelData(chunk: Chunk): boolean {
+    return (
+      chunk.state === "voxelsReady" ||
+      chunk.state === "queuedMesh" ||
+      chunk.state === "meshing" ||
+      chunk.state === "meshReady" ||
+      chunk.state === "uploaded" ||
+      chunk.state === "meshFailed"
+    );
+  }
+
+  private requestNeighborRemeshes(chunk: Chunk): void {
+    this.requestNeighborRemesh(chunk, -1, 0);
+    this.requestNeighborRemesh(chunk, 1, 0);
+    this.requestNeighborRemesh(chunk, 0, -1);
+    this.requestNeighborRemesh(chunk, 0, 1);
+  }
+
+  private requestBoundaryNeighborRemeshes(chunk: Chunk, localX: number, localZ: number): void {
+    if (localX === 0) this.requestNeighborRemesh(chunk, -1, 0);
+    if (localX === this.config.chunkSize - 1) this.requestNeighborRemesh(chunk, 1, 0);
+    if (localZ === 0) this.requestNeighborRemesh(chunk, 0, -1);
+    if (localZ === this.config.chunkSize - 1) this.requestNeighborRemesh(chunk, 0, 1);
+  }
+
+  private requestNeighborRemesh(chunk: Chunk, dx: number, dz: number): void {
+    const neighbor = this.chunks.get(chunk.chunkX + dx, chunk.chunkZ + dz);
+    if (!neighbor || !this.chunkHasVoxelData(neighbor)) return;
+    this.requestRemesh(neighbor);
   }
 
   private getBlockId(worldX: number, worldY: number, worldZ: number): number {

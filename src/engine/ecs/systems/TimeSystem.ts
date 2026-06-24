@@ -1,6 +1,6 @@
 import { UniformBuffer } from "../../render/UniformBuffer.js";
 
-const MORNING_TIME_OF_DAY = 0.25;
+const MORNING_TIME_OF_DAY = 0.35;
 const NIGHT_DAYLIGHT_THRESHOLD = 0.3;
 
 const wrapTimeOfDay = (timeOfDay: number): number => {
