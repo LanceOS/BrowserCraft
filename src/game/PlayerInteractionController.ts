@@ -75,13 +75,14 @@ export class PlayerInteractionController {
     }
   }
 
-  toggleInventory(): void {
+  toggleInventory(): boolean {
     const next = !this.hud.isOpen();
     this.hud.setInventoryOpen(next);
     if (next) {
       document.exitPointerLock?.();
       this.input.clearMovementState();
     }
+    return next;
   }
 
   isInventoryOpen(): boolean {

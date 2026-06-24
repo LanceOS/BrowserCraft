@@ -10,8 +10,10 @@ test("game session advances through the singleplayer lifecycle", () => {
   session.enterMainMenu();
   assert.equal(session.state, GameState.MAIN_MENU);
 
-  session.startSingleplayer();
+  session.startSingleplayer("creative");
   assert.equal(session.state, GameState.GENERATING_WORLD);
+  assert.equal(session.gameMode, "creative");
+  assert.equal(session.startRequestId, 1);
 
   assert.equal(session.markWorldReady(), true);
   assert.equal(session.state, GameState.IN_GAME);
@@ -29,6 +31,7 @@ test("game session advances through the singleplayer lifecycle", () => {
 test("game session clamps render distance updates", () => {
   const session = new GameSession(1);
   assert.equal(session.renderDistance, 2);
+  assert.equal(session.gameMode, "survival");
 
   session.setRenderDistance(128);
   assert.equal(session.renderDistance, 32);

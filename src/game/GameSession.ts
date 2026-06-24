@@ -3,9 +3,13 @@ import { GameState } from "../engine/core/GameState.js";
 const MIN_RENDER_DISTANCE = 2;
 const MAX_RENDER_DISTANCE = 32;
 
+export type GameMode = "survival" | "creative";
+
 export class GameSession {
   private currentState = GameState.BOOTING;
   private currentRenderDistance: number;
+  private currentGameMode: GameMode = "survival";
+  private currentStartRequestId = 0;
 
   constructor(renderDistance: number) {
     this.currentRenderDistance = this.clampRenderDistance(renderDistance);
@@ -19,12 +23,22 @@ export class GameSession {
     return this.currentRenderDistance;
   }
 
+  get gameMode(): GameMode {
+    return this.currentGameMode;
+  }
+
+  get startRequestId(): number {
+    return this.currentStartRequestId;
+  }
+
   enterMainMenu(): void {
     this.currentState = GameState.MAIN_MENU;
   }
 
-  startSingleplayer(): void {
+  startSingleplayer(gameMode: GameMode): void {
+    this.currentGameMode = gameMode;
     this.currentState = GameState.GENERATING_WORLD;
+    this.currentStartRequestId++;
   }
 
   markWorldReady(): boolean {

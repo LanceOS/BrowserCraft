@@ -83,8 +83,22 @@ export class UIManager {
 
   handleAction(action: string): void {
     switch (action) {
+      case "show-start-menu":
+        this.showGameModeMenu();
+        break;
+      case "start-survival":
+        this.session.startSingleplayer("survival");
+        this.showLoadingScreen("Survival");
+        break;
+      case "start-creative":
+        this.session.startSingleplayer("creative");
+        this.showLoadingScreen("Creative");
+        break;
+      case "back-main-menu":
+        this.showMainMenu();
+        break;
       case "start-singleplayer":
-        this.session.startSingleplayer();
+        this.session.startSingleplayer("survival");
         this.showLoadingScreen();
         break;
       case "show-options":
@@ -141,9 +155,23 @@ export class UIManager {
       <div class="ui-overlay">
         <div class="ui-panel">
           <div class="ui-title">VOXEL ENGINE (v1.5.2)</div>
-          <button class="ui-btn" data-action="start-singleplayer">Singleplayer</button>
+          <button class="ui-btn" data-action="show-start-menu">Start Game</button>
           <button class="ui-btn" data-action="show-options">Options</button>
           <button class="ui-btn" data-action="quit-game">Quit Game</button>
+        </div>
+      </div>
+    `;
+  }
+
+  showGameModeMenu(): void {
+    this.clearUI();
+    this.root.innerHTML = `
+      <div class="ui-overlay">
+        <div class="ui-panel">
+          <div class="ui-title">Select Mode</div>
+          <button class="ui-btn" data-action="start-survival">Survival</button>
+          <button class="ui-btn" data-action="start-creative">Creative</button>
+          <button class="ui-btn" data-action="back-main-menu">Back</button>
         </div>
       </div>
     `;
@@ -193,13 +221,13 @@ export class UIManager {
     }
   }
 
-  showLoadingScreen(): void {
+  showLoadingScreen(modeLabel = "World"): void {
     this.clearUI();
     this.root.innerHTML = `
       <div class="ui-overlay">
         <div class="ui-panel">
           <div class="ui-title">Generating World...</div>
-          <div>Building Terrain & Structures</div>
+          <div>Preparing ${modeLabel} Mode</div>
         </div>
       </div>
     `;

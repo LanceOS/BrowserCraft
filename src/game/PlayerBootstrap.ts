@@ -6,6 +6,7 @@ export function bootstrapPlayerControls(
   canvas: HTMLCanvasElement,
   input: InputState,
   session: GameSession,
+  onToggleInventory: () => boolean,
 ): () => void {
   const onCanvasClick = (): void => {
     if (session.state !== GameState.IN_GAME) return;
@@ -23,7 +24,18 @@ export function bootstrapPlayerControls(
     input.mouseDelta[1] += event.movementY;
   };
 
-  const onKeyDown = (event: KeyboardEvent): void => input.setKey(event.code, true);
+  const onKeyDown = (event: KeyboardEvent): void => {
+    input.setKey(event.code, true);
+    if (event.code === "KeyE" && !event.repeat && session.state === GameState.IN_GAME) {
+      const inventoryOpen = onToggleInventory();
+      if (inventoryOpen) {
+        document.exitPointerLock?.();
+        input.clearMovementState();
+      } else {
+        void canvas.requestPointerLock();
+      }
+    }
+  };
   const onKeyUp = (event: KeyboardEvent): void => input.setKey(event.code, false);
   const onMouseDown = (event: MouseEvent): void => input.setMouseButton(event.button, true);
   const onMouseUp = (event: MouseEvent): void => input.setMouseButton(event.button, false);

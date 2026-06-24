@@ -38,7 +38,7 @@ import { UIManager } from "../ui/UIManager.js";
 import { AudioRegistry } from "../content/audio/AudioRegistry.js";
 import { BlockInteractionAudio } from "./BlockInteractionAudio.js";
 import { SaveManager } from "../engine/save/SaveManager.js";
-import { GameSession } from "./GameSession.js";
+import { GameSession, type GameMode } from "./GameSession.js";
 import { PlayerInteractionController } from "./PlayerInteractionController.js";
 
 export class Game {
@@ -75,6 +75,7 @@ export class Game {
   private readonly playerInteractions: PlayerInteractionController;
   private readonly playerEntityId: number;
   private readonly playerEntityIndex: number;
+  private appliedStartRequestId = 0;
 
   constructor(
     private readonly config: GameConfig,
@@ -149,8 +150,14 @@ export class Game {
       this.cameraSystem,
       this.playerEntityIndex,
     );
-    this.disposePlayerControls = bootstrapPlayerControls(canvas, this.input, this.session);
-    this.seedPlayerInventory();
+    this.configurePlayerForMode(this.session.gameMode);
+    this.appliedStartRequestId = this.session.startRequestId;
+    this.disposePlayerControls = bootstrapPlayerControls(
+      canvas,
+      this.input,
+      this.session,
+      () => this.playerInteractions.toggleInventory(),
+    );
 
     const mobs = new MobFactory(
       this.entityManager,
@@ -255,37 +262,17 @@ export class Game {
     this.inventories.data.itemMetadata.fill(0, invRow * 45, invRow * 45 + 45);
   }
 
-  private seedPlayerInventory(): void {
-    const row = this.inventories.rowFor(this.playerEntityIndex);
-    if (row === -1) return;
-    const base = row * 45;
-    const ids = this.inventories.data.itemIds;
-    const counts = this.inventories.data.itemCounts;
-
-    const starter: Array<[number, number, number]> = [
-      [0, 17, 16],
-      [1, 5, 32],
-      [2, 4, 64],
-      [3, 20, 16],
-      [4, 12, 24],
-      [5, 24, 12],
-      [6, 58, 1],
-      [7, 56, 8],
-      [8, 49, 8],
-    ];
-
-    for (const [slot, itemId, count] of starter) {
-      ids[base + slot] = itemId;
-      counts[base + slot] = count;
-    }
-    this.playerInteractions.refreshCraftingOutput();
-  }
-
   private update(dt: number): void {
     const state = this.session.state;
     this.config.renderDistance = this.session.renderDistance;
     this.playerInteractions.syncState(state);
     this.playerInteractions.syncHotbarSelection();
+
+    if (this.session.startRequestId !== this.appliedStartRequestId) {
+      this.appliedStartRequestId = this.session.startRequestId;
+      this.configurePlayerForMode(this.session.gameMode);
+      this.cameraSystem.syncFromPlayer();
+    }
 
     if (state === GameState.GENERATING_WORLD) {
       this.timeSystem.update(dt);
@@ -297,8 +284,6 @@ export class Game {
     }
 
     if (state !== GameState.IN_GAME) return;
-
-    if (this.input.isPressedCode("KeyE")) this.playerInteractions.toggleInventory();
 
     if (this.playerInteractions.isInventoryOpen()) {
       this.playerInteractions.stopPlayerMotion();
@@ -323,5 +308,78 @@ export class Game {
     this.renderer.render(this.world, this.cameraSystem, timeSeconds, this.timeSystem.skyDarkness);
     this.particleSystem.render();
     this.playerInteractions.render(this.session.state);
+  }
+
+  private configurePlayerForMode(mode: GameMode): void {
+    this.resetPlayerState(mode);
+    this.resetPlayerInventory();
+    if (mode === "creative") {
+      this.seedCreativeInventory();
+    }
+    this.playerInteractions.refreshCraftingOutput();
+  }
+
+  private resetPlayerState(mode: GameMode): void {
+    const transformRow = this.transforms.rowFor(this.playerEntityIndex);
+    if (transformRow !== -1) {
+      this.transforms.data.position[transformRow * 3 + 0] = this.config.chunkSize * 0.5;
+      this.transforms.data.position[transformRow * 3 + 1] = 80;
+      this.transforms.data.position[transformRow * 3 + 2] = this.config.chunkSize * 0.5;
+    }
+
+    const bodyRow = this.bodies.rowFor(this.playerEntityIndex);
+    if (bodyRow !== -1) {
+      this.bodies.data.velocity[bodyRow * 3 + 0] = 0;
+      this.bodies.data.velocity[bodyRow * 3 + 1] = 0;
+      this.bodies.data.velocity[bodyRow * 3 + 2] = 0;
+      this.bodies.data.gravity[bodyRow] = mode === "creative" ? 0 : 20;
+      this.bodies.data.onGround[bodyRow] = 0;
+      this.bodies.data.isFluid[bodyRow] = 0;
+    }
+
+    const playerRow = this.players.rowFor(this.playerEntityIndex);
+    if (playerRow !== -1) {
+      this.players.data.isFlying[playerRow] = mode === "creative" ? 1 : 0;
+      this.players.data.selectedHotbarSlot[playerRow] = 0;
+    }
+
+    const healthRow = this.health.rowFor(this.playerEntityIndex);
+    if (healthRow !== -1) {
+      this.health.data.hp[healthRow] = this.health.data.maxHp[healthRow];
+      this.health.data.regenCd[healthRow] = 0;
+    }
+  }
+
+  private resetPlayerInventory(): void {
+    const row = this.inventories.rowFor(this.playerEntityIndex);
+    if (row === -1) return;
+    this.inventories.data.itemIds.fill(0, row * 45, row * 45 + 45);
+    this.inventories.data.itemCounts.fill(0, row * 45, row * 45 + 45);
+    this.inventories.data.itemMetadata.fill(0, row * 45, row * 45 + 45);
+  }
+
+  private seedCreativeInventory(): void {
+    const row = this.inventories.rowFor(this.playerEntityIndex);
+    if (row === -1) return;
+    const base = row * 45;
+    const ids = this.inventories.data.itemIds;
+    const counts = this.inventories.data.itemCounts;
+
+    const starter: Array<[number, number, number]> = [
+      [0, 17, 16],
+      [1, 5, 32],
+      [2, 4, 64],
+      [3, 20, 16],
+      [4, 12, 24],
+      [5, 24, 12],
+      [6, 58, 1],
+      [7, 56, 8],
+      [8, 49, 8],
+    ];
+
+    for (const [slot, itemId, count] of starter) {
+      ids[base + slot] = itemId;
+      counts[base + slot] = count;
+    }
   }
 }
