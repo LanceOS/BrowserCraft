@@ -8,8 +8,6 @@ CaveCarver::CaveCarver(uint32_t seed)
   : m_noise(std::make_unique<SimplexNoise>(seed ^ 0xcafeu))
   , m_rngState(seed ^ 0xc4e5u) {}
 
-CaveCarver::~CaveCarver() = default;
-
 auto CaveCarver::rng() -> float {
   m_rngState = (m_rngState * 1664525u + 1013904223u);
   return static_cast<float>(m_rngState) / 4294967296.0f;

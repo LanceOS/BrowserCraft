@@ -12,7 +12,6 @@ class SimplexNoise;
 class CaveCarver {
 public:
   explicit CaveCarver(uint32_t seed);
-  ~CaveCarver();
 
   /// Carve caves into voxel data. Operates on a single chunk.
   void carve(uint8_t* voxels, int32_t baseX, int32_t baseZ,
