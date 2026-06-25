@@ -69,6 +69,10 @@ public:
   [[nodiscard]] auto playerEntityId() const -> int32_t { return m_playerEntityId; }
   void requestStop() { m_running = false; }
 
+  /// Apply a new render distance at runtime. Recreates the world pool,
+  /// renderer buffers, and reloads chunks at the new distance.
+  void applyRenderDistance(int32_t newRd);
+
 private:
   void initECS();
   void initSystems();
@@ -105,6 +109,7 @@ private:
   WorldGenPipeline m_worldGenPipeline;
   daynight::DayNightCycle m_dayNightCycle;
   std::string m_saveDir;
+  std::string m_currentSaveSlug;
 
   // Save system orchestrator
   std::unique_ptr<SaveOrchestrator> m_saveOrchestrator;

@@ -59,6 +59,10 @@ public:
   /// Release a slot back to the free list. Main thread only.
   void release(ChunkSlot slot);
 
+  /// Grow the pool to accommodate more slots. Existing slots keep their
+  /// indices and data. Does nothing if newCapacity <= current capacity.
+  void resize(int32_t newCapacity);
+
   /// Get a view of a slot by index. Thread-safe for reads/writes to
   /// different slots (each slot is a disjoint memory region).
   [[nodiscard]] auto view(int32_t slotIndex) const -> ChunkSlot;

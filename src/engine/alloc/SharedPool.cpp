@@ -52,6 +52,26 @@ void SharedPool::release(ChunkSlot slot) {
   m_freeList[m_freeHead++] = slot.slotIndex;
 }
 
+void SharedPool::resize(int32_t newCapacity) {
+  if (newCapacity <= m_capacity) return;
+
+  // Allocate a new buffer large enough for the new capacity.
+  std::vector<uint8_t> newBuf(m_slotByteSize * newCapacity, 0);
+
+  // Copy existing slots to the new buffer (they stay at the same indices).
+  std::memcpy(newBuf.data(), m_buffer.data(), m_buffer.size());
+
+  // Swap the buffers.
+  m_buffer.swap(newBuf);
+
+  // Extend the free list with the new slot indices.
+  m_freeList.resize(newCapacity);
+  for (int32_t i = m_capacity; i < newCapacity; ++i) {
+    m_freeList[m_freeHead++] = i;
+  }
+  m_capacity = newCapacity;
+}
+
 auto SharedPool::view(int32_t slotIndex) const -> ChunkSlot {
   size_t base = static_cast<size_t>(slotIndex) * m_slotByteSize;
   auto* buf = const_cast<uint8_t*>(m_buffer.data()); // non-const access to shared memory

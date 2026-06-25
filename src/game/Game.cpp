@@ -123,7 +123,8 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   m_renderer = std::make_unique<Renderer>(window, m_blocks, config);
 
   m_saveDir = options.saveDir;
-  m_worldController->configureSaveWorld(m_saveDir, options.saveSlotId, false, m_ioPool.get());
+  m_currentSaveSlug = options.saveSlotId.empty() ? std::string("default") : options.saveSlotId;
+  m_worldController->configureSaveWorld(m_saveDir, m_currentSaveSlug, false, m_ioPool.get());
 
   // Initialize save system orchestrator
   m_saveOrchestrator = std::make_unique<SaveOrchestrator>(m_saveDir);
@@ -149,9 +150,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     .onQuit = [this]{ m_running = false; },
     .onRenderDistanceChanged = [this]{
       int32_t rd = m_ui->renderDistance();
-      m_config.renderDistance = rd;
-      m_session.setRenderDistance(rd);
-      m_saveOrchestrator->settings().setInt("renderDistance", rd);
+      applyRenderDistance(rd);
     },
   });
 
@@ -181,6 +180,63 @@ Game::~Game() {
   // Persist runtime settings and flush chunk saves
   m_saveOrchestrator->saveSettings(m_config.renderDistance, m_ui->isFpsVisible());
   m_saveOrchestrator->onWorldClosed(m_worldController->saveManager());
+}
+
+void Game::applyRenderDistance(int32_t newRd) {
+  // Clamp to valid range
+  newRd = std::clamp(newRd, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
+  if (newRd == m_config.renderDistance) return;
+
+  // 1. Flush pending saves and detach persistence
+  if (m_worldController->saveManager()) {
+    m_saveOrchestrator->onWorldClosed(m_worldController->saveManager());
+  }
+
+  // 2. Clear systems (they hold references to World)
+  m_systems.clear();
+  m_playerController = nullptr;
+
+  // 3. Destroy render-dependent objects in reverse creation order
+  m_renderer.reset();
+  m_chunkWorker.reset();
+  m_worldController.reset();
+  m_pool.reset();
+
+  // 4. Update config and session
+  m_config.renderDistance = newRd;
+  m_session.setRenderDistance(newRd);
+  m_saveOrchestrator->settings().setInt("renderDistance", newRd);
+
+  // 5. Recreate pool with new capacity
+  int32_t poolCap = (newRd * 2 + 1) * (newRd * 2 + 1) + 8;
+  m_pool = SharedPool::create(poolCap, makeDims(m_config));
+
+  // 6. Recreate world controller and chunk worker
+  m_worldController = std::make_unique<WorldController>(*m_pool, m_blocks, m_config);
+  m_chunkWorker = std::make_unique<ChunkWorkerImpl>(
+    *m_genPool, *m_meshPool, *m_pool, m_worldGenPipeline, m_config,
+    *m_worldController, m_blocks);
+  m_worldController->createWorld(*m_chunkWorker, nullptr);
+
+  // 7. Recreate renderer with new buffer sizes
+  m_renderer = std::make_unique<Renderer>(m_window, m_blocks, m_config);
+
+  // 8. Reconfigure save (re-attach persistence)
+  m_worldController->configureSaveWorld(m_saveDir, m_currentSaveSlug, false, m_ioPool.get());
+  if (auto* sm = m_worldController->saveManager()) {
+    m_saveOrchestrator->finalizeWorldStart(*sm, m_currentSaveSlug, m_currentSaveSlug,
+                                           m_config.worldSeed, m_session.gameMode());
+  }
+
+  // 9. Rebuild systems (they reference the new World)
+  initSystems();
+
+  // 10. Reset player state
+  m_spawnedToSurface = false;
+  m_cameraDirty = true;
+  syncPlayerWithCamera();
+  m_input.clearAll();
+  m_input.pointerLocked = false;
 }
 
 void Game::initECS() { createPlayer(); }
@@ -247,6 +303,8 @@ void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh)
     slug = std::move(result.slug);
     seed = m_config.worldSeed;
   }
+
+  m_currentSaveSlug = slug;
 
   // 2. Configure the world (creates SaveManager, sets up chunk persistence)
   m_worldController->configureSaveWorld(m_saveDir, slug, startFresh, m_ioPool.get());
