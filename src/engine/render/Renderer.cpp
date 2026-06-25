@@ -88,7 +88,8 @@ auto Renderer::updateFramebufferSize() -> float {
 }
 
 void Renderer::render(World& world, const CameraView& camera,
-                       float timeSeconds, float daylightFactor) {
+                       float timeSeconds, float daylightFactor,
+                       float ambientIntensity, float normalizedTimeOfDay) {
   m_chunkSyncer.sync(world);
   m_frustum.extractFrom(camera.viewProjectionMatrix);
 
@@ -107,10 +108,7 @@ void Renderer::render(World& world, const CameraView& camera,
     float dayFac = daylightFactor;
     glm::vec3 sunDir = daynight::computeSunDirection(timeSeconds);
     glm::vec3 sunCol = daynight::computeSunColor(timeSeconds);
-    float ambientIntensity = daynight::computeAmbientIntensity(timeSeconds);
     float sunIntensity = dayFac; // sun contribution scales with daylight
-    float timeOfDay = std::fmod(timeSeconds / daynight::kDefaultDayLengthSeconds, 1.0f);
-    if (timeOfDay < 0.0f) timeOfDay += 1.0f;
 
     // std140 layout (48 bytes = 12 floats):
     //   0: u_timeElapsed
@@ -129,7 +127,7 @@ void Renderer::render(World& world, const CameraView& camera,
       sunDir.x,              // u_sunDir.x
       sunDir.y,              // u_sunDir.y
       sunDir.z,              // u_sunDir.z
-      timeOfDay,             // u_timeOfDay (0-1)
+      normalizedTimeOfDay,   // u_timeOfDay (0-1)
       sunCol.r,              // u_sunColor.r
       sunCol.g,              // u_sunColor.g
       sunCol.b,              // u_sunColor.b

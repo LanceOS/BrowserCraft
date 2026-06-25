@@ -37,7 +37,8 @@ public:
   Renderer& operator=(const Renderer&) = delete;
 
   /// Render a frame.
-  void render(World& world, const CameraView& camera, float timeSeconds, float daylightFactor);
+  void render(World& world, const CameraView& camera, float timeSeconds, float daylightFactor,
+              float ambientIntensity, float normalizedTimeOfDay);
 
   /// Resize to match the framebuffer.
   auto updateFramebufferSize() -> float;
