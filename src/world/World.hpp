@@ -79,6 +79,10 @@ public:
   /// Check if a world position has a solid block.
   [[nodiscard]] auto isSolid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool;
 
+  /// Fast-path: check solidity using a pre-resolved chunk (skips chunk lookup).
+  /// The caller must ensure worldX/worldZ fall within the given chunk.
+  [[nodiscard]] auto isSolidInChunk(int32_t worldX, int32_t worldY, int32_t worldZ, const Chunk& chunk) const -> bool;
+
   /// Check if a world position has a liquid block.
   [[nodiscard]] auto isFluid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool;
 

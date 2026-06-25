@@ -291,10 +291,29 @@ auto Game::collidesAt(const glm::vec3& candidatePosition, const cmp::RigidBody& 
   int32_t minZ = static_cast<int32_t>(std::floor(minPoint.z));
   int32_t maxZ = static_cast<int32_t>(std::floor(maxPoint.z));
 
+  const int32_t chunkSize = m_config.chunkSize;
+  const int32_t worldHeight = m_config.worldHeight;
+
+  // Cache the last-resolved chunk to avoid repeated map lookups in the inner loop.
+  const Chunk* cachedChunk = nullptr;
+  int32_t cachedCX = 0;
+  int32_t cachedCZ = 0;
+
   for (int32_t y = minY; y <= maxY; ++y) {
+    if (y < 0 || y >= worldHeight) continue;
     for (int32_t z = minZ; z <= maxZ; ++z) {
+      int32_t cz = worldToChunk(static_cast<float>(z), chunkSize);
       for (int32_t x = minX; x <= maxX; ++x) {
-        if (m_world->isSolid(x, y, z)) return true;
+        int32_t cx = worldToChunk(static_cast<float>(x), chunkSize);
+
+        if (cx != cachedCX || cz != cachedCZ) {
+          cachedChunk = m_world->getChunk(cx, cz);
+          cachedCX = cx;
+          cachedCZ = cz;
+        }
+        if (!cachedChunk) continue;
+
+        if (m_world->isSolidInChunk(x, y, z, *cachedChunk)) return true;
       }
     }
   }

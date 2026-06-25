@@ -137,6 +137,18 @@ auto World::setRedstonePackedAt(int32_t worldX, int32_t worldY, int32_t worldZ, 
   return true;
 }
 
+auto World::isSolidInChunk(int32_t worldX, int32_t worldY, int32_t worldZ, const Chunk& chunk) const -> bool {
+  if (worldY < 0 || worldY >= m_config.worldHeight) return false;
+  auto slot = const_cast<World*>(this)->m_pool.view(chunk.slotIndex);
+  int32_t localX = mod(worldX, m_config.chunkSize);
+  int32_t localZ = mod(worldZ, m_config.chunkSize);
+  int32_t idx = (worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX;
+  uint8_t blockId = slot.voxels[idx];
+  if (blockId == 0) return false;
+  auto* block = m_blocks.tryGet(blockId);
+  return block && block->collision.hasVolume();
+}
+
 auto World::isSolid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool {
   if (worldY < 0 || worldY >= m_config.worldHeight) return false;
   uint8_t blockId = getBlockId(worldX, worldY, worldZ);
