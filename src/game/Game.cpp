@@ -62,8 +62,11 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
 
   // Thread pool (use hardware concurrency, min 1)
   int32_t threads = std::max(1u, std::thread::hardware_concurrency());
-  m_genPool = std::make_unique<WorkerThreadPool>(std::max(1, threads / 2));
-  m_meshPool = std::make_unique<WorkerThreadPool>(std::max(1, threads / 2));
+  int32_t halfThreads = std::max(1, threads / 2);
+  m_genPool = std::make_unique<WorkerThreadPool>(halfThreads);
+  m_meshPool = std::make_unique<WorkerThreadPool>(halfThreads);
+  // Dedicated I/O pool for async chunk loading (1-2 threads; disk I/O is serial-bound)
+  m_ioPool = std::make_unique<WorkerThreadPool>(std::max(1, threads / 4));
 
   int32_t poolCap = (MAX_RENDER_DISTANCE * 2 + 1) * (MAX_RENDER_DISTANCE * 2 + 1) + 8;
   m_pool = SharedPool::create(poolCap, makeDims(config));
@@ -205,7 +208,7 @@ void Game::configureSaveWorld(const std::string& slotId, bool startFresh) {
     std::filesystem::remove_all(m_saveDir + "/" + selectedSlot, ec);
   }
 
-  m_saveManager = std::make_unique<SaveManager>(m_saveDir, selectedSlot, *m_pool, *m_world);
+  m_saveManager = std::make_unique<SaveManager>(m_saveDir, selectedSlot, *m_pool, *m_world, m_ioPool.get());
   m_world->attachSaveManager(m_saveManager.get());
 }
 
@@ -507,6 +510,7 @@ void Game::update(float dt) {
     m_dayNightCycle.advance(dt);
 
     processGenJobs();
+    if (m_saveManager) m_saveManager->processPending();
     m_world->update(m_camera.position);
 
     if (!m_spawnedToSurface && m_world->hasTerrain()) {

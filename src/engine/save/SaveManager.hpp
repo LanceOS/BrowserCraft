@@ -4,13 +4,26 @@
 #include <cstdint>
 #include <vector>
 #include <unordered_set>
+#include <queue>
 #include <mutex>
 #include <functional>
+#include <memory>
 
 namespace voxel {
 
 class SharedPool;
 class World;
+class WorkerThreadPool;
+
+/// Holds the result of an async chunk load from disk.
+struct PendingChunkLoad {
+  int32_t chunkX;
+  int32_t chunkZ;
+  std::vector<uint8_t> voxels;
+  std::vector<uint8_t> light;
+  std::vector<uint8_t> redstone;
+  bool success;
+};
 
 /// Manages saving and loading chunk data to/from disk.
 class SaveManager {
@@ -20,13 +33,13 @@ public:
   using LoadFailCallback = std::function<void(int32_t, int32_t)>;
 
   SaveManager(const std::string& saveDir, const std::string& slotId,
-              SharedPool& pool, World& world);
+              SharedPool& pool, World& world, WorkerThreadPool* ioPool);
   ~SaveManager();
 
   SaveManager(const SaveManager&) = delete;
   SaveManager& operator=(const SaveManager&) = delete;
 
-  /// Request a chunk to be loaded from disk (async via thread pool or sync).
+  /// Request a chunk to be loaded from disk (async via thread pool).
   void requestLoad(int32_t chunkX, int32_t chunkZ);
 
   /// Mark a chunk as needing to be saved.
@@ -53,8 +66,11 @@ private:
   std::string m_slotId;
   SharedPool& m_pool;
   World& m_world;
+  WorkerThreadPool* m_ioPool;
   std::unordered_set<int64_t> m_dirtyChunks;
-  std::mutex m_mutex;
+  std::queue<PendingChunkLoad> m_pendingLoads;
+  mutable std::mutex m_mutex;
+  mutable std::mutex m_loadMutex;
   size_t m_dataSize = 0;
 };
 

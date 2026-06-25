@@ -102,6 +102,7 @@ private:
   // Threading
   std::unique_ptr<WorkerThreadPool> m_genPool;
   std::unique_ptr<WorkerThreadPool> m_meshPool;
+  std::unique_ptr<WorkerThreadPool> m_ioPool;
 
   // Completion queues: workers push slot indices here instead of main thread polling all slots.
   std::queue<int32_t> m_completedGenSlots;

@@ -2,6 +2,7 @@
 #include "../alloc/SharedPool.hpp"
 #include "../../world/Chunk.hpp"
 #include "../../world/World.hpp"
+#include "../threading/WorkerThreadPool.hpp"
 #include <fstream>
 #include <filesystem>
 #include <cstring>
@@ -9,8 +10,8 @@
 namespace voxel {
 
 SaveManager::SaveManager(const std::string& saveDir, const std::string& slotId,
-                         SharedPool& pool, World& world)
-  : m_saveDir(saveDir), m_slotId(slotId), m_pool(pool), m_world(world) {
+                         SharedPool& pool, World& world, WorkerThreadPool* ioPool)
+  : m_saveDir(saveDir), m_slotId(slotId), m_pool(pool), m_world(world), m_ioPool(ioPool) {
   std::filesystem::create_directories(m_saveDir + "/" + m_slotId);
   auto dims = pool.dimensions();
   m_dataSize = static_cast<size_t>(dims.sizeX) * dims.sizeY * dims.sizeZ;
@@ -23,15 +24,23 @@ auto SaveManager::chunkFilePath(int32_t cx, int32_t cz) const -> std::string {
 }
 
 void SaveManager::requestLoad(int32_t chunkX, int32_t chunkZ) {
-  auto dims = m_pool.dimensions();
-  size_t dataSize = static_cast<size_t>(dims.sizeX) * dims.sizeY * dims.sizeZ;
-  std::vector<uint8_t> voxels(dataSize), light(dataSize), redstone(dataSize);
+  // Submit file I/O to the thread pool; the main thread processes the result
+  // via processPending().
+  size_t ds = m_dataSize;
+  m_ioPool->submit([this, chunkX, chunkZ, ds]() {
+    PendingChunkLoad result{chunkX, chunkZ, {}, {}, {}, false};
+    result.voxels.resize(ds);
+    result.light.resize(ds);
+    result.redstone.resize(ds);
 
-  if (loadChunk(chunkX, chunkZ, voxels.data(), light.data(), redstone.data(), dataSize)) {
-    m_world.onSaveLoadSuccess(chunkX, chunkZ, voxels.data(), light.data(), redstone.data(), dataSize);
-  } else {
-    m_world.onSaveLoadFailed(chunkX, chunkZ);
-  }
+    result.success = loadChunk(chunkX, chunkZ,
+                                result.voxels.data(),
+                                result.light.data(),
+                                result.redstone.data(), ds);
+
+    std::lock_guard lock(m_loadMutex);
+    m_pendingLoads.push(std::move(result));
+  });
 }
 
 void SaveManager::markDirty(int32_t chunkX, int32_t chunkZ) {
@@ -89,7 +98,25 @@ auto SaveManager::loadChunk(int32_t chunkX, int32_t chunkZ,
 }
 
 void SaveManager::processPending() {
-  // Sync loads are handled inline in requestLoad; flush is manual.
+  std::queue<PendingChunkLoad> ready;
+  {
+    std::lock_guard lock(m_loadMutex);
+    ready.swap(m_pendingLoads);
+  }
+
+  while (!ready.empty()) {
+    auto& load = ready.front();
+    if (load.success) {
+      m_world.onSaveLoadSuccess(load.chunkX, load.chunkZ,
+                                 load.voxels.data(),
+                                 load.light.data(),
+                                 load.redstone.data(),
+                                 load.voxels.size());
+    } else {
+      m_world.onSaveLoadFailed(load.chunkX, load.chunkZ);
+    }
+    ready.pop();
+  }
 }
 
 } // namespace voxel
