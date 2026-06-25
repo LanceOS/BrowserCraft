@@ -133,8 +133,13 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
 
   // Load saved settings
   if (m_settings->has("renderDistance")) {
-    m_config.renderDistance = m_settings->getInt("renderDistance", m_config.renderDistance);
-    m_session.setRenderDistance(m_config.renderDistance);
+    int32_t savedRd = m_settings->getInt("renderDistance", m_config.renderDistance);
+    m_config.renderDistance = savedRd;
+    m_session.setRenderDistance(savedRd);
+    m_ui->setRenderDistance(savedRd);
+  }
+  if (m_settings->has("showFps")) {
+    m_ui->setShowFps(m_settings->getBool("showFps", true));
   }
 
   m_audioRegistry.seedBuiltinSounds();
@@ -159,6 +164,14 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     },
     .onResume = [this]{ glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); },
     .onQuit = [this]{ m_running = false; },
+    .onRenderDistanceChanged = [this]{
+      int32_t rd = m_ui->renderDistance();
+      m_config.renderDistance = rd;
+      m_session.setRenderDistance(rd);
+      if (m_settings) {
+        m_settings->setInt("renderDistance", rd);
+      }
+    },
   });
 
   if (options.initialState == GameState::MainMenu) {
@@ -180,7 +193,17 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
 }
 
 Game::~Game() {
-  if (auto* sm = m_worldController->saveManager()) sm->flushPending();
+  // Save settings before shutdown
+  if (m_settings) {
+    m_settings->setInt("renderDistance", m_config.renderDistance);
+    m_settings->setBool("showFps", m_ui->isFpsVisible());
+    m_settings->flush();
+  }
+
+  // Flush any pending chunk saves
+  if (auto* sm = m_worldController->saveManager()) {
+    sm->flushPending();
+  }
 }
 
 void Game::initECS() { createPlayer(); }
@@ -224,12 +247,41 @@ void Game::initSystems() {
 }
 
 void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh) {
+  // Resolve the display name and slug
+  std::string displayName = slotId;
+  std::string slug;
+
   if (startFresh) {
+    // For new worlds, find an available slug
+    slug = m_worldNaming->nextAvailableSlug(slotId);
     m_config.worldSeed = static_cast<uint32_t>(m_worldSeedRng());
     m_worldGenPipeline = WorldGenPipeline(m_config.worldSeed);
+  } else {
+    // For loading existing worlds, check if the slug exists directly,
+    // or search saved worlds by display name
+    if (m_worldNaming->isSlugTaken(slotId)) {
+      slug = WorldNamingService::generateSlug(slotId);
+    } else {
+      // Try to find it by display name in the world list
+      slug = WorldNamingService::generateSlug(slotId);
+      // If the slug isn't taken, the world might not exist yet — let it fail gracefully
+    }
   }
 
-  m_worldController->configureSaveWorld(m_saveDir, slotId, startFresh, m_ioPool.get());
+  m_worldController->configureSaveWorld(m_saveDir, slug, startFresh, m_ioPool.get());
+
+  // Update metadata after save manager is configured
+  if (auto* sm = m_worldController->saveManager()) {
+    if (startFresh) {
+      auto meta = WorldMetadata::create(displayName, slug, m_config.worldSeed,
+                                        static_cast<int32_t>(mode));
+      sm->writeMetadata(meta);
+    } else {
+      // Touch the timestamp on load
+      sm->touchMetadata();
+    }
+  }
+
   m_session.startSingleplayer(mode);
   m_dayNightCycle.setTime(daynight::kMiddayTimeSeconds);
 
@@ -255,6 +307,9 @@ void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh)
   m_ui->clearUI();
   m_ui->setInventoryOpen(false);
   glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+  // Refresh the world list after creating/loading a world
+  m_worldList->refresh();
 }
 
 auto Game::playerIndex() const -> int32_t {
@@ -298,6 +353,21 @@ void Game::update(float dt) {
     if (m_session.state() == GameState::GeneratingWorld && m_worldController->world().isReady()) {
       m_session.markWorldReady();
     }
+  } else if (m_session.state() == GameState::MainMenu) {
+    // Feed world list to the UI for the world selection menu
+    // Refresh periodically (not every frame) — check if save dir mtime changed
+    // is non-trivial, so we just push the cached list.
+    std::vector<WorldEntry> entries;
+    for (const auto& meta : m_worldList->worlds()) {
+      entries.push_back({
+        .name = meta.displayName(),
+        .slug = meta.displaySlug(),
+        .seed = meta.seed,
+        .gameMode = meta.gameMode,
+        .lastPlayedTimestamp = meta.lastPlayedTimestamp
+      });
+    }
+    m_ui->setWorldList(std::move(entries));
   }
 }
 

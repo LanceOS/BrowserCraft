@@ -96,6 +96,10 @@ public:
   /// Get the current world list.
   [[nodiscard]] auto worldList() const -> const std::vector<WorldEntry>& { return m_worldEntries; }
 
+  /// Get/set the render distance from UI.
+  [[nodiscard]] auto renderDistance() const -> int32_t { return m_renderDistance; }
+  void setRenderDistance(int32_t rd) { m_renderDistance = rd; }
+
   /// Set an error/status message to display in the game mode menu.
   void setWorldError(std::string msg) { m_worldErrorMsg = std::move(msg); }
 

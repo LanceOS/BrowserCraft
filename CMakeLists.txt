@@ -215,6 +215,7 @@ add_executable(voxel_tests
   tests/test_biome_sampler.cpp
   tests/test_worldgen.cpp
   tests/test_save_manager.cpp
+  tests/test_save_services.cpp
   tests/test_thread_pool.cpp
   tests/test_player_controller.cpp
   tests/test_mesher.cpp

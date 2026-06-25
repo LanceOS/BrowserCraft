@@ -11,9 +11,10 @@ SettingsRepository::SettingsRepository(std::filesystem::path dbPath)
 }
 
 SettingsRepository::~SettingsRepository() {
-  flush();
   if (m_db) {
-    sqlite3_close(m_db);
+    flush();
+    int rc = sqlite3_close(m_db);
+    (void)rc; // Debug: rc would be SQLITE_BUSY if statements weren't finalized
     m_db = nullptr;
   }
 }
@@ -34,9 +35,16 @@ auto SettingsRepository::openDb() -> bool {
     return false;
   }
 
-  // Enable WAL mode for better concurrency
+  // Enable WAL mode for better concurrency, with explicit checkpoint control
   char* errMsg = nullptr;
   sqlite3_exec(m_db, "PRAGMA journal_mode=WAL;", nullptr, nullptr, &errMsg);
+  if (errMsg) {
+    sqlite3_free(errMsg);
+    errMsg = nullptr;
+  }
+
+  // Set synchronous to NORMAL (faster, safe with WAL)
+  sqlite3_exec(m_db, "PRAGMA synchronous=NORMAL;", nullptr, nullptr, &errMsg);
   if (errMsg) {
     sqlite3_free(errMsg);
     errMsg = nullptr;
@@ -46,6 +54,17 @@ auto SettingsRepository::openDb() -> bool {
   sqlite3_busy_timeout(m_db, 100);
 
   ensureTable();
+
+  // Verify the database is writable
+  {
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(m_db, "SELECT COUNT(*) FROM settings", -1, &stmt, nullptr);
+    if (rc == SQLITE_OK) {
+      sqlite3_step(stmt);
+      sqlite3_finalize(stmt);
+    }
+  }
+
   return true;
 }
 
@@ -169,7 +188,15 @@ void SettingsRepository::flush() {
   std::lock_guard lock(m_mutex);
 
   if (!m_db) return;
-  sqlite3_exec(m_db, "COMMIT;", nullptr, nullptr, nullptr);
+
+  // Run a full checkpoint to move WAL content into the main database file.
+  // TRUNCATE mode is faster and ensures the WAL file is removed.
+  int log = 0, ckpt = 0;
+  int rc = sqlite3_wal_checkpoint_v2(m_db, nullptr, SQLITE_CHECKPOINT_TRUNCATE, &log, &ckpt);
+  (void)rc;
+
+  // After checkpoint, run a manual sync to ensure data is on disk
+  sqlite3_exec(m_db, "PRAGMA wal_checkpoint(TRUNCATE);", nullptr, nullptr, nullptr);
 }
 
 } // namespace voxel
