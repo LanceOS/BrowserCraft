@@ -55,6 +55,7 @@ add_library(voxel_engine STATIC
   src/engine/alloc/SharedPool.cpp
   src/engine/ecs/EntityManager.cpp
   src/engine/ecs/SystemManager.cpp
+  src/engine/ecs/systems/PlayerControllerSystem.cpp
   src/engine/assets/AssetManager.cpp
   src/world/BlockRegistry.cpp
   src/world/Chunk.cpp

@@ -18,6 +18,7 @@
 #include "engine/ecs/SystemManager.hpp"
 #include "engine/ecs/components/Components.hpp"
 #include "engine/ecs/components/AudioEmitter.hpp"
+#include "engine/ecs/systems/PlayerControllerSystem.hpp"
 #include "engine/audio/AudioEngine.hpp"
 #include "engine/threading/WorkerThreadPool.hpp"
 #include "engine/save/SaveManager.hpp"
@@ -70,17 +71,12 @@ private:
   void initSystems();
   void syncPlayerWithCamera();
   void createPlayer();
-  void applyPlayerControls(float dt);
-  auto playerIndex() const -> int32_t;
-  auto groundHeightAt(float worldX, float worldZ, int32_t startY) const -> int32_t;
-  auto collidesAt(const glm::vec3& candidatePosition, const cmp::RigidBody& body) const -> bool;
-  void syncCameraFromPlayer();
+  [[nodiscard]] auto playerIndex() const -> int32_t;
   void configureSaveWorld(const std::string& slotId, bool startFresh);
   void startWorld(GameMode mode, const std::string& slotId, bool startFresh);
   void updateCamera();
   void processGenJobs();
   auto makeRandomWorldSeed() -> uint32_t;
-  void processMeshJobs();
 
   GLFWwindow* m_window;
   GameConfig m_config;
@@ -128,6 +124,7 @@ private:
   TagStore m_friendlyTags;
 
   SystemManager<Game> m_systems;
+  std::unique_ptr<PlayerControllerSystem> m_playerController;
   bool m_spawnedToSurface = false;
   bool m_cameraDirty = true;
   int32_t m_playerEntityId = 0;
