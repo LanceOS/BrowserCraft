@@ -314,9 +314,12 @@ auto Game::collidesAt(const glm::vec3& candidatePosition, const cmp::RigidBody& 
   const int32_t worldHeight = m_config.worldHeight;
 
   // Cache the last-resolved chunk to avoid repeated map lookups in the inner loop.
+  // Initialise with sentinel values that cannot match any real chunk coordinate,
+  // so the first block always triggers a cache miss and loads the correct chunk.
+  constexpr int32_t kSentinel = int32_t(0x7FFFFFFF);
   const Chunk* cachedChunk = nullptr;
-  int32_t cachedCX = 0;
-  int32_t cachedCZ = 0;
+  int32_t cachedCX = kSentinel;
+  int32_t cachedCZ = kSentinel;
 
   for (int32_t y = minY; y <= maxY; ++y) {
     if (y < 0 || y >= worldHeight) continue;
@@ -585,6 +588,11 @@ void Game::run() {
   GameLoop loop(60.0f,
     [this](float dt) { update(dt); },
     [this, &loop](float, float time) {
+      // Clear frame state BEFORE polling events so that mouse delta accumulated
+      // during glfwPollEvents survives until the next frame's update() call.
+      // (update() runs before render() in the GameLoop, so clearing here ensures
+      //  the delta from this frame's poll is consumed by update next frame.)
+      m_input.clearFrameState();
       glfwPollEvents();
       if (glfwWindowShouldClose(m_window) || !m_running) { loop.stop(); return; }
 
@@ -605,7 +613,6 @@ void Game::run() {
       m_ui->endFrame();
 
       glfwSwapBuffers(m_window);
-      m_input.clearFrameState();
     }
   );
   loop.run();
