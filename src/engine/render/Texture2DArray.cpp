@@ -19,7 +19,7 @@ Texture2DArray::Texture2DArray(int32_t width, int32_t height, int32_t layers)
   gl::GenTextures(1, &m_texture);
   gl::BindTexture(GL_TEXTURE_2D_ARRAY, m_texture);
 
-  int32_t levels = static_cast<int32_t>(std::log2(std::max(width, height))) + 1;
+  int32_t levels = 1; // only base level — NEAREST filtering used, mipmaps not needed
   GLenum internalFormat = m_highBitDepth ? GL_RGBA16 : GL_RGBA8;
   gl::TexStorage3D(GL_TEXTURE_2D_ARRAY, levels, internalFormat, width, height, layers);
 
