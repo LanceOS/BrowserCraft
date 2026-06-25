@@ -326,8 +326,7 @@ void Game::applyPlayerControls(float dt) {
   const bool canControl = (m_session.state() == GameState::InGame ||
                           m_session.state() == GameState::GeneratingWorld) &&
     (m_ui->state() == UIState::InGame) &&
-    !m_ui->isInventoryOpen() &&
-    m_world && m_world->hasTerrain();
+    !m_ui->isInventoryOpen();
 
   if (!canControl) {
     body.velocity.x = 0.0f;
@@ -355,6 +354,13 @@ void Game::applyPlayerControls(float dt) {
   if (m_input.isHeld(InputState::KEY_D)) moveDir += rightFlat;
 
   if (glm::dot(moveDir, moveDir) > 0.0f) moveDir = glm::normalize(moveDir);
+
+  if (!m_world || !m_world->hasTerrain()) {
+    float speed = m_input.isHeld(InputState::KEY_SHIFT) ? player.sprintSpeed : player.walkSpeed;
+    transform.position += moveDir * speed * dt;
+    body.velocity = glm::vec3(0.0f);
+    return;
+  }
 
   if (player.isFlying) {
     float speed = player.flySpeed;
