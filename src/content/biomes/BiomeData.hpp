@@ -25,6 +25,7 @@ struct BiomeWeights {
   float forest    = 0.0f;
   float mountains = 0.0f;
   float swamp     = 0.0f;
+  float ocean     = 0.0f;
 };
 
 /// Numeric biome ID — replaces string-based biome name comparisons.
@@ -35,6 +36,7 @@ enum class BiomeId : uint8_t {
   Forest,
   Mountains,
   Swamp,
+  Ocean,
 };
 
 /// Surface blocks and height bias for a single biome.
@@ -69,6 +71,10 @@ inline constexpr float kSwampTempTransWidth    = 0.08f;
 inline constexpr float kForestHumidThreshold   = 0.55f;
 inline constexpr float kForestTransWidth       = 0.08f;
 
+inline constexpr float kOceanTempThreshold     = 0.42f;
+inline constexpr float kOceanHumidThreshold    = 0.40f;
+inline constexpr float kOceanTransWidth        = 0.08f;
+
 // ---------------------------------------------------------------------------
 // Biome surface rule definitions
 // ---------------------------------------------------------------------------
@@ -84,6 +90,8 @@ inline constexpr BiomeSurfaceRule ForestBiome    {BiomeId::Forest,    BlockId::G
 inline constexpr BiomeSurfaceRule MountainsBiome {BiomeId::Mountains, BlockId::GRASS, BlockId::STONE, 3,  22.0f};
 // Swamp: wet stone/mud, depressed and wet.
 inline constexpr BiomeSurfaceRule SwampBiome     {BiomeId::Swamp,     BlockId::STONE, BlockId::STONE, 5, -3.0f};
+// Ocean: cold-ish and dry-ish, deep depression to stay below sea level, sand floor.
+inline constexpr BiomeSurfaceRule OceanBiome     {BiomeId::Ocean,     BlockId::SAND,  BlockId::SAND,  3, -14.0f};
 
 /// Hermite smoothstep: maps [threshold - width/2, threshold + width/2]
 /// to [0, 1] with smooth ease-in-out. Values outside the transition
@@ -102,6 +110,7 @@ inline constexpr std::array ALL_BIOMES = {
   ForestBiome,
   MountainsBiome,
   SwampBiome,
+  OceanBiome,
 };
 
 } // namespace voxel::biome

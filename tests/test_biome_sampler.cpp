@@ -10,6 +10,7 @@ TEST_CASE("BiomeClassifier pick returns valid biome", "[biome]") {
   REQUIRE(BiomeClassifier::pick(0.1f, 0.5f).id == BiomeId::Mountains);
   REQUIRE(BiomeClassifier::pick(0.5f, 0.7f).id == BiomeId::Forest);
   REQUIRE(BiomeClassifier::pick(0.5f, 0.3f).id == BiomeId::Plains);
+  REQUIRE(BiomeClassifier::pick(0.35f, 0.25f).id == BiomeId::Ocean);
 }
 
 TEST_CASE("BiomeSampler sampleBiome returns valid rule", "[biome]") {
@@ -133,11 +134,12 @@ TEST_CASE("BiomeClassifier computeWeights sums to ~1", "[biome]") {
     {0.5f,  0.5f},  // moderate
     {0.3f,  0.6f},  // cool, humid
     {0.7f,  0.3f},  // warm, dry
+    {0.35f, 0.25f}, // cool, dry (ocean)
   };
 
   for (const auto& pt : testPoints) {
     auto w = BiomeClassifier::computeWeights(pt);
-    float sum = w.plains + w.desert + w.forest + w.mountains + w.swamp;
+    float sum = w.plains + w.desert + w.forest + w.mountains + w.swamp + w.ocean;
     // Allow small epsilon for FP rounding.
     REQUIRE(sum > 0.99f);
     REQUIRE(sum < 1.01f);
@@ -159,8 +161,8 @@ TEST_CASE("BiomeClassifier computeWeights sums to ~1", "[biome]") {
 TEST_CASE("BiomeData ALL_BIOMES array is complete", "[biome]") {
   using namespace voxel::biome;
 
-  // ALL_BIOMES should contain exactly 5 biomes, each with a unique BiomeId.
-  REQUIRE(ALL_BIOMES.size() == 5);
+  // ALL_BIOMES should contain exactly 6 biomes, each with a unique BiomeId.
+  REQUIRE(ALL_BIOMES.size() == 6);
 
   // Check that all BiomeId values are represented.
   bool hasPlains    = false;
@@ -168,6 +170,7 @@ TEST_CASE("BiomeData ALL_BIOMES array is complete", "[biome]") {
   bool hasForest    = false;
   bool hasMountains = false;
   bool hasSwamp     = false;
+  bool hasOcean     = false;
 
   for (const auto& b : ALL_BIOMES) {
     switch (b.id) {
@@ -176,6 +179,7 @@ TEST_CASE("BiomeData ALL_BIOMES array is complete", "[biome]") {
       case BiomeId::Forest:    hasForest    = true; break;
       case BiomeId::Mountains: hasMountains = true; break;
       case BiomeId::Swamp:     hasSwamp     = true; break;
+      case BiomeId::Ocean:     hasOcean     = true; break;
     }
   }
 
@@ -184,4 +188,5 @@ TEST_CASE("BiomeData ALL_BIOMES array is complete", "[biome]") {
   REQUIRE(hasForest);
   REQUIRE(hasMountains);
   REQUIRE(hasSwamp);
+  REQUIRE(hasOcean);
 }
