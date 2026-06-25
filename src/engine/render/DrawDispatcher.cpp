@@ -6,7 +6,7 @@ namespace voxel {
 
 DrawDispatcher::DrawDispatcher(ShaderProgram& chunkShader, ShaderProgram& skyShader,
                                Texture2DArray& textures, IndirectBatcher& indirectBatcher,
-                               uint32_t masterVao, uint32_t skyVao)
+                               uint32_t& masterVao, uint32_t& skyVao)
   : m_chunkShader(chunkShader), m_skyShader(skyShader),
     m_textures(textures), m_indirectBatcher(indirectBatcher),
     m_masterVao(masterVao), m_skyVao(skyVao)

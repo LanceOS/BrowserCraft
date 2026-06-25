@@ -16,7 +16,7 @@ class DrawDispatcher {
 public:
   DrawDispatcher(ShaderProgram& chunkShader, ShaderProgram& skyShader,
                  Texture2DArray& textures, IndirectBatcher& indirectBatcher,
-                 uint32_t masterVao, uint32_t skyVao);
+                 uint32_t& masterVao, uint32_t& skyVao);
 
   /// Render the sky fullscreen triangle.
   void renderSky();
@@ -31,8 +31,8 @@ private:
   ShaderProgram& m_skyShader;
   Texture2DArray& m_textures;
   IndirectBatcher& m_indirectBatcher;
-  uint32_t m_masterVao;
-  uint32_t m_skyVao;
+  uint32_t& m_masterVao;
+  uint32_t& m_skyVao;
 };
 
 } // namespace voxel
