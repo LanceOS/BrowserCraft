@@ -30,10 +30,7 @@ void DrawDispatcher::renderChunks(bool hasTransparentChunks,
   m_textures.bind(0);
   gl::Uniform1i(m_chunkShader.uniform("u_blockTextures"), 0);
 
-  m_indirectBatcher.dispatchCulling(viewProjectionMatrix);
-
-  // Re-bind chunk shader after dispatchCulling switches to compute program
-  m_chunkShader.use();
+  m_indirectBatcher.buildIndirectCommands(viewProjectionMatrix);
 
   gl::BindVertexArray(m_masterVao);
 

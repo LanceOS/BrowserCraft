@@ -1,5 +1,6 @@
 #pragma once
 
+#include "world/IChunkPersistence.hpp"
 #include <string>
 #include <cstdint>
 #include <vector>
@@ -26,7 +27,8 @@ struct PendingChunkLoad {
 };
 
 /// Manages saving and loading chunk data to/from disk.
-class SaveManager {
+/// Implements IChunkPersistence for integration with World.
+class SaveManager : public IChunkPersistence {
 public:
   using LoadCallback = std::function<void(int32_t chunkX, int32_t chunkZ)>;
   using LoadSuccessCallback = std::function<void(int32_t, int32_t, const uint8_t*, const uint8_t*, const uint8_t*, size_t)>;
@@ -40,10 +42,10 @@ public:
   SaveManager& operator=(const SaveManager&) = delete;
 
   /// Request a chunk to be loaded from disk (async via thread pool).
-  void requestLoad(int32_t chunkX, int32_t chunkZ);
+  void requestLoad(int32_t chunkX, int32_t chunkZ) override;
 
   /// Mark a chunk as needing to be saved.
-  void markDirty(int32_t chunkX, int32_t chunkZ);
+  void markDirty(int32_t chunkX, int32_t chunkZ) override;
 
   /// Flush all pending saves to disk (call on quit).
   void flushPending();

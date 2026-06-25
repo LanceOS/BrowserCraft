@@ -9,7 +9,66 @@
 namespace voxel {
 
 namespace {
-} // namespace
+
+/// Concrete IChunkWorker that dispatches generation and meshing
+/// jobs to dedicated thread pools.
+class ChunkWorkerImpl final : public IChunkWorker {
+public:
+  ChunkWorkerImpl(WorkerThreadPool& genPool, WorkerThreadPool& meshPool,
+                  SharedPool& pool, WorldGenPipeline& pipeline,
+                  const GameConfig& config, WorldController& controller,
+                  BlockRegistry& blocks)
+    : m_genPool(genPool), m_meshPool(meshPool), m_pool(pool),
+      m_pipeline(pipeline), m_config(config),
+      m_controller(controller), m_blocks(blocks) {}
+
+  void generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t seed) override {
+    m_genPool.submitAndForget([this, slotIndex, chunkX, chunkZ, seed]() {
+      auto slot = m_pool.view(slotIndex);
+      m_pipeline.generate(slot.voxels, chunkX, chunkZ,
+        m_config.chunkSize, m_config.worldHeight, m_config.chunkSize, seed);
+      *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
+      m_controller.onGenCompleted(slotIndex);
+    });
+  }
+
+  void mesh(int32_t slotIndex) override {
+    m_meshPool.submitAndForget([this, slotIndex]() {
+      auto slot = m_pool.view(slotIndex);
+      mesher::MesherConfig mcfg;
+      mcfg.sizeX = m_config.chunkSize;
+      mcfg.sizeY = m_config.worldHeight;
+      mcfg.sizeZ = m_config.chunkSize;
+      mcfg.maxVertices = m_config.maxVertsPerChunk;
+      mcfg.maxIndices = m_config.maxIndicesPerChunk;
+      mcfg.strideFloats = m_config.vertexStrideFloats;
+
+      uint32_t vc = 0, ic = 0;
+      bool hasTransparent = false;
+      bool ok = mesher::greedyMesh(
+          slot.voxels, slot.light, m_blocks, mcfg,
+          slot.vertices, slot.indices, vc, ic,
+          &hasTransparent);
+      *slot.vertexCount = static_cast<uint32_t>(vc);
+      *slot.indexCount = ic;
+      *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+      if (hasTransparent) {
+        *slot.status |= 0x10000;
+      }
+      m_controller.onMeshCompleted(slotIndex);
+      (void)ok;
+    });
+  }
+
+private:
+  WorkerThreadPool& m_genPool;
+  WorkerThreadPool& m_meshPool;
+  SharedPool& m_pool;
+  WorldGenPipeline& m_pipeline;
+  const GameConfig& m_config;
+  WorldController& m_controller;
+  BlockRegistry& m_blocks;
+};
 
 static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
   return {cfg.chunkSize, cfg.worldHeight, cfg.chunkSize,
@@ -36,6 +95,8 @@ static void registerVanillaBlocks(BlockRegistry& blocks) {
     blocks.register_(std::move(bd));
   }
 }
+
+} // anonymous namespace
 
 Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   : m_window(window), m_config(config),
@@ -65,58 +126,13 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   int32_t poolCap = (MAX_RENDER_DISTANCE * 2 + 1) * (MAX_RENDER_DISTANCE * 2 + 1) + 8;
   m_pool = SharedPool::create(poolCap, makeDims(config));
 
-  // Wire world gen callback through thread pool
+  // Wire world worker and persistence
   m_worldController = std::make_unique<WorldController>(*m_pool, m_blocks, config);
-  m_worldController->createWorld(
-    // Gen callback
-    [this](int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t) {
-      m_genPool->submitAndForget([this, slotIndex, chunkX, chunkZ]() {
-        auto slot = m_pool->view(slotIndex);
-        // @see notes/worldgen-threadsafe-chunk-rng.md
-        m_worldGenPipeline.generate(slot.voxels, chunkX, chunkZ,
-          m_config.chunkSize, m_config.worldHeight, m_config.chunkSize,
-          chunkSeed(chunkX, chunkZ, m_config.worldSeed));
-        *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
-        m_worldController->onGenCompleted(slotIndex);
-      });
-    },
-    // Mesh callback
-    [this](int32_t slotIndex) {
-      m_meshPool->submitAndForget([this, slotIndex]() {
-        auto slot = m_pool->view(slotIndex);
-        mesher::MesherConfig mcfg;
-        mcfg.sizeX = m_config.chunkSize;
-        mcfg.sizeY = m_config.worldHeight;
-        mcfg.sizeZ = m_config.chunkSize;
-        mcfg.maxVertices = m_config.maxVertsPerChunk;
-        mcfg.maxIndices = m_config.maxIndicesPerChunk;
-        mcfg.strideFloats = m_config.vertexStrideFloats;
-
-        uint32_t vc = 0, ic = 0;
-        bool hasTransparent = false;
-        bool ok = mesher::greedyMesh(
-            slot.voxels, slot.light, m_blocks, mcfg,
-            slot.vertices, slot.indices, vc, ic,
-            &hasTransparent);
-        *slot.vertexCount = static_cast<uint32_t>(vc);
-        *slot.indexCount = ic;
-        *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-        if (hasTransparent) {
-          *slot.status |= 0x10000;
-        }
-        m_worldController->onMeshCompleted(slotIndex);
-        (void)ok;
-      });
-    },
-    // Save load callback
-    [this](int32_t cx, int32_t cz) {
-      if (auto* sm = m_worldController->saveManager()) sm->requestLoad(cx, cz);
-    },
-    // Mark dirty callback
-    [this](int32_t cx, int32_t cz) {
-      if (auto* sm = m_worldController->saveManager()) sm->markDirty(cx, cz);
-    }
-  );
+  m_chunkWorker = std::make_unique<ChunkWorkerImpl>(
+    *m_genPool, *m_meshPool, *m_pool, m_worldGenPipeline, m_config,
+    *m_worldController, m_blocks);
+  // Persistence is nullptr initially; attached by configureSaveWorld
+  m_worldController->createWorld(*m_chunkWorker, nullptr);
 
   m_renderer = std::make_unique<Renderer>(window, m_blocks, config);
 

@@ -6,15 +6,12 @@ namespace voxel {
 World::World(SharedPool& pool,
              BlockRegistry& blocks,
              const GameConfig& config,
-             GenCallback onGenerate,
-             MeshCallback onMesh,
-             SaveLoadCallback onSaveLoad,
-             SaveDirtyCallback onMarkDirty)
+             IChunkWorker& worker,
+             IChunkPersistence* persistence)
   : m_pool(pool), m_blocks(blocks), m_config(config),
     m_store(pool, blocks, m_chunks, config),
-    m_jobQueue(std::move(onGenerate), std::move(onMesh)),
-    m_onSaveLoad(std::move(onSaveLoad)),
-    m_onMarkDirty(std::move(onMarkDirty))
+    m_jobQueue(worker),
+    m_persistence(persistence)
 {}
 
 void World::update(glm::vec3 cameraPos) {
@@ -151,6 +148,7 @@ void World::clear() {
   m_chunks = ChunkManager{};
   m_slotToChunk.clear();
   m_jobQueue.clear();
+  m_pendingUploadSlots.clear();
   m_hasCenter = false;
 }
 
@@ -173,10 +171,17 @@ void World::onMeshDone(int32_t slotIndex, uint32_t vertexCount, uint32_t indexCo
   chunk->vertexCount = vertexCount;
   chunk->indexCount = indexCount;
   chunk->state = success ? ChunkState::MeshReady : ChunkState::MeshFailed;
+  if (success) {
+    m_pendingUploadSlots.push_back(slotIndex);
+  }
   if (chunk->needsRemesh) {
     chunk->needsRemesh = false;
     requestRemesh(*chunk);
   }
+}
+
+auto World::drainPendingUploadSlots() -> std::vector<int32_t> {
+  return std::move(m_pendingUploadSlots);
 }
 
 void World::onSaveLoadSuccess(int32_t chunkX, int32_t chunkZ,
@@ -229,9 +234,9 @@ void World::ensureVisibleRadius(int32_t centerCX, int32_t centerCZ) {
         m_slotToChunk[chunk.slotIndex] = {cx, cz};
       }
 
-      if (m_onSaveLoad) {
+      if (m_persistence) {
         inserted->state = ChunkState::LoadingFromDisk;
-        m_onSaveLoad(cx, cz);
+        m_persistence->requestLoad(cx, cz);
       } else {
         inserted->state = ChunkState::QueuedGen;
         m_jobQueue.pushGen(inserted->slotIndex, inserted->chunkX, inserted->chunkZ);
@@ -280,7 +285,7 @@ void World::requestRemesh(Chunk& chunk) {
 }
 
 void World::markChunkDirty(int32_t cx, int32_t cz) {
-  if (m_onMarkDirty) m_onMarkDirty(cx, cz);
+  if (m_persistence) m_persistence->markDirty(cx, cz);
 }
 
 auto World::chunkHasVoxelData(const Chunk& chunk) const -> bool {

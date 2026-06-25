@@ -8,15 +8,8 @@ WorldController::WorldController(SharedPool& pool, BlockRegistry& blocks, const 
   : m_pool(pool), m_blocks(blocks), m_config(config)
 {}
 
-void WorldController::createWorld(World::GenCallback onGenerate,
-                                   World::MeshCallback onMesh,
-                                   World::SaveLoadCallback onSaveLoad,
-                                   World::SaveDirtyCallback onMarkDirty) {
-  m_world = std::make_unique<World>(m_pool, m_blocks, m_config,
-                                     std::move(onGenerate),
-                                     std::move(onMesh),
-                                     std::move(onSaveLoad),
-                                     std::move(onMarkDirty));
+void WorldController::createWorld(IChunkWorker& worker, IChunkPersistence* persistence) {
+  m_world = std::make_unique<World>(m_pool, m_blocks, m_config, worker, persistence);
 }
 
 void WorldController::configureSaveWorld(const std::string& saveDir, const std::string& slotId,
@@ -38,7 +31,7 @@ void WorldController::configureSaveWorld(const std::string& saveDir, const std::
   }
 
   m_saveManager = std::make_unique<SaveManager>(saveDir, selectedSlot, m_pool, *m_world, ioPool);
-  m_world->attachSaveManager(m_saveManager.get());
+  m_world->attachPersistence(m_saveManager.get());
 }
 
 void WorldController::processGenJobs() {

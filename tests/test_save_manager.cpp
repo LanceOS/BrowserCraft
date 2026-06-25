@@ -5,6 +5,7 @@
 #include "world/World.hpp"
 #include "engine/core/Config.hpp"
 #include "world/BlockRegistry.hpp"
+#include "MockWorker.hpp"
 #include <cstdio>
 #include <filesystem>
 
@@ -28,9 +29,9 @@ TEST_CASE("SaveManager save and load chunk", "[save]") {
   voxel::BlockRegistry blocks(256);
   blocks.register_(voxel::BlockDefinition{.id=1,.name="stone",.material={.opaque=true}});
 
-  voxel::World world(*pool, blocks, cfg,
-    [](int32_t,int32_t,int32_t,uint32_t){},
-    [](int32_t){}, {}, {});
+  voxel::TestChunkWorker worker;
+  voxel::NullPersistence nullPersistence;
+  voxel::World world(*pool, blocks, cfg, worker, &nullPersistence);
 
   auto ioPool = std::make_unique<voxel::WorkerThreadPool>(1);
   voxel::SaveManager saveMgr("./test_saves", "test_slot", *pool, world, ioPool.get());
@@ -51,9 +52,9 @@ TEST_CASE("SaveManager file path generation", "[save]") {
   auto pool = voxel::SharedPool::create(4, makeDims(cfg));
   voxel::BlockRegistry blocks(256);
 
-  voxel::World world(*pool, blocks, cfg,
-    [](int32_t,int32_t,int32_t,uint32_t){},
-    [](int32_t){}, {}, {});
+  voxel::TestChunkWorker worker2;
+  voxel::NullPersistence nullPersistence2;
+  voxel::World world(*pool, blocks, cfg, worker2, &nullPersistence2);
 
   auto ioPool2 = std::make_unique<voxel::WorkerThreadPool>(1);
   voxel::SaveManager saveMgr("./test_saves2", "slot1", *pool, world, ioPool2.get());

@@ -2,13 +2,9 @@
 
 #include "gl_core.hpp"
 #include "PersistentBuffer.hpp"
-#include "ShaderProgram.hpp"
-#include "shaders/ShaderSources.hpp"
 #include <vector>
 #include <cstdint>
 #include <cstring>
-#include <stdexcept>
-#include <string>
 #include <memory>
 
 namespace voxel {
@@ -34,46 +30,19 @@ struct DrawCommand {
     uint32_t baseInstance;
 };
 
+/// Builds indirect draw commands on the CPU from per-chunk cull data.
+/// The compute-cull path was removed because CPU rebuilding is simpler and
+/// more reliable across GPU drivers. With ~81 chunks at render distance 4,
+/// the CPU cost is negligible and avoids an extra GPU dispatch + barrier.
 class IndirectBatcher {
 public:
   IndirectBatcher(uint32_t maxChunks) : m_maxChunks(maxChunks) {
-      // Compile compute shader
-      uint32_t cs = gl::CreateShader(GL_COMPUTE_SHADER);
-      gl::ShaderSource(cs, 1, &shaders::cullingCompute, nullptr);
-      gl::CompileShader(cs);
-      int success;
-      gl::GetShaderiv(cs, GL_COMPILE_STATUS, &success);
-      if (!success) {
-          char info[512];
-          gl::GetShaderInfoLog(cs, 512, nullptr, info);
-          throw std::runtime_error("Compute shader compilation failed: " + std::string(info));
-      }
-      
-      m_computeProgram = gl::CreateProgram();
-      gl::AttachShader(m_computeProgram, cs);
-      gl::LinkProgram(m_computeProgram);
-      int programOK;
-      gl::GetProgramiv(m_computeProgram, GL_LINK_STATUS, &programOK);
-      if (!programOK) {
-        char info[1024];
-        gl::GetProgramInfoLog(m_computeProgram, sizeof(info), nullptr, info);
-        throw std::runtime_error("Compute shader link failed: " + std::string(info));
-      }
-      gl::DeleteShader(cs);
-
-      // Create SSBOs
       m_chunkDataBuffer = std::make_unique<PersistentBuffer>(maxChunks * sizeof(ChunkCullData), GL_SHADER_STORAGE_BUFFER);
       m_indirectBuffer = std::make_unique<PersistentBuffer>(maxChunks * sizeof(DrawCommand), GL_DRAW_INDIRECT_BUFFER);
       
       // Zero out
       std::memset(m_chunkDataBuffer->mappedPtr(), 0, m_chunkDataBuffer->capacity());
       std::memset(m_indirectBuffer->mappedPtr(), 0, m_indirectBuffer->capacity());
-  }
-
-  ~IndirectBatcher() {
-      if (m_computeProgram) {
-          gl::DeleteProgram(m_computeProgram);
-      }
   }
 
   uint32_t capacity() const { return m_maxChunks; }
@@ -84,33 +53,10 @@ public:
       ptr[slotIndex] = data;
   }
 
-  void dispatchCulling(const float* projViewMatrix) {
-    gl::UseProgram(m_computeProgram);
-
-    int projViewLoc = gl::GetUniformLocation(m_computeProgram, "u_projView");
-    if (projViewLoc >= 0) {
-      gl::UniformMatrix4fv(projViewLoc, 1, GL_FALSE, projViewMatrix);
-    }
-
-    int maxChunksLoc = gl::GetUniformLocation(m_computeProgram, "u_maxChunks");
-    if (maxChunksLoc >= 0) {
-      gl::Uniform1i(maxChunksLoc, m_maxChunks);
-    }
-
-      gl::BindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_chunkDataBuffer->buffer());
-      gl::BindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_indirectBuffer->buffer());
-
-      // Dispatch 64 threads per workgroup
-      uint32_t groups = (m_maxChunks + 63) / 64;
-      gl::DispatchCompute(groups, 1, 1);
-
-      // Ensure compute writes are visible to indirect drawing and SSBO reads in vertex shader
-      gl::MemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
-
-    // Fallback: if compute dispatch produces no visible commands (common on some drivers),
-    // build indirect commands directly on the CPU from chunk metadata.
-    // @see notes/renderer-cpu-command-fallback.md
-    {
+  /// Rebuild indirect draw commands on the CPU from chunk metadata.
+  /// No frustum culling is performed — all chunks with indexCount > 0 are drawn.
+  /// The view-projection matrix parameter is retained for future culling integration.
+  void buildIndirectCommands(const float* /*projViewMatrix*/) {
       auto* chunks = static_cast<ChunkCullData*>(m_chunkDataBuffer->mappedPtr());
       auto* commands = static_cast<DrawCommand*>(m_indirectBuffer->mappedPtr());
       std::memset(commands, 0, m_indirectBuffer->capacity());
@@ -129,7 +75,6 @@ public:
       }
 
       gl::MemoryBarrier(GL_COMMAND_BARRIER_BIT);
-    }
   }
 
   void drawIndirect() const {
@@ -141,7 +86,6 @@ public:
 
 private:
   uint32_t m_maxChunks = 0;
-  uint32_t m_computeProgram = 0;
   std::unique_ptr<PersistentBuffer> m_chunkDataBuffer;
   std::unique_ptr<PersistentBuffer> m_indirectBuffer;
 };

@@ -5,11 +5,6 @@
 
 namespace voxel {
 
-ChunkJobQueue::ChunkJobQueue(GenCallback onGenerate, MeshCallback onMesh)
-  : m_onGenerate(std::move(onGenerate)),
-    m_onMesh(std::move(onMesh))
-{}
-
 void ChunkJobQueue::pushGen(int32_t slotIndex, int32_t chunkX, int32_t chunkZ) {
   m_pendingGen.push_back(PendingChunkJob{slotIndex, chunkX, chunkZ});
 }
@@ -48,8 +43,8 @@ void ChunkJobQueue::pump(
     auto slot = pool.view(chunk->slotIndex);
     *slot.status = static_cast<int32_t>(ChunkSlotStatus::GENERATING);
     chunk->state = ChunkState::Generating;
-    m_onGenerate(chunk->slotIndex, chunk->chunkX, chunk->chunkZ,
-                 chunkSeed(chunk->chunkX, chunk->chunkZ, worldSeed));
+    m_worker.generate(chunk->slotIndex, chunk->chunkX, chunk->chunkZ,
+                      chunkSeed(chunk->chunkX, chunk->chunkZ, worldSeed));
   }
 
   // Mesh queue
@@ -65,7 +60,7 @@ void ChunkJobQueue::pump(
     auto slot = pool.view(chunk->slotIndex);
     *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESHING);
     chunk->state = ChunkState::Meshing;
-    m_onMesh(chunk->slotIndex);
+    m_worker.mesh(chunk->slotIndex);
   }
 }
 

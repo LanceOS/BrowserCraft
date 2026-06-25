@@ -4,6 +4,8 @@
 #include "engine/alloc/SharedPool.hpp"
 #include "engine/threading/WorkerThreadPool.hpp"
 #include "world/World.hpp"
+#include "world/IChunkWorker.hpp"
+#include "world/IChunkPersistence.hpp"
 #include "engine/save/SaveManager.hpp"
 #include <memory>
 #include <queue>
@@ -21,11 +23,8 @@ class WorldController {
 public:
   WorldController(SharedPool& pool, BlockRegistry& blocks, const GameConfig& config);
 
-  /// Create the World with the given callbacks (typically wired to thread pools by the caller).
-  void createWorld(World::GenCallback onGenerate,
-                   World::MeshCallback onMesh,
-                   World::SaveLoadCallback onSaveLoad,
-                   World::SaveDirtyCallback onMarkDirty);
+  /// Create the World with the given worker and persistence interfaces.
+  void createWorld(IChunkWorker& worker, IChunkPersistence* persistence);
 
   /// Configure save directory and create/replace the SaveManager.
   void configureSaveWorld(const std::string& saveDir, const std::string& slotId,

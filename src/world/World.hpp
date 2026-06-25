@@ -3,6 +3,8 @@
 #include "Chunk.hpp"
 #include "ChunkManager.hpp"
 #include "ChunkJobQueue.hpp"
+#include "IChunkWorker.hpp"
+#include "IChunkPersistence.hpp"
 #include "BlockRegistry.hpp"
 #include "VoxelStore.hpp"
 #include "engine/core/Config.hpp"
@@ -38,25 +40,17 @@ struct WorldBlockRef {
 };
 
 /// Manages chunk lifecycle: generation, meshing, loading, unloading.
-/// This is the core world class. Worker/save integration uses function callbacks.
+/// Worker operations use IChunkWorker and IChunkPersistence interfaces.
 class World {
 public:
-  /// Callback types for worker and save operations.
-  using GenCallback = std::function<void(int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t seed)>;
-  using MeshCallback = std::function<void(int32_t slotIndex)>;
-  using SaveLoadCallback = std::function<void(int32_t chunkX, int32_t chunkZ)>;
-  using SaveDirtyCallback = std::function<void(int32_t chunkX, int32_t chunkZ)>;
-
   /// Access the job queue for fine-grained control.
   [[nodiscard]] auto jobQueue() -> ChunkJobQueue& { return m_jobQueue; }
 
   World(SharedPool& pool,
         BlockRegistry& blocks,
         const GameConfig& config,
-        GenCallback onGenerate,
-        MeshCallback onMesh,
-        SaveLoadCallback onSaveLoad,
-        SaveDirtyCallback onMarkDirty);
+        IChunkWorker& worker,
+        IChunkPersistence* persistence);
 
   /// Called each frame with the camera position.
   void update(glm::vec3 cameraPosition);
@@ -89,8 +83,8 @@ public:
   /// Check if the world has terrain data for the center chunk for gameplay/spawn logic.
   [[nodiscard]] auto hasTerrain() const -> bool;
 
-  /// Attach a save manager for loading/saving chunks.
-  void attachSaveManager(void* saveManager) { m_saveManager = saveManager; }
+  /// Attach a persistence backend for loading/saving chunks.
+  void attachPersistence(IChunkPersistence* persistence) { m_persistence = persistence; }
 
   /// Get chunk by coordinates.
   [[nodiscard]] auto getChunk(int32_t cx, int32_t cz) const -> const Chunk*;
@@ -115,6 +109,10 @@ public:
 
   /// Signal that a mesh job completed.
   void onMeshDone(int32_t slotIndex, uint32_t vertexCount, uint32_t indexCount, bool success);
+
+  /// Drain the queue of slots whose meshes are ready for GPU upload.
+  /// Called each frame by ChunkSyncer to avoid iterating all chunks.
+  auto drainPendingUploadSlots() -> std::vector<int32_t>;
 
   /// Signal save-load success with voxel/light/redstone data.
   void onSaveLoadSuccess(int32_t chunkX, int32_t chunkZ,
@@ -166,13 +164,12 @@ private:
 
   ChunkJobQueue m_jobQueue;
 
+  IChunkPersistence* m_persistence = nullptr;
+  std::vector<int32_t> m_pendingUploadSlots;
+
   int32_t m_centerChunkX = 0;
   int32_t m_centerChunkZ = 0;
   bool m_hasCenter = false;
-
-  SaveLoadCallback m_onSaveLoad;
-  SaveDirtyCallback m_onMarkDirty;
-  void* m_saveManager = nullptr;
 };
 
 } // namespace voxel

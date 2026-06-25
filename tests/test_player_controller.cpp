@@ -8,6 +8,7 @@
 #include "engine/alloc/SharedPool.hpp"
 #include "world/World.hpp"
 #include "world/BlockRegistry.hpp"
+#include "MockWorker.hpp"
 #include <glm/glm.hpp>
 #include <cmath>
 
@@ -224,10 +225,9 @@ TEST_CASE("World isSolid detects blocks", "[world][collision]") {
   BlockRegistry blocks(256);
   registerTestBlocks(blocks);
 
-  World world(*pool, blocks, cfg,
-    [](int32_t, int32_t, int32_t, uint32_t) {},
-    [](int32_t) {},
-    {}, {});
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
 
   // Acquire a slot and fill it with a flat floor at Y=10 (with stone from Y=1..9)
   auto slot = pool->acquire();
@@ -276,10 +276,9 @@ TEST_CASE("isSolidInChunk reads correct block data", "[world][collision]") {
   BlockRegistry blocks(256);
   registerTestBlocks(blocks);
 
-  World world(*pool, blocks, cfg,
-    [](int32_t, int32_t, int32_t, uint32_t) {},
-    [](int32_t) {},
-    {}, {});
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
 
   world.update(glm::vec3(8.0f, 40.0f, 8.0f));
   auto* chunk = world.getChunk(0, 0);
@@ -311,10 +310,9 @@ TEST_CASE("groundHeightAt finds correct surface", "[world][spawn]") {
   BlockRegistry blocks(256);
   registerTestBlocks(blocks);
 
-  World world(*pool, blocks, cfg,
-    [](int32_t, int32_t, int32_t, uint32_t) {},
-    [](int32_t) {},
-    {}, {});
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
 
   world.update(glm::vec3(8.0f, 40.0f, 8.0f));
   auto* chunk = world.getChunk(0, 0);
@@ -347,10 +345,9 @@ TEST_CASE("3x3 grid scan avoids cave holes", "[world][spawn]") {
   BlockRegistry blocks(256);
   registerTestBlocks(blocks);
 
-  World world(*pool, blocks, cfg,
-    [](int32_t, int32_t, int32_t, uint32_t) {},
-    [](int32_t) {},
-    {}, {});
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
 
   world.update(glm::vec3(8.0f, 40.0f, 8.0f));
   auto* chunk = world.getChunk(0, 0);
@@ -403,10 +400,9 @@ TEST_CASE("Player collides when inside terrain", "[world][collision]") {
   BlockRegistry blocks(256);
   registerTestBlocks(blocks);
 
-  World world(*pool, blocks, cfg,
-    [](int32_t, int32_t, int32_t, uint32_t) {},
-    [](int32_t) {},
-    {}, {});
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
 
   world.update(glm::vec3(8.0f, 40.0f, 8.0f));
   auto* chunk = world.getChunk(0, 0);

@@ -11,7 +11,7 @@ namespace voxel {
 class IndirectBatcher;
 
 /// Manages the draw-pass logic for chunk rendering.
-/// Owns sky rendering, culling dispatch, and opaque/transparent draw passes.
+/// Owns sky rendering, indirect command building, and opaque/transparent draw passes.
 class DrawDispatcher {
 public:
   DrawDispatcher(ShaderProgram& chunkShader, ShaderProgram& skyShader,

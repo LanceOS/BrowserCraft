@@ -22,6 +22,7 @@
 #include "engine/threading/WorkerThreadPool.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
 #include "world/BlockRegistry.hpp"
+#include "world/IChunkWorker.hpp"
 #include "engine/render/Renderer.hpp"
 #include "engine/render/CameraView.hpp"
 #include "world/daynight/DayNightCycle.hpp"
@@ -85,6 +86,7 @@ private:
   std::unique_ptr<WorldController> m_worldController;
   std::unique_ptr<Renderer> m_renderer;
   std::unique_ptr<UIManager> m_ui;
+  std::unique_ptr<IChunkWorker> m_chunkWorker;
   CameraView m_camera;
 
   audio::AudioEngine m_audioEngine;

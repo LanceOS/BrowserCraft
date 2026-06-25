@@ -1,8 +1,8 @@
 #pragma once
 
 #include "Chunk.hpp"
+#include "IChunkWorker.hpp"
 #include <deque>
-#include <functional>
 #include <cstdint>
 #include <unordered_map>
 
@@ -20,19 +20,17 @@ struct ChunkSlotCoord {
 
 /// Manages the generation and meshing job queues for the world.
 /// Owns the pending-gen and pending-mesh queues and their processing callbacks.
-/// The pump() method processes all ready jobs, delegating to the registered callbacks.
+/// The pump() method processes all ready jobs, delegating to the IChunkWorker.
 class ChunkJobQueue {
 public:
-  using GenCallback = std::function<void(int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t seed)>;
-  using MeshCallback = std::function<void(int32_t slotIndex)>;
-
   struct PendingChunkJob {
     int32_t slotIndex;
     int32_t chunkX;
     int32_t chunkZ;
   };
 
-  ChunkJobQueue(GenCallback onGenerate, MeshCallback onMesh);
+  explicit ChunkJobQueue(IChunkWorker& worker)
+    : m_worker(worker) {}
 
   /// Push a new generation job.
   void pushGen(int32_t slotIndex, int32_t chunkX, int32_t chunkZ);
@@ -59,8 +57,7 @@ private:
 
   std::deque<PendingChunkJob> m_pendingGen;
   std::deque<PendingChunkJob> m_pendingMesh;
-  GenCallback m_onGenerate;
-  MeshCallback m_onMesh;
+  IChunkWorker& m_worker;
 };
 
 } // namespace voxel
