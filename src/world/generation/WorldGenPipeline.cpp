@@ -65,10 +65,6 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
   const auto& cfg = m_config;
   const int32_t terrainMaxY = sizeY - 2;
 
-  // Pre-compute the biome-name string lookup once per block to avoid
-  // calling rule.name every time.  We use a simple boolean per column.
-  // (rule.name comparisons are O(strlen) — avoid them in inner loops.)
-
   for (int32_t z = 0; z < sizeZ; ++z) {
     for (int32_t x = 0; x < sizeX; ++x) {
       const float worldX = static_cast<float>(baseX + x);

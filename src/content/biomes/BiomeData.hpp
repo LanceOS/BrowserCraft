@@ -15,6 +15,18 @@ struct ClimateSample {
   float humidity;
 };
 
+/// Per-biome weights for a given climate sample.
+/// All weights are in [0, 1] and sum to 1 after normalisation.
+/// Exposed so other systems (flora, mob spawning) can determine which
+/// biomes are present at a location without duplicating blending logic.
+struct BiomeWeights {
+  float plains    = 0.0f;
+  float desert    = 0.0f;
+  float forest    = 0.0f;
+  float mountains = 0.0f;
+  float swamp     = 0.0f;
+};
+
 /// Numeric biome ID — replaces string-based biome name comparisons.
 /// Enables O(1) lookups and fully constexpr surface rule definitions.
 enum class BiomeId : uint8_t {
@@ -72,6 +84,16 @@ inline constexpr BiomeSurfaceRule ForestBiome    {BiomeId::Forest,    BlockId::G
 inline constexpr BiomeSurfaceRule MountainsBiome {BiomeId::Mountains, BlockId::GRASS, BlockId::STONE, 3,  22.0f};
 // Swamp: wet stone/mud, depressed and wet.
 inline constexpr BiomeSurfaceRule SwampBiome     {BiomeId::Swamp,     BlockId::STONE, BlockId::STONE, 5, -3.0f};
+
+/// Hermite smoothstep: maps [threshold - width/2, threshold + width/2]
+/// to [0, 1] with smooth ease-in-out. Values outside the transition
+/// range clamp to 0 or 1 at compile time.
+inline constexpr float smoothEdge(float value, float threshold, float width) {
+  float edge = (value - threshold + width * 0.5f) / width;
+  if (edge < 0.0f) edge = 0.0f;
+  if (edge > 1.0f) edge = 1.0f;
+  return edge * edge * (3.0f - 2.0f * edge);
+}
 
 /// Compile-time registry of all biomes for iteration / lookup.
 inline constexpr std::array ALL_BIOMES = {

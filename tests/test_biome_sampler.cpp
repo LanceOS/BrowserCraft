@@ -119,3 +119,69 @@ TEST_CASE("BiomeSampler blended bias stays within biome extremes", "[biome]") {
   REQUIRE(avg > -5.0f);
   REQUIRE(avg < 5.0f);
 }
+
+TEST_CASE("BiomeClassifier computeWeights sums to ~1", "[biome]") {
+  using namespace voxel::biome;
+
+  // At a variety of climate points, the sum of weights should be ≈ 1
+  // within floating-point tolerance.
+  constexpr ClimateSample testPoints[] = {
+    {0.0f,  0.0f},  // cold, dry
+    {0.0f,  1.0f},  // cold, wet
+    {1.0f,  0.0f},  // hot, dry
+    {1.0f,  1.0f},  // hot, wet
+    {0.5f,  0.5f},  // moderate
+    {0.3f,  0.6f},  // cool, humid
+    {0.7f,  0.3f},  // warm, dry
+  };
+
+  for (const auto& pt : testPoints) {
+    auto w = BiomeClassifier::computeWeights(pt);
+    float sum = w.plains + w.desert + w.forest + w.mountains + w.swamp;
+    // Allow small epsilon for FP rounding.
+    REQUIRE(sum > 0.99f);
+    REQUIRE(sum < 1.01f);
+
+    // All individual weights must be in [0, 1].
+    REQUIRE(w.plains    >= 0.0f);
+    REQUIRE(w.desert    >= 0.0f);
+    REQUIRE(w.forest    >= 0.0f);
+    REQUIRE(w.mountains >= 0.0f);
+    REQUIRE(w.swamp     >= 0.0f);
+    REQUIRE(w.plains    <= 1.0f);
+    REQUIRE(w.desert    <= 1.0f);
+    REQUIRE(w.forest    <= 1.0f);
+    REQUIRE(w.mountains <= 1.0f);
+    REQUIRE(w.swamp     <= 1.0f);
+  }
+}
+
+TEST_CASE("BiomeData ALL_BIOMES array is complete", "[biome]") {
+  using namespace voxel::biome;
+
+  // ALL_BIOMES should contain exactly 5 biomes, each with a unique BiomeId.
+  REQUIRE(ALL_BIOMES.size() == 5);
+
+  // Check that all BiomeId values are represented.
+  bool hasPlains    = false;
+  bool hasDesert    = false;
+  bool hasForest    = false;
+  bool hasMountains = false;
+  bool hasSwamp     = false;
+
+  for (const auto& b : ALL_BIOMES) {
+    switch (b.id) {
+      case BiomeId::Plains:    hasPlains    = true; break;
+      case BiomeId::Desert:    hasDesert    = true; break;
+      case BiomeId::Forest:    hasForest    = true; break;
+      case BiomeId::Mountains: hasMountains = true; break;
+      case BiomeId::Swamp:     hasSwamp     = true; break;
+    }
+  }
+
+  REQUIRE(hasPlains);
+  REQUIRE(hasDesert);
+  REQUIRE(hasForest);
+  REQUIRE(hasMountains);
+  REQUIRE(hasSwamp);
+}
