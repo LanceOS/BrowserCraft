@@ -319,20 +319,31 @@ void Game::update(float dt) {
         auto& transform = m_transforms.get(idx);
         auto& body = m_bodies.get(idx);
 
-        // Scan downward from top of the world to find the highest solid block
-        // at the player's XZ position.
-        int32_t groundY = -1;
+        // Scan a 3x3 column area around the player's XZ position and use the
+        // highest ground found.  This avoids caves or overhangs at the player's
+        // exact coordinate causing them to spawn underground.
         int32_t gx = static_cast<int32_t>(std::floor(transform.position.x));
         int32_t gz = static_cast<int32_t>(std::floor(transform.position.z));
-        for (int32_t y = m_config.worldHeight - 1; y >= 0; --y) {
-          if (m_world->isSolid(gx, y, gz)) { groundY = y; break; }
+        int32_t highestGroundY = -1;
+        for (int32_t dz = -1; dz <= 1; ++dz) {
+          for (int32_t dx = -1; dx <= 1; ++dx) {
+            int32_t sx = gx + dx;
+            int32_t sz = gz + dz;
+            for (int32_t y = m_config.worldHeight - 1; y >= 0; --y) {
+              if (m_world->isSolid(sx, y, sz)) {
+                if (y > highestGroundY) highestGroundY = y;
+                break;
+              }
+            }
+          }
         }
 
-        if (groundY >= 0) {
-          // Place the player a few blocks above the highest solid block so they
-          // always spawn in clear space, even when the surface is uneven.
+        if (highestGroundY >= 0) {
+          // Place the player a few blocks above the highest nearby solid block
+          // so they always spawn in clear space, even when the surface is
+          // uneven or there's a cave shaft at their exact coordinates.
           constexpr float kSpawnHeightOffset = 3.0f;
-          transform.position.y = static_cast<float>(groundY) + kSpawnHeightOffset;
+          transform.position.y = static_cast<float>(highestGroundY) + kSpawnHeightOffset;
 
           // Verify the player is not colliding; push upward in small steps if
           // they somehow ended up inside geometry (e.g. partial blocks,
