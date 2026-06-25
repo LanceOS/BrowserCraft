@@ -76,7 +76,7 @@ void PlayerSpawnSystem::update(Game& state, float /*dt*/) {
     // Verify the player is not colliding; push upward in small steps if
     // they somehow ended up inside geometry (e.g. partial blocks,
     // overhangs, or terrain that generates after the scan).
-    if (m_playerController) m_playerController->pushPlayerOutOfBlocks();
+    if (m_playerController && idx >= 0) m_playerController->pushPlayerOutOfBlocks(idx);
 
     body.velocity.y = 0.0f;
     body.onGround = 1;

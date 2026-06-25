@@ -34,19 +34,18 @@ public:
     const GameConfig& config,
     UIManager& ui,
     GameSession& session,
-    bool& cameraDirty,
-    int32_t playerEntityId);
+    bool& cameraDirty);
 
   [[nodiscard]] auto name() const -> const std::string& override;
   [[nodiscard]] auto stage() const -> SystemStage override;
   void update(Game& state, float dt) override;
 
-private:
 public:
-  /// Push the player entity upward until they are no longer colliding with blocks.
-  /// Called by Game after spawning the player to prevent them from being stuck
-  /// inside terrain.
-  void pushPlayerOutOfBlocks();
+  /// Push the player entity at \a entityIndex upward until they are no longer
+  /// colliding with blocks.  Called after spawning to prevent the player from
+  /// being stuck inside terrain.  \a entityIndex is a raw component-store index
+  /// (not an EntityManager ID), obtained from EntityManager::indexOf().
+  void pushPlayerOutOfBlocks(int32_t entityIndex);
 
 private:
   void applyMouseLook(float dt);
@@ -72,8 +71,6 @@ private:
   UIManager& m_ui;
   GameSession& m_session;
   bool& m_cameraDirty;
-  int32_t m_playerEntityId;
-
   int32_t m_cachedPlayerIndex = -1;
 };
 

@@ -17,8 +17,7 @@ PlayerControllerSystem::PlayerControllerSystem(
     const GameConfig& config,
     UIManager& ui,
     GameSession& session,
-    bool& cameraDirty,
-    int32_t playerEntityId)
+    bool& cameraDirty)
   : m_window(window)
   , m_input(input)
   , m_transforms(transforms)
@@ -30,7 +29,6 @@ PlayerControllerSystem::PlayerControllerSystem(
   , m_ui(ui)
   , m_session(session)
   , m_cameraDirty(cameraDirty)
-  , m_playerEntityId(playerEntityId)
 {}
 
 auto PlayerControllerSystem::name() const -> const std::string& {
@@ -42,15 +40,18 @@ auto PlayerControllerSystem::stage() const -> SystemStage {
   return SystemStage::Physics;
 }
 
-void PlayerControllerSystem::update(Game& /*state*/, float dt) {
+void PlayerControllerSystem::update(Game& state, float dt) {
   // Only run controls while actively playing
   if (m_session.state() != GameState::InGame &&
       m_session.state() != GameState::GeneratingWorld) {
     return;
   }
 
-  // Resolve player entity index (cached to avoid repeated EntityManager::indexOf)
-  int32_t idx = EntityManager::indexOf(m_playerEntityId);
+  // Resolve player entity index from the current Game state (always fresh,
+  // survives respawns and entity re-allocation).
+  int32_t playerId = state.playerEntityId();
+  if (playerId == 0) return;
+  int32_t idx = EntityManager::indexOf(playerId);
   if (idx < 0 ||
       !m_transforms.has(idx) || !m_bodies.has(idx) || !m_players.has(idx)) {
     m_cachedPlayerIndex = -1;
@@ -113,11 +114,10 @@ void PlayerControllerSystem::update(Game& /*state*/, float dt) {
   syncCameraFromPlayer();
 }
 
-void PlayerControllerSystem::pushPlayerOutOfBlocks() {
-  int32_t idx = m_cachedPlayerIndex;
-  if (idx < 0 || !m_bodies.has(idx) || !m_transforms.has(idx)) return;
-  auto& transform = m_transforms.get(idx);
-  auto& body = m_bodies.get(idx);
+void PlayerControllerSystem::pushPlayerOutOfBlocks(int32_t entityIndex) {
+  if (entityIndex < 0 || !m_bodies.has(entityIndex) || !m_transforms.has(entityIndex)) return;
+  auto& transform = m_transforms.get(entityIndex);
+  auto& body = m_bodies.get(entityIndex);
   int32_t maxIter = 256; // safety limit
   while (collidesAt(transform.position, body) && --maxIter > 0) {
     transform.position.y += 0.05f;
@@ -178,57 +178,100 @@ void PlayerControllerSystem::applyMovement(
   // Apply gravity
   body.velocity.y -= body.gravity * dt;
 
+  // Apply drag to horizontal velocity before clearing it (drag affects
+  // residual velocity from external forces like knockback).
+  body.velocity.x *= body.drag;
+  body.velocity.z *= body.drag;
+
   // Clear horizontal velocity — it's set per-frame from input
   body.velocity.x = 0.0f;
   body.velocity.z = 0.0f;
 
-  glm::vec3 nextPosition = transform.position;
+  // Compute total displacement for each axis
+  float dx = moveDir.x * speed * dt;
+  float dz = moveDir.z * speed * dt;
+  float dy = body.velocity.y * dt;
 
-  // --- X axis ---
-  glm::vec3 xStep = nextPosition + glm::vec3(moveDir.x * speed * dt, 0.0f, 0.0f);
-  if (!collidesAt(xStep, body)) {
-    nextPosition.x = xStep.x;
-  } else {
-    body.velocity.x = 0.0f;
-  }
+  // Sub-step if any axis moves more than 0.5 blocks per step (tunneling prevention)
+  float maxDelta = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
+  int32_t steps = std::max(1, static_cast<int32_t>(std::ceil(maxDelta / 0.5f)));
+  float invSteps = 1.0f / static_cast<float>(steps);
 
-  // --- Z axis ---
-  glm::vec3 zStep = nextPosition + glm::vec3(0.0f, 0.0f, moveDir.z * speed * dt);
-  if (!collidesAt(zStep, body)) {
-    nextPosition.z = zStep.z;
-  } else {
-    body.velocity.z = 0.0f;
-  }
+  static constexpr float kStepHeight = 0.52f;
 
-  // --- Y axis (gravity + collision) ---
-  glm::vec3 yStep = nextPosition + glm::vec3(0.0f, body.velocity.y * dt, 0.0f);
-  if (!collidesAt(yStep, body)) {
-    nextPosition = yStep;
-    body.onGround = 0;
-  } else if (body.velocity.y <= 0.0f) {
-    // Landed on ground — snap to surface
-    int32_t groundY = groundHeightAt(
-        nextPosition.x, nextPosition.z,
-        std::max(0, static_cast<int32_t>(std::floor(nextPosition.y + body.aabbMin.y))));
-    if (groundY >= 0) {
-      nextPosition.y = static_cast<float>(groundY + 1);
-      body.onGround = 1;
-      // If we are still colliding after snapping (e.g. inside a block from
-      // spawning or clipping), push upward until clear.
-      int32_t safetyIters = 64;
-      while (collidesAt(nextPosition, body) && --safetyIters > 0) {
-        nextPosition.y += 0.05f;
-      }
-    } else {
+  for (int32_t s = 0; s < steps; ++s) {
+    float subDx = dx * invSteps;
+    float subDy = dy * invSteps;
+    float subDz = dz * invSteps;
+
+    glm::vec3 stepPos = transform.position;
+
+    // --- Y axis (gravity + collision) ---
+    glm::vec3 yStep = stepPos + glm::vec3(0.0f, subDy, 0.0f);
+    if (!collidesAt(yStep, body)) {
+      stepPos = yStep;
       body.onGround = 0;
+    } else if (subDy <= 0.0f) {
+      // Landed on ground — snap to surface
+      int32_t groundY = groundHeightAt(
+          stepPos.x, stepPos.z,
+          std::max(0, static_cast<int32_t>(std::floor(stepPos.y + body.aabbMin.y))));
+      if (groundY >= 0) {
+        stepPos.y = static_cast<float>(groundY + 1);
+        body.onGround = 1;
+        // Safety push-up if still colliding
+        int32_t safetyIters = 64;
+        while (collidesAt(stepPos, body) && --safetyIters > 0) {
+          stepPos.y += 0.05f;
+        }
+      } else {
+        body.onGround = 0;
+      }
+      body.velocity.y = 0.0f;
+      subDy = 0.0f; // Ground absorbs remaining fall
+    } else {
+      // Hit ceiling
+      body.velocity.y = 0.0f;
+      subDy = 0.0f;
     }
-    body.velocity.y = 0.0f;
-  } else {
-    // Hit ceiling
-    body.velocity.y = 0.0f;
-  }
 
-  transform.position = nextPosition;
+    // --- X axis (with step-assist) ---
+    glm::vec3 xStep = stepPos + glm::vec3(subDx, 0.0f, 0.0f);
+    if (!collidesAt(xStep, body)) {
+      stepPos.x = xStep.x;
+    } else {
+      // Step-assist: if on ground, try raising the player to step onto slabs/stairs
+      if (body.onGround && subDx != 0.0f) {
+        glm::vec3 raised = stepPos + glm::vec3(subDx, kStepHeight, 0.0f);
+        if (!collidesAt(raised, body)) {
+          stepPos = raised;
+        } else {
+          body.velocity.x = 0.0f;
+        }
+      } else {
+        body.velocity.x = 0.0f;
+      }
+    }
+
+    // --- Z axis (with step-assist) ---
+    glm::vec3 zStep = stepPos + glm::vec3(0.0f, 0.0f, subDz);
+    if (!collidesAt(zStep, body)) {
+      stepPos.z = zStep.z;
+    } else {
+      if (body.onGround && subDz != 0.0f) {
+        glm::vec3 raised = stepPos + glm::vec3(0.0f, kStepHeight, subDz);
+        if (!collidesAt(raised, body)) {
+          stepPos = raised;
+        } else {
+          body.velocity.z = 0.0f;
+        }
+      } else {
+        body.velocity.z = 0.0f;
+      }
+    }
+
+    transform.position = stepPos;
+  }
 
   // Fluid check
   int32_t sampleY = std::max(0, static_cast<int32_t>(
@@ -276,7 +319,9 @@ auto PlayerControllerSystem::collidesAt(
           cachedCX = cx;
           cachedCZ = cz;
         }
-        if (!cachedChunk) continue;
+        // Treat unloaded chunks as solid to prevent walking through
+        // world edges or falling through ungenerated terrain.
+        if (!cachedChunk) return true;
 
         if (m_world.isSolidInChunk(x, y, z, *cachedChunk)) return true;
       }

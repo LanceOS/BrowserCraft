@@ -194,7 +194,7 @@ void Game::initSystems() {
   auto controller = std::make_unique<PlayerControllerSystem>(
     m_window, m_input, m_transforms, m_bodies, m_players,
     *m_world, m_camera, m_config, *m_ui, m_session,
-    m_cameraDirty, m_playerEntityId);
+    m_cameraDirty);
   // Keep a non-owning pointer for direct access (e.g. pushPlayerOutOfBlocks).
   m_playerController = controller.get();
   m_systems.add(std::move(controller));
