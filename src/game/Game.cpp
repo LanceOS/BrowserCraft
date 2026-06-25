@@ -128,12 +128,10 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   // Initialize save system orchestrator
   m_saveOrchestrator = std::make_unique<SaveOrchestrator>(m_saveDir);
 
-  // Load saved settings
+  // Load saved settings (apply to UI after it's constructed below)
   auto saved = m_saveOrchestrator->loadSettings();
   m_config.renderDistance = saved.renderDistance;
   m_session.setRenderDistance(saved.renderDistance);
-  m_ui->setRenderDistance(saved.renderDistance);
-  m_ui->setShowFps(saved.showFps);
 
   m_audioRegistry.seedBuiltinSounds();
   m_blockAudio = std::make_unique<BlockInteractionAudio>(m_audioEngine, m_audioRegistry, m_blocks);
@@ -156,6 +154,10 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
       m_saveOrchestrator->settings().setInt("renderDistance", rd);
     },
   });
+
+  // Apply saved settings to the now-constructed UI
+  m_ui->setRenderDistance(saved.renderDistance);
+  m_ui->setShowFps(saved.showFps);
 
   if (options.initialState == GameState::MainMenu) {
     m_ui->showMainMenu();
