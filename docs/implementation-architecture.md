@@ -55,7 +55,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     m_players(m_entityManager.capacity())
 {
   // 1. Infrastructure — no business logic
-  registerVanillaBlocks(m_blocks);
+  VanillaBlockFactory{}.registerAll(m_blocks);
 
   int32_t poolCap = ...;
   m_pool = SharedPool::create(poolCap, makeDims(config));

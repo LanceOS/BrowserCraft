@@ -50,7 +50,8 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
 
   gl::Enable(GL_DEPTH_TEST);
   gl::Disable(GL_CULL_FACE);
-  gl::Enable(GL_BLEND);
+  // Blending is toggled per-pass in DrawDispatcher: off for opaque, on for transparent.
+  gl::Disable(GL_BLEND);
   gl::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   gl::GenVertexArrays(1, &m_masterVao);

@@ -112,6 +112,7 @@ add_library(voxel_engine STATIC
   src/engine/ecs/systems/PlayerSpawnSystem.cpp
   src/engine/assets/AssetManager.cpp
   src/world/BlockRegistry.cpp
+  src/world/blocks/VanillaBlockFactory.cpp
   src/world/VoxelStore.cpp
   src/world/ChunkJobQueue.cpp
   src/world/Chunk.cpp
@@ -139,6 +140,9 @@ add_library(voxel_engine STATIC
   src/world/generation/WorldGenPipeline.cpp
   src/engine/workers/mesher/GreedyMesher.cpp
   src/content/biomes/BiomeSampler.cpp
+  src/content/flora/FloraRegistry.cpp
+  src/content/flora/GrassFactory.cpp
+  src/content/flora/DefaultFlora.cpp
   src/game/GameSession.cpp
   src/game/WorldController.cpp
   src/game/Game.cpp
@@ -183,6 +187,8 @@ add_executable(voxel_tests
   tests/test_query.cpp
   tests/test_system_manager.cpp
   tests/test_block_registry.cpp
+  tests/test_vanilla_block_factory.cpp
+  tests/test_flora.cpp
   tests/test_world.cpp
   tests/test_simplex_noise.cpp
   tests/test_biome_sampler.cpp

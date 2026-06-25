@@ -1,10 +1,11 @@
 #include "game/Game.hpp"
 #include "engine/alloc/SharedPool.hpp"
 #include "engine/workers/mesher/GreedyMesher.hpp"
+#include "world/blocks/VanillaBlockFactory.hpp"
+#include "content/flora/DefaultFlora.hpp"
 #include <algorithm>
 #include <cmath>
 #include <thread>
-#include "engine/assets/AssetManager.hpp"
 
 namespace voxel {
 
@@ -75,27 +76,6 @@ static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
           cfg.maxVertsPerChunk, cfg.maxIndicesPerChunk, cfg.vertexStrideFloats};
 }
 
-// ---- Block registration ----
-static void registerVanillaBlocks(BlockRegistry& blocks) {
-  AssetManager::get().loadAssets();
-  
-  for (const auto& [id, def] : AssetManager::get().getBlockDefs()) {
-    if (id == 0) continue; // Skip air
-    
-    BlockDefinition bd;
-    bd.id = def.id;
-    bd.name = def.name;
-    bd.textures.top = def.tex_top;
-    bd.textures.bottom = def.tex_bottom;
-    bd.textures.side = def.tex_side;
-    bd.material.opaque = def.is_opaque;
-    if (!def.is_opaque) {
-        bd.material.transparent = true;
-    }
-    blocks.register_(std::move(bd));
-  }
-}
-
 } // anonymous namespace
 
 Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
@@ -113,7 +93,14 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     m_hostileTags(m_entityManager.capacity()),
     m_friendlyTags(m_entityManager.capacity())
 {
-  registerVanillaBlocks(m_blocks);
+  {
+    VanillaBlockFactory factory;
+    factory.registerAll(m_blocks);
+  }
+
+  // Flora system — registers additional blocks and provides metadata
+  m_flora = flora::createDefaultFloraRegistry();
+  m_flora->registerAllBlocks(m_blocks);
 
   // Thread pool (use hardware concurrency, min 1)
   int32_t threads = std::max(1u, std::thread::hardware_concurrency());
