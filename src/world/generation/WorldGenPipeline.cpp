@@ -109,7 +109,7 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
           + mountainExtra);
       surfaceY = std::clamp(surfaceY, 1, terrainMaxY);
 
-      const bool isDesert = (rule.name == "desert");
+      const bool isDesert = (rule.id == biome::BiomeId::Desert);
 
       // ---- 6. Fill the column ----
       for (int32_t y = 0; y < sizeY; ++y) {

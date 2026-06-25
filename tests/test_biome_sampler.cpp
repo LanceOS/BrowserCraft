@@ -2,21 +2,14 @@
 #include "content/biomes/BiomeSampler.hpp"
 
 TEST_CASE("BiomeSampler pick returns valid biome", "[biome]") {
+  using namespace voxel::biome;
+
   // All biomes should be reachable
-  auto& desert = voxel::biome::BiomeSampler::pick(0.8f, 0.2f);
-  REQUIRE(desert.name == "desert");
-
-  auto& swamp = voxel::biome::BiomeSampler::pick(0.5f, 0.8f);
-  REQUIRE(swamp.name == "swamp");
-
-  auto& mountains = voxel::biome::BiomeSampler::pick(0.1f, 0.5f);
-  REQUIRE(mountains.name == "mountains");
-
-  auto& forest = voxel::biome::BiomeSampler::pick(0.5f, 0.7f);
-  REQUIRE(forest.name == "forest");
-
-  auto& plains = voxel::biome::BiomeSampler::pick(0.5f, 0.3f);
-  REQUIRE(plains.name == "plains");
+  REQUIRE(BiomeSampler::pick(0.8f, 0.2f).id == BiomeId::Desert);
+  REQUIRE(BiomeSampler::pick(0.5f, 0.8f).id == BiomeId::Swamp);
+  REQUIRE(BiomeSampler::pick(0.1f, 0.5f).id == BiomeId::Mountains);
+  REQUIRE(BiomeSampler::pick(0.5f, 0.7f).id == BiomeId::Forest);
+  REQUIRE(BiomeSampler::pick(0.5f, 0.3f).id == BiomeId::Plains);
 }
 
 TEST_CASE("BiomeSampler sampleBiome returns valid rule", "[biome]") {
