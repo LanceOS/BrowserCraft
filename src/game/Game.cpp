@@ -150,6 +150,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   m_camera.forward = glm::vec3(0.0f, 0.0f, -1.0f);
   m_camera.right = glm::vec3(1.0f, 0.0f, 0.0f);
   m_camera.up = glm::vec3(0.0f, 1.0f, 0.0f);
+  m_cameraDirty = true;
   syncPlayerWithCamera();
 }
 
@@ -220,6 +221,7 @@ void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh)
 
   m_spawnedToSurface = false;
   m_camera.position = glm::vec3(0.0f, 80.0f, 50.0f);
+  m_cameraDirty = true;
   syncPlayerWithCamera();
   m_input.clearAll();
   m_input.pointerLocked = false;
@@ -272,6 +274,7 @@ void Game::syncCameraFromPlayer() {
   ));
   m_camera.right = glm::normalize(glm::cross(m_camera.forward, m_camera.up));
   m_camera.position = transform.position + glm::vec3(0.0f, player.eyeHeight, 0.0f);
+  m_cameraDirty = true;
 }
 
 auto Game::groundHeightAt(float worldX, float worldZ, int32_t startY) const -> int32_t {
@@ -558,6 +561,9 @@ void Game::render(float, float) {
 }
 
 void Game::updateCamera() {
+  if (!m_cameraDirty) return;
+  m_cameraDirty = false;
+
   m_camera.viewMatrix = glm::lookAt(m_camera.position, m_camera.position + m_camera.forward, m_camera.up);
   m_camera.viewProjectionMatrix = m_camera.projectionMatrix * m_camera.viewMatrix;
   m_camera.inverseViewProjectionMatrix = glm::inverse(m_camera.viewProjectionMatrix);

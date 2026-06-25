@@ -128,6 +128,7 @@ private:
 
   SystemManager<Game> m_systems;
   bool m_spawnedToSurface = false;
+  bool m_cameraDirty = true;
   int32_t m_playerEntityId = 0;
 };
 
