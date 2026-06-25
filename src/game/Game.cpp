@@ -318,24 +318,34 @@ void Game::update(float dt) {
       if (idx >= 0 && m_transforms.has(idx) && m_bodies.has(idx)) {
         auto& transform = m_transforms.get(idx);
         auto& body = m_bodies.get(idx);
-        // Find the highest solid block below the spawn height
+
+        // Scan downward from top of the world to find the highest solid block
+        // at the player's XZ position.
         int32_t groundY = -1;
         int32_t gx = static_cast<int32_t>(std::floor(transform.position.x));
         int32_t gz = static_cast<int32_t>(std::floor(transform.position.z));
         for (int32_t y = m_config.worldHeight - 1; y >= 0; --y) {
           if (m_world->isSolid(gx, y, gz)) { groundY = y; break; }
         }
+
         if (groundY >= 0) {
-          transform.position.y = static_cast<float>(groundY + 1);
-          // Push player upward if they spawned inside a block (e.g. bedrock
-          // at Y=0 or uneven terrain). Without this the player gets stuck
-          // because every movement axis collides.
+          // Place the player a few blocks above the highest solid block so they
+          // always spawn in clear space, even when the surface is uneven.
+          constexpr float kSpawnHeightOffset = 3.0f;
+          transform.position.y = static_cast<float>(groundY) + kSpawnHeightOffset;
+
+          // Verify the player is not colliding; push upward in small steps if
+          // they somehow ended up inside geometry (e.g. partial blocks,
+          // overhangs, or terrain that generates after the scan).
           if (m_playerController) m_playerController->pushPlayerOutOfBlocks();
+
           body.velocity.y = 0.0f;
           body.onGround = 1;
           m_spawnedToSurface = true;
           m_cameraDirty = true;
         } else {
+          // No terrain found at this XZ — clamp to a reasonable height and
+          // wait for neighbouring chunks to finish generating.
           transform.position.y = std::min(transform.position.y, 64.0f);
           body.velocity.y = 0.0f;
           body.onGround = 0;
