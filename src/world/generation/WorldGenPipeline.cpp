@@ -85,21 +85,20 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
       float heightBias = m_biomeSampler.blendedHeightBias(worldX, worldZ);
 
       // ---- 4. Mountain amplification ----
-      // In cold regions (where MountainsBiome is selected) add extra
-      // high-amplitude noise so that mountains have peaks, slopes,
-      // and varied elevation rather than a flat +heightBias step.
-      float mountainExtra = 0.0f;
-      if (&rule == &biome::MountainsBiome) {
-        mountainExtra = fractalNoise2D(
-            m_continentalNoise,
-            worldX * cfg.mountainScale,
-            worldZ * cfg.mountainScale,
-            3,
-            2.5f,
-            0.6f) * cfg.mountainAmplitude;
-        // Ensure mountainExtra is non-negative — we want only upward shaping.
-        if (mountainExtra < 0.0f) mountainExtra *= -0.6f;
-      }
+      // Use smooth mountain weight (derived from temperature) instead of a
+      // hard biome-ID check. This prevents height discontinuities at biome
+      // boundaries while still concentrating amplification in cold regions.
+      float mountainWeight = m_biomeSampler.mountainWeight(worldX, worldZ);
+      float mountainExtra = mountainWeight * fractalNoise2D(
+          m_continentalNoise,
+          worldX * cfg.mountainScale,
+          worldZ * cfg.mountainScale,
+          3,      // octaves
+          2.5f,   // lacunarity
+          0.6f)   // persistence
+          * cfg.mountainAmplitude;
+      // Keep only upward shaping (negative noise inverted and damped).
+      if (mountainExtra < 0.0f) mountainExtra *= -0.6f;
 
       // ---- 5. Compute final surface height ----
       int32_t surfaceY = static_cast<int32_t>(

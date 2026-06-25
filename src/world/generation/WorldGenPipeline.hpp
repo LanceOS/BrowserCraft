@@ -19,15 +19,17 @@ struct WorldGenerationConfig {
   float baseHeight = 64.0f;
 
   /// Continental (large-scale) noise — controls basic land/sea shape.
-  float continentalScale = 0.005f;
+  float continentalScale = 0.008f;
   float continentalAmplitude = 40.0f;
 
   /// Regional / detail noise — adds hills, valleys, small bumps.
-  float detailScale = 0.025f;
-  float detailAmplitude = 10.0f;
+  /// Higher scale and amplitude than continental to break up flat terraces
+  /// caused by int32_t truncation of slowly-varying noise.
+  float detailScale = 0.05f;
+  float detailAmplitude = 14.0f;
 
   /// Mountain amplification — extra high-frequency noise in cold regions.
-  float mountainScale = 0.015f;
+  float mountainScale = 0.02f;
   float mountainAmplitude = 28.0f;
 
   /// Sea level (for filling water).

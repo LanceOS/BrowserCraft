@@ -6,15 +6,8 @@ namespace voxel::biome {
 
 BiomeSampler::BiomeSampler(uint32_t seed)
   : m_tempNoise(seed ^ 0xa10beu),
-    m_humidNoise(seed ^ 0xb1d07u),
-    m_heightNoise(seed ^ 0xc0da7au)   // dedicated continental height noise
+    m_humidNoise(seed ^ 0xb1d07u)
 {}
-
-auto BiomeSampler::noise2D(float worldX, float worldZ) const -> float {
-  // Use dedicated height noise instead of temperature noise.
-  // This provides proper large-scale terrain contours independent of biome climate.
-  return m_heightNoise.noise3D(worldX, 0.0f, worldZ);
-}
 
 auto BiomeSampler::sampleBiome(float worldX, float worldZ) const -> const BiomeSurfaceRule& {
   float temperature = (m_tempNoise.noise3D(worldX * 0.008f, 0.0f, worldZ * 0.008f) + 1.0f) * 0.5f;
@@ -28,7 +21,8 @@ auto BiomeSampler::blendedHeightBias(float worldX, float worldZ) const -> float 
   float h = (m_humidNoise.noise3D(worldX * 0.008f, 100.0f, worldZ * 0.008f) + 1.0f) * 0.5f;
 
   // Evaluate weight for each biome using smoothstep-like blending.
-  // This replaces the hard cutoffs in pick() with smooth transitions.
+  // Transition centers are aligned with pick() thresholds so that the
+  // surface rule selection and height bias remain consistent.
   auto smoothEdge = [](float value, float threshold, float width) -> float {
     float edge = (value - threshold + width * 0.5f) / width;
     edge = std::clamp(edge, 0.0f, 1.0f);
@@ -36,28 +30,40 @@ auto BiomeSampler::blendedHeightBias(float worldX, float worldZ) const -> float 
     return edge * edge * (3.0f - 2.0f * edge);
   };
 
-  float wMountains = 1.0f - smoothEdge(t, 0.30f, 0.10f);
-  float wDesert    = smoothEdge(t, 0.60f, 0.10f) * (1.0f - smoothEdge(h, 0.40f, 0.10f));
-  float wSwamp     = smoothEdge(h, 0.65f, 0.12f) * smoothEdge(t, 0.30f, 0.10f);
-  float wForest    = smoothEdge(h, 0.50f, 0.10f) * (1.0f - wMountains) * (1.0f - wSwamp);
+  // Mountains: pick() uses t < 0.28
+  float wMountains = 1.0f - smoothEdge(t, 0.28f, 0.08f);
+  // Desert: pick() uses t > 0.65 && h < 0.35
+  float wDesert = smoothEdge(t, 0.65f, 0.08f) * (1.0f - smoothEdge(h, 0.35f, 0.08f));
+  // Swamp: pick() uses h > 0.72 && t > 0.35
+  float wSwamp = smoothEdge(h, 0.72f, 0.10f) * smoothEdge(t, 0.35f, 0.08f);
+  // Forest: pick() uses h > 0.55; suppress where mountains or swamp would take priority
+  float wForest = smoothEdge(h, 0.55f, 0.08f) * (1.0f - wMountains) * (1.0f - wSwamp);
+  // Plains: remainder — naturally falls to near zero when another biome dominates
+  float wPlains = std::max(0.0f, 1.0f - wMountains - wDesert - wSwamp - wForest);
 
   // Normalise weights so they sum to 1.
-  float total = wMountains + wDesert + wSwamp + wForest + 1.0f; // +1 for plains (default)
-  wMountains /= total;
-  wDesert    /= total;
-  wSwamp     /= total;
-  wForest    /= total;
-  float wPlains = 1.0f / total;
+  float total = wMountains + wDesert + wSwamp + wForest + wPlains;
+  // Guard against division by zero if all weights are somehow zero (shouldn't happen).
+  if (total <= 0.0f) return PlainsBiome.heightBias;
 
   // Weighted sum of biome height biases.
-  float bias =
-    wMountains * MountainsBiome.heightBias +
-    wDesert    * DesertBiome.heightBias +
-    wSwamp     * SwampBiome.heightBias +
-    wForest    * ForestBiome.heightBias +
-    wPlains    * PlainsBiome.heightBias;
+  return
+    (wMountains / total) * MountainsBiome.heightBias +
+    (wDesert    / total) * DesertBiome.heightBias +
+    (wSwamp     / total) * SwampBiome.heightBias +
+    (wForest    / total) * ForestBiome.heightBias +
+    (wPlains    / total) * PlainsBiome.heightBias;
+}
 
-  return bias;
+auto BiomeSampler::mountainWeight(float worldX, float worldZ) const -> float {
+  // Evaluate temperature and derive mountain influence using the same
+  // smooth transition as blendedHeightBias — centered at 0.28, width 0.08.
+  float t = (m_tempNoise.noise3D(worldX * 0.008f, 0.0f, worldZ * 0.008f) + 1.0f) * 0.5f;
+  float edge = (t - 0.28f + 0.04f) / 0.08f;
+  edge = std::clamp(edge, 0.0f, 1.0f);
+  // Hermite smoothstep, inverted: high when cold (t low)
+  float w = 1.0f - (edge * edge * (3.0f - 2.0f * edge));
+  return std::max(0.0f, w);
 }
 
 auto BiomeSampler::pick(float temperature, float humidity) -> const BiomeSurfaceRule& {

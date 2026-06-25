@@ -51,16 +51,36 @@ TEST_CASE("BiomeSampler blendedHeightBias is smooth", "[biome]") {
   REQUIRE(differs);
 }
 
-TEST_CASE("BiomeSampler height noise independent of temperature", "[biome]") {
+TEST_CASE("BiomeSampler blended bias stays within biome extremes", "[biome]") {
   voxel::biome::BiomeSampler sampler(42);
 
-  // The dedicated height noise returns different values than temperature.
-  // Sample at the same coordinates — noise2D (height) should differ from
-  // the internal temperature. We can check this indirectly: the height noise
-  // uses a different seed, so at the same location the values differ.
-  float heightVal = sampler.noise2D(500.0f, 500.0f);
+  // The blended bias at any position must be bounded by the min and max
+  // heightBias across all biomes: DesertBiome (-3) <= bias <= MountainsBiome (22).
+  constexpr float minBias = -3.0f;  // DesertBiome.heightBias
+  constexpr float maxBias = 22.0f;  // MountainsBiome.heightBias
 
-  // Height noise should produce values in [-1, 1] range
-  REQUIRE(heightVal >= -1.5f);
-  REQUIRE(heightVal <= 1.5f);
+  // Sample a broad grid to cover various temp/humidity combinations.
+  for (float x = -2000.0f; x <= 2000.0f; x += 500.0f) {
+    for (float z = -2000.0f; z <= 2000.0f; z += 500.0f) {
+      float bias = sampler.blendedHeightBias(x, z);
+      REQUIRE(bias >= minBias);
+      REQUIRE(bias <= maxBias);
+    }
+  }
+
+  // The average bias over a large area should be close to plains (0),
+  // since plains is the default biome across most of the world.
+  float sum = 0.0f;
+  int32_t count = 0;
+  for (float x = -5000.0f; x <= 5000.0f; x += 200.0f) {
+    for (float z = -5000.0f; z <= 5000.0f; z += 200.0f) {
+      sum += sampler.blendedHeightBias(x, z);
+      ++count;
+    }
+  }
+  float avg = sum / static_cast<float>(count);
+  // Plains has heightBias=0. The average across all biomes should be
+  // closer to 0 than to the mountain or desert extremes.
+  REQUIRE(avg > -5.0f);
+  REQUIRE(avg < 5.0f);
 }
