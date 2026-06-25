@@ -69,6 +69,9 @@ public:
   /// Get the world metadata for this save slot.
   [[nodiscard]] auto metadata() const -> const WorldMetadata& { return m_metadata; }
 
+  /// Get the path to the metadata file for this save slot.
+  [[nodiscard]] auto metadataFilePath() const -> std::string;
+
   /// Update and persist the world metadata (e.g., timestamp on load).
   void writeMetadata(const WorldMetadata& meta);
 
@@ -77,7 +80,6 @@ public:
 
 private:
   auto chunkFilePath(int32_t cx, int32_t cz) const -> std::string;
-  auto metadataFilePath() const -> std::string;
 
   std::string m_saveDir;
   std::string m_slotId;

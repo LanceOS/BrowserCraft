@@ -154,6 +154,7 @@ add_library(voxel_engine STATIC
   src/engine/save/WorldNamingService.cpp
   src/engine/save/WorldListService.cpp
   src/engine/save/SettingsRepository.cpp
+  src/engine/save/SaveOrchestrator.cpp
   src/world/generation/SimplexNoise.cpp
   src/world/generation/CaveCarver.cpp
   src/world/generation/OreDistributor.cpp

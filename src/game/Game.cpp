@@ -83,7 +83,6 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     m_session(config.renderDistance),
     m_blocks(4096),
     m_worldGenPipeline(config.worldSeed),
-    m_worldSeedRng(std::random_device{}()),
     m_transforms(m_entityManager.capacity()),
     m_bodies(m_entityManager.capacity()),
     m_players(m_entityManager.capacity()),
@@ -126,41 +125,27 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   m_saveDir = options.saveDir;
   m_worldController->configureSaveWorld(m_saveDir, options.saveSlotId, false, m_ioPool.get());
 
-  // Initialize save system services
-  m_worldNaming = std::make_unique<WorldNamingService>(m_saveDir);
-  m_worldList = std::make_unique<WorldListService>(m_saveDir);
-  m_settings = std::make_unique<SettingsRepository>(m_saveDir + "/settings.db");
+  // Initialize save system orchestrator
+  m_saveOrchestrator = std::make_unique<SaveOrchestrator>(m_saveDir);
 
   // Load saved settings
-  if (m_settings->has("renderDistance")) {
-    int32_t savedRd = m_settings->getInt("renderDistance", m_config.renderDistance);
-    m_config.renderDistance = savedRd;
-    m_session.setRenderDistance(savedRd);
-    m_ui->setRenderDistance(savedRd);
-  }
-  if (m_settings->has("showFps")) {
-    m_ui->setShowFps(m_settings->getBool("showFps", true));
-  }
+  auto saved = m_saveOrchestrator->loadSettings();
+  m_config.renderDistance = saved.renderDistance;
+  m_session.setRenderDistance(saved.renderDistance);
+  m_ui->setRenderDistance(saved.renderDistance);
+  m_ui->setShowFps(saved.showFps);
 
   m_audioRegistry.seedBuiltinSounds();
   m_blockAudio = std::make_unique<BlockInteractionAudio>(m_audioEngine, m_audioRegistry, m_blocks);
 
   m_ui = std::make_unique<UIManager>(window, UIManager::Callbacks{
     .onStartWorld = [this](GameMode mode, const std::string& slotId, bool startFresh) {
-      // Name collision check for new worlds
-      if (startFresh && m_worldNaming->isNameTaken(slotId)) {
-        m_ui->setWorldError("A world with this name already exists. Choose a different name.");
-        return;
-      }
+      m_ui->clearWorldError();
       startWorld(mode, slotId, startFresh);
     },
     .onQuitToTitle = [this]{
-      // Flush save data and refresh world list on return to title
-      if (auto* sm = m_worldController->saveManager()) {
-        sm->flushPending();
-      }
+      m_saveOrchestrator->onWorldClosed(m_worldController->saveManager());
       m_session.returnToTitle();
-      m_worldList->refresh();
     },
     .onResume = [this]{ glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); },
     .onQuit = [this]{ m_running = false; },
@@ -168,9 +153,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
       int32_t rd = m_ui->renderDistance();
       m_config.renderDistance = rd;
       m_session.setRenderDistance(rd);
-      if (m_settings) {
-        m_settings->setInt("renderDistance", rd);
-      }
+      m_saveOrchestrator->settings().setInt("renderDistance", rd);
     },
   });
 
@@ -193,17 +176,9 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
 }
 
 Game::~Game() {
-  // Save settings before shutdown
-  if (m_settings) {
-    m_settings->setInt("renderDistance", m_config.renderDistance);
-    m_settings->setBool("showFps", m_ui->isFpsVisible());
-    m_settings->flush();
-  }
-
-  // Flush any pending chunk saves
-  if (auto* sm = m_worldController->saveManager()) {
-    sm->flushPending();
-  }
+  // Persist runtime settings and flush chunk saves
+  m_saveOrchestrator->saveSettings(m_config.renderDistance, m_ui->isFpsVisible());
+  m_saveOrchestrator->onWorldClosed(m_worldController->saveManager());
 }
 
 void Game::initECS() { createPlayer(); }
@@ -247,44 +222,43 @@ void Game::initSystems() {
 }
 
 void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh) {
-  // Resolve the display name and slug
+  // 1. Resolve slug and prepare world parameters via the orchestrator
   std::string displayName = slotId;
   std::string slug;
+  uint32_t seed = m_config.worldSeed;
 
   if (startFresh) {
-    // For new worlds, find an available slug
-    slug = m_worldNaming->nextAvailableSlug(slotId);
-    m_config.worldSeed = static_cast<uint32_t>(m_worldSeedRng());
-    m_worldGenPipeline = WorldGenPipeline(m_config.worldSeed);
-  } else {
-    // For loading existing worlds, check if the slug exists directly,
-    // or search saved worlds by display name
-    if (m_worldNaming->isSlugTaken(slotId)) {
-      slug = WorldNamingService::generateSlug(slotId);
-    } else {
-      // Try to find it by display name in the world list
-      slug = WorldNamingService::generateSlug(slotId);
-      // If the slug isn't taken, the world might not exist yet — let it fail gracefully
+    auto result = m_saveOrchestrator->prepareNewWorld(slotId, mode, seed);
+    if (!result.error.empty()) {
+      m_ui->setWorldError(result.error);
+      return;
     }
+    slug = std::move(result.slug);
+    m_config.worldSeed = seed;
+    m_worldGenPipeline = WorldGenPipeline(seed);
+  } else {
+    auto result = m_saveOrchestrator->prepareLoadWorld(slotId);
+    if (!result.error.empty()) {
+      m_ui->setWorldError(result.error);
+      return;
+    }
+    slug = std::move(result.slug);
+    seed = m_config.worldSeed;
   }
 
+  // 2. Configure the world (creates SaveManager, sets up chunk persistence)
   m_worldController->configureSaveWorld(m_saveDir, slug, startFresh, m_ioPool.get());
 
-  // Update metadata after save manager is configured
+  // 3. Finalize metadata via the orchestrator
   if (auto* sm = m_worldController->saveManager()) {
-    if (startFresh) {
-      auto meta = WorldMetadata::create(displayName, slug, m_config.worldSeed,
-                                        static_cast<int32_t>(mode));
-      sm->writeMetadata(meta);
-    } else {
-      // Touch the timestamp on load
-      sm->touchMetadata();
-    }
+    m_saveOrchestrator->finalizeWorldStart(*sm, displayName, slug, seed, mode);
   }
 
+  // 4. Transition session state
   m_session.startSingleplayer(mode);
   m_dayNightCycle.setTime(daynight::kMiddayTimeSeconds);
 
+  // 5. Reset player / camera
   m_spawnedToSurface = false;
   m_camera.position = glm::vec3(0.0f, 80.0f, 50.0f);
   m_cameraDirty = true;
@@ -304,12 +278,13 @@ void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh)
     player.selectedHotbarSlot = 0;
   }
 
+  // 6. Switch UI to in-game
   m_ui->clearUI();
   m_ui->setInventoryOpen(false);
   glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-  // Refresh the world list after creating/loading a world
-  m_worldList->refresh();
+  // 7. Refresh world list
+  m_saveOrchestrator->refreshWorldList();
 }
 
 auto Game::playerIndex() const -> int32_t {
@@ -354,20 +329,8 @@ void Game::update(float dt) {
       m_session.markWorldReady();
     }
   } else if (m_session.state() == GameState::MainMenu) {
-    // Feed world list to the UI for the world selection menu
-    // Refresh periodically (not every frame) — check if save dir mtime changed
-    // is non-trivial, so we just push the cached list.
-    std::vector<WorldEntry> entries;
-    for (const auto& meta : m_worldList->worlds()) {
-      entries.push_back({
-        .name = meta.displayName(),
-        .slug = meta.displaySlug(),
-        .seed = meta.seed,
-        .gameMode = meta.gameMode,
-        .lastPlayedTimestamp = meta.lastPlayedTimestamp
-      });
-    }
-    m_ui->setWorldList(std::move(entries));
+    m_ui->setWorldList(
+      SaveOrchestrator::buildWorldEntries(m_saveOrchestrator->worldList()));
   }
 }
 

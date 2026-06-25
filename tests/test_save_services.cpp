@@ -3,6 +3,7 @@
 #include "engine/save/WorldNamingService.hpp"
 #include "engine/save/WorldListService.hpp"
 #include "engine/save/SettingsRepository.hpp"
+#include "engine/save/SaveOrchestrator.hpp"
 #include <filesystem>
 #include <cstdio>
 
@@ -304,6 +305,140 @@ TEST_CASE("SettingsRepository persists across sessions", "[save][settings][persi
     REQUIRE(repo.getInt("render_distance") == 8);
     REQUIRE(repo.getFloat("volume") == 0.75f);
     REQUIRE(repo.getBool("show_fps") == false);
+  }
+
+  fs::remove_all(tmpDir);
+}
+
+TEST_CASE("SaveOrchestrator buildWorldEntries", "[save][orchestrator]") {
+  std::vector<voxel::WorldMetadata> worlds;
+
+  // Empty list
+  auto entries = voxel::SaveOrchestrator::buildWorldEntries(worlds);
+  REQUIRE(entries.empty());
+
+  // Single world
+  auto meta1 = voxel::WorldMetadata::create("Alpha", "alpha", 100, 0);
+  meta1.lastPlayedTimestamp = 1000;
+  worlds.push_back(meta1);
+
+  entries = voxel::SaveOrchestrator::buildWorldEntries(worlds);
+  REQUIRE(entries.size() == 1);
+  REQUIRE(entries[0].name == "Alpha");
+  REQUIRE(entries[0].slug == "alpha");
+  REQUIRE(entries[0].seed == 100);
+  REQUIRE(entries[0].gameMode == 0);
+  REQUIRE(entries[0].lastPlayedTimestamp == 1000);
+
+  // Multiple worlds
+  auto meta2 = voxel::WorldMetadata::create("Beta", "beta", 200, 1);
+  meta2.lastPlayedTimestamp = 2000;
+  worlds.push_back(meta2);
+
+  entries = voxel::SaveOrchestrator::buildWorldEntries(worlds);
+  REQUIRE(entries.size() == 2);
+  REQUIRE(entries[0].name == "Alpha");
+  REQUIRE(entries[1].name == "Beta");
+  REQUIRE(entries[1].gameMode == 1);
+}
+
+TEST_CASE("SaveOrchestrator new world preparation", "[save][orchestrator]") {
+  auto tmpDir = fs::temp_directory_path() / "voxel_test_orch_new";
+  fs::remove_all(tmpDir);
+  fs::create_directories(tmpDir);
+
+  voxel::SaveOrchestrator orch(tmpDir.string());
+
+  SECTION("creates valid new world") {
+    uint32_t seed = 0;
+    auto result = orch.prepareNewWorld("My New World", voxel::GameMode::Survival, seed);
+    REQUIRE(result.error.empty());
+    REQUIRE_FALSE(result.slug.empty());
+    REQUIRE(result.slug == "my_new_world");
+    REQUIRE(seed != 0);
+  }
+
+  SECTION("rejects empty name") {
+    uint32_t seed = 0;
+    auto result = orch.prepareNewWorld("", voxel::GameMode::Survival, seed);
+    REQUIRE_FALSE(result.error.empty());
+  }
+
+  SECTION("rejects duplicate name") {
+    // First world: succeeds
+    uint32_t seed1 = 0;
+    auto result1 = orch.prepareNewWorld("My World", voxel::GameMode::Creative, seed1);
+    REQUIRE(result1.error.empty());
+    REQUIRE(result1.slug == "my_world");
+
+    // Create the world directory so the name is taken
+    fs::create_directories(tmpDir / "my_world");
+    auto meta = voxel::WorldMetadata::create("My World", "my_world", seed1, 1);
+    REQUIRE(meta.write(tmpDir / "my_world" / "world.meta"));
+    orch.refreshWorldList();
+
+    // Second attempt with same name: fails
+    uint32_t seed2 = 0;
+    auto result2 = orch.prepareNewWorld("My World", voxel::GameMode::Survival, seed2);
+    REQUIRE_FALSE(result2.error.empty());
+  }
+
+  SECTION("generates unique slugs for duplicate slugs") {
+    uint32_t seed = 0;
+    auto result1 = orch.prepareNewWorld("My World", voxel::GameMode::Survival, seed);
+    REQUIRE(result1.slug == "my_world");
+
+    // Create the directory to make slug taken
+    fs::create_directories(tmpDir / "my_world");
+    auto meta1 = voxel::WorldMetadata::create("My World", "my_world", seed, 0);
+    REQUIRE(meta1.write(tmpDir / "my_world" / "world.meta"));
+    orch.refreshWorldList();
+
+    // Second world with different name that maps to same slug
+    uint32_t seed2 = 0;
+    auto result2 = orch.prepareNewWorld("my_world", voxel::GameMode::Survival, seed2);
+    REQUIRE(result2.error.empty());
+    // Should get a numbered suffix
+    REQUIRE(result2.slug.find("my_world") == 0);
+    REQUIRE(result2.slug != "my_world");
+  }
+
+  fs::remove_all(tmpDir);
+}
+
+TEST_CASE("SaveOrchestrator load world preparation", "[save][orchestrator]") {
+  auto tmpDir = fs::temp_directory_path() / "voxel_test_orch_load";
+  fs::remove_all(tmpDir);
+  fs::create_directories(tmpDir);
+
+  // Create a world directory with metadata
+  fs::create_directories(tmpDir / "existing_world");
+  auto meta = voxel::WorldMetadata::create("Existing World", "existing_world", 42, 0);
+  REQUIRE(meta.write(tmpDir / "existing_world" / "world.meta"));
+
+  voxel::SaveOrchestrator orch(tmpDir.string());
+  orch.refreshWorldList();
+
+  SECTION("load by slug") {
+    auto result = orch.prepareLoadWorld("existing_world");
+    REQUIRE(result.error.empty());
+    REQUIRE(result.slug == "existing_world");
+  }
+
+  SECTION("load by display name") {
+    auto result = orch.prepareLoadWorld("Existing World");
+    REQUIRE(result.error.empty());
+    REQUIRE(result.slug == "existing_world");
+  }
+
+  SECTION("rejects nonexistent world") {
+    auto result = orch.prepareLoadWorld("nonexistent");
+    REQUIRE_FALSE(result.error.empty());
+  }
+
+  SECTION("rejects empty identifier") {
+    auto result = orch.prepareLoadWorld("");
+    REQUIRE_FALSE(result.error.empty());
   }
 
   fs::remove_all(tmpDir);
