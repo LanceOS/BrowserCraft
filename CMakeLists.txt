@@ -184,6 +184,7 @@ add_executable(voxel_tests
   tests/test_query.cpp
   tests/test_system_manager.cpp
   tests/test_block_registry.cpp
+  tests/test_vanilla_block_factory.cpp
   tests/test_world.cpp
   tests/test_simplex_noise.cpp
   tests/test_biome_sampler.cpp

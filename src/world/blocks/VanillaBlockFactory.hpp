@@ -1,6 +1,6 @@
 #pragma once
 
-#include "BlockFactory.hpp"
+#include "world/BlockFactory.hpp"
 
 namespace voxel {
 

@@ -4,7 +4,7 @@ This guide explains how to extend the content that exists in the current codebas
 
 The main extension surfaces are:
 
-- blocks via [`cpp-voxel/src/game/Game.cpp`](../cpp-voxel/src/game/Game.cpp) (registered inline)
+- blocks via [`cpp-voxel/src/world/blocks/VanillaBlockFactory.cpp`](../src/world/blocks/VanillaBlockFactory.cpp)
 - recipes via [`cpp-voxel/src/content/crafting/CraftingRegistry.hpp`](../cpp-voxel/src/content/crafting/CraftingRegistry.hpp)
 - structures via (to be ported)
 - biomes via [`cpp-voxel/src/content/biomes/BiomeData.hpp`](../cpp-voxel/src/content/biomes/BiomeData.hpp)
@@ -25,7 +25,7 @@ If you add new content, update the code path that the runtime actually uses.
 
 ## Adding A Block
 
-Current block definitions are registered in [`Game.cpp`](../cpp-voxel/src/game/Game.cpp) (blocks registered inline), which registers `BlockDefinition` objects.
+Current block definitions are registered in [`VanillaBlockFactory`](../src/world/blocks/VanillaBlockFactory.cpp), which reads from [`blocks.json`](../assets/blocks.json) via [`AssetManager`](../src/engine/assets/AssetManager.hpp).
 
 ### Block Definition Shape
 
@@ -37,20 +37,21 @@ A block definition needs:
 - `material`
 - `collision`
 
-The data shape lives in [`cpp-voxel/src/world/BlockDefinition.hpp`](../cpp-voxel/src/world/BlockDefinition.hpp).
+The data shape lives in [`BlockDefinition.hpp`](../src/world/BlockDefinition.hpp).
 
 ### Steps
 
 1. Pick a new block ID that does not collide with an existing registration in `VanillaBlockFactory`.
-2. Add or reuse a texture layer in [`cpp-voxel/src/world/BlockDefinition.hpp`](../cpp-voxel/src/world/BlockDefinition.hpp).
-3. Add a matching texture source in [`Renderer`](../cpp-voxel/src/engine/render/Renderer.hpp) if the new texture layer is brand new.
-4. Register the block in `VanillaBlockFactory`.
-5. Set the right material flags:
-   - `opaque`
-   - `transparent`
-   - `liquid`
-   - `foliage`
-   - `lightEmission`
+2. Add a texture entry in [`blocks.json`](../assets/blocks.json) under the `"textures"` section.
+3. Register the block in the `"blocks"` array of [`blocks.json`](../assets/blocks.json).
+4. Add a matching `BlockId` constant in [`BlockIds.hpp`](../src/world/BlockIds.hpp) if the block is referenced in C++ code.
+5. Set the right material flags in `blocks.json`:
+   - `is_opaque` (bool) — whether the block is fully solid
+   - `is_liquid` (bool) — enables liquid rendering and behavior
+   - `is_foliage` (bool) — enables alpha-test rendering without AO
+   - `light_emission` (int, 0-15) — emitted light level
+   - `hardness` (float) — mining time multiplier
+   - `blast_resistance` (float) — explosion resistance
 6. Set the collision AABB:
    - use `FULL_BLOCK_AABB` for normal solids
    - use an empty AABB for non-solid logic blocks or fluids
@@ -66,11 +67,11 @@ The material flags affect more than rendering:
 
 ### Current Caveat
 
-External texture assets are not wired yet. Texture layers are currently synthesized in code.
+External texture assets are not wired yet. Texture layers are currently synthesized in code by [`AssetManager`](../src/engine/assets/AssetManager.cpp).
 
 ## Adding A Recipe
 
-Recipes are registered in [`CraftingRegistry`](../cpp-voxel/src/content/crafting/CraftingRegistry.hpp).
+Recipes are registered in [`CraftingRegistry`](../src/content/crafting/CraftingRegistry.hpp).
 
 There are two recipe types:
 
