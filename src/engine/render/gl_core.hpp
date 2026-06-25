@@ -49,7 +49,6 @@ using PFN_BindVertexArray = void (*)(GLuint);
 using PFN_DeleteVertexArrays = void (*)(GLsizei, const GLuint*);
 using PFN_EnableVertexAttribArray = void (*)(GLuint);
 using PFN_VertexAttribPointer = void (*)(GLuint, GLint, GLenum, GLboolean, GLsizei, const void*);
-using PFN_VertexAttribIPointer = void (*)(GLuint, GLint, GLenum, GLsizei, const void*);
 
 // Buffer
 using PFN_GenBuffers = void (*)(GLsizei, GLuint*);
@@ -120,7 +119,6 @@ extern PFN_BindVertexArray BindVertexArray;
 extern PFN_DeleteVertexArrays DeleteVertexArrays;
 extern PFN_EnableVertexAttribArray EnableVertexAttribArray;
 extern PFN_VertexAttribPointer VertexAttribPointer;
-extern PFN_VertexAttribIPointer VertexAttribIPointer;
 
 extern PFN_GenBuffers GenBuffers;
 extern PFN_BindBuffer BindBuffer;

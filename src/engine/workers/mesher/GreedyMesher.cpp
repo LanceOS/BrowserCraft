@@ -59,11 +59,13 @@ static inline auto getPackedLight(const uint8_t* light,
   return light[voxelIndex(x, y, z, cfg)];
 }
 
-/// Pack sky light, block light, AO into 10 bits.
-static inline auto packLightBits(int32_t sky, int32_t block, int32_t ao) -> uint32_t {
-  return (static_cast<uint32_t>(sky) & 0x0Fu)
-       | ((static_cast<uint32_t>(block) & 0x0Fu) << 4)
-       | ((static_cast<uint32_t>(ao) & 0x03u) << 8);
+/// Pack sky light, block light, AO into a float.
+/// The shader does `uint(a_lightData + 0.5)` to recover the integer.
+static inline auto packLight(int32_t sky, int32_t block, int32_t ao) -> float {
+  uint32_t p = ( static_cast<uint32_t>(sky)   & 0x0Fu)
+             | ((static_cast<uint32_t>(block) & 0x0Fu) << 4)
+             | ((static_cast<uint32_t>(ao)    & 0x03u) << 16);
+  return static_cast<float>(p);
 }
 
 // ======================================================================
@@ -180,26 +182,16 @@ static inline auto cornerLight(const uint8_t* light,
 // ======================================================================
 
 static inline void writeVtx(float* data, int32_t stride, uint32_t offset,
-                            int32_t x, int32_t y, int32_t z,
-                            uint32_t normalIdx,
-                            int32_t u, int32_t v,
-                            uint32_t texLayer, uint32_t lightData) {
-  // data1: X (5 bits), Y (9 bits), Z (5 bits), Normal (3 bits), U (9 bits) = 31 bits
-  uint32_t data1 = (static_cast<uint32_t>(x) & 0x1F)
-                 | ((static_cast<uint32_t>(y) & 0x1FF) << 5)
-                 | ((static_cast<uint32_t>(z) & 0x1F) << 14)
-                 | ((normalIdx & 0x7) << 19)
-                 | ((static_cast<uint32_t>(u) & 0x1FF) << 22);
-
-  // data2: V (9 bits), TexLayer (8 bits), LightData (10 bits) = 27 bits
-  uint32_t data2 = (static_cast<uint32_t>(v) & 0x1FF)
-                 | ((texLayer & 0xFF) << 9)
-                 | ((lightData & 0x3FF) << 17);
-
-  // Reinterpret float array as uint32_t array
-  uint32_t* p = reinterpret_cast<uint32_t*>(data + offset);
-  p[0] = data1;
-  p[1] = data2;
+                            float x, float y, float z,
+                            float nx, float ny, float nz,
+                            float u, float v,
+                            float texLayer, float lightData) {
+  float* p = data + offset;
+  p[0]=x; p[1]=y; p[2]=z;       // a_pos
+  p[3]=nx; p[4]=ny; p[5]=nz;    // a_normal
+  p[6]=u; p[7]=v;               // a_uv
+  p[8]=texLayer;                 // a_texLayer
+  p[9]=lightData;                // a_lightData
 }
 
 // ======================================================================
@@ -347,17 +339,17 @@ bool greedyMesh(
           bl[vAxis] = static_cast<float>(v);       br[vAxis] = static_cast<float>(v);
           tl[vAxis] = static_cast<float>(v+rh);    tr[vAxis] = static_cast<float>(v+rh);
 
+          float uv[4][2] = {
+            {0,0}, {static_cast<float>(rw),0},
+            {0,static_cast<float>(rh)}, {static_cast<float>(rw),static_cast<float>(rh)},
+          };
+
           // Grid corner integers
           int32_t c[4][3] = {
             {static_cast<int32_t>(bl[0]), static_cast<int32_t>(bl[1]), static_cast<int32_t>(bl[2])},
             {static_cast<int32_t>(br[0]), static_cast<int32_t>(br[1]), static_cast<int32_t>(br[2])},
             {static_cast<int32_t>(tl[0]), static_cast<int32_t>(tl[1]), static_cast<int32_t>(tl[2])},
             {static_cast<int32_t>(tr[0]), static_cast<int32_t>(tr[1]), static_cast<int32_t>(tr[2])},
-          };
-          
-          int32_t uvI[4][2] = {
-            {0,0}, {rw,0},
-            {0,rh}, {rw,rh},
           };
 
           // First block in the rect (for self-exclusion in AO)
@@ -386,9 +378,9 @@ bool greedyMesh(
             sky[ci] = al.sky; blk[ci] = al.block;
           }
 
-          uint32_t ld[4];
+          float ld[4];
           for (int32_t ci = 0; ci < 4; ++ci)
-            ld[ci] = packLightBits(sky[ci], blk[ci], ao[ci]);
+            ld[ci] = packLight(sky[ci], blk[ci], ao[ci]);
 
           bool flip = (ao[0] + ao[2]) > (ao[1] + ao[3]);
 
@@ -397,12 +389,11 @@ bool greedyMesh(
             vertexCountOut = vo / S; indexCountOut = io; return false;
           }
 
-          uint32_t tlU = static_cast<uint32_t>(tlayer);
-          uint32_t diU = static_cast<uint32_t>(di);
-          writeVtx(vertexOut, S, vo, c[0][0], c[0][1], c[0][2], diU, uvI[0][0], uvI[0][1], tlU, ld[0]); vo += S;
-          writeVtx(vertexOut, S, vo, c[1][0], c[1][1], c[1][2], diU, uvI[1][0], uvI[1][1], tlU, ld[1]); vo += S;
-          writeVtx(vertexOut, S, vo, c[2][0], c[2][1], c[2][2], diU, uvI[2][0], uvI[2][1], tlU, ld[2]); vo += S;
-          writeVtx(vertexOut, S, vo, c[3][0], c[3][1], c[3][2], diU, uvI[3][0], uvI[3][1], tlU, ld[3]); vo += S;
+          float tlF = static_cast<float>(tlayer);
+          writeVtx(vertexOut, S, vo, bl[0],bl[1],bl[2], nx,ny,nz, uv[0][0],uv[0][1], tlF, ld[0]); vo += S;
+          writeVtx(vertexOut, S, vo, br[0],br[1],br[2], nx,ny,nz, uv[1][0],uv[1][1], tlF, ld[1]); vo += S;
+          writeVtx(vertexOut, S, vo, tl[0],tl[1],tl[2], nx,ny,nz, uv[2][0],uv[2][1], tlF, ld[2]); vo += S;
+          writeVtx(vertexOut, S, vo, tr[0],tr[1],tr[2], nx,ny,nz, uv[3][0],uv[3][1], tlF, ld[3]); vo += S;
 
           uint32_t base = (vo / S) - 4;
           if (!flip) {

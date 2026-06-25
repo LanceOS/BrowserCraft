@@ -26,8 +26,11 @@ layout(std140, binding = 2) uniform TimeBlock {
   float u_pad;
 };
 
-layout(location = 0) in uint a_data1;
-layout(location = 1) in uint a_data2;
+layout(location = 0) in vec3 a_pos;
+layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec2 a_uv;
+layout(location = 3) in float a_texLayer;
+layout(location = 4) in float a_lightData;
 
 struct ChunkCullData {
     vec4 min;
@@ -55,27 +58,6 @@ out float v_blockLight;
 out float v_ao;
 
 void main() {
-  uint d1 = a_data1;
-  uint d2 = a_data2;
-
-  vec3 a_pos = vec3(
-      float(d1 & 0x1Fu),
-      float((d1 >> 5u) & 0x1FFu),
-      float((d1 >> 14u) & 0x1Fu)
-  );
-  
-  uint normalIdx = (d1 >> 19u) & 0x7u;
-  vec3 normals[6] = vec3[6](
-      vec3(1.0, 0.0, 0.0), vec3(-1.0, 0.0, 0.0),
-      vec3(0.0, 1.0, 0.0), vec3(0.0, -1.0, 0.0),
-      vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, -1.0)
-  );
-  vec3 a_normal = normals[normalIdx];
-  
-  vec2 a_uv = vec2(float((d1 >> 22u) & 0x1FFu), float(d2 & 0x1FFu));
-  float a_texLayer = float((d2 >> 9u) & 0xFFu);
-  uint packedLight = (d2 >> 17u) & 0x3FFu;
-
   vec3 chunkTranslation = chunks[gl_InstanceID].min.xyz;
   vec3 worldPos = a_pos + chunkTranslation;
   vec4 clip = u_projView * vec4(worldPos, 1.0);
@@ -84,9 +66,10 @@ void main() {
   v_uv = a_uv;
   v_normal = a_normal;
   v_texLayer = a_texLayer;
+  uint packedLight = uint(a_lightData + 0.5);
   v_skyLight = float(packedLight & 0x0Fu) / 15.0;
   v_blockLight = float((packedLight >> 4u) & 0x0Fu) / 15.0;
-  v_ao = float((packedLight >> 8u) & 0x03u) / 3.0;
+  v_ao = float((packedLight >> 16u) & 0x03u) / 3.0;
 
   float dist = length(u_camTime.xyz - worldPos);
   float fogDistance = u_fogColor.a;
