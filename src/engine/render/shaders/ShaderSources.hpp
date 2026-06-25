@@ -19,10 +19,12 @@ layout(std140, binding = 0) uniform CameraBlock {
 
 layout(std140, binding = 2) uniform TimeBlock {
   float u_timeElapsed;
-  float u_sunAngle;
   float u_daylight;
-  float u_lightLevel;
-  vec3 u_sunDir;
+  float u_sunIntensity;
+  float u_ambientIntensity;
+  vec3  u_sunDir;
+  float u_timeOfDay;
+  vec3  u_sunColor;
   float u_pad;
 };
 
@@ -53,8 +55,7 @@ out vec2 v_uv;
 out vec3 v_normal;
 out float v_texLayer;
 out float v_fogFactor;
-out float v_skyLight;
-out float v_blockLight;
+out float v_skyExposure;
 out float v_ao;
 
 void main() {
@@ -69,8 +70,7 @@ void main() {
   v_normal = a_normal;
   v_texLayer = a_texLayer;
   uint packedLight = uint(a_lightData + 0.5);
-  v_skyLight = float(packedLight & 0x0Fu) / 15.0;
-  v_blockLight = float((packedLight >> 4u) & 0x0Fu) / 15.0;
+  v_skyExposure = float(packedLight & 0x0Fu) / 15.0;
   v_ao = float((packedLight >> 16u) & 0x03u) / 3.0;
 
   float dist = length(u_camTime.xyz - worldPos);
@@ -94,10 +94,12 @@ layout(std140, binding = 0) uniform CameraBlock {
 
 layout(std140, binding = 2) uniform TimeBlock {
   float u_timeElapsed;
-  float u_sunAngle;
   float u_daylight;
-  float u_lightLevel;
-  vec3 u_sunDir;
+  float u_sunIntensity;
+  float u_ambientIntensity;
+  vec3  u_sunDir;
+  float u_timeOfDay;
+  vec3  u_sunColor;
   float u_pad;
 };
 
@@ -108,8 +110,7 @@ in vec2 v_uv;
 in vec3 v_normal;
 in float v_texLayer;
 in float v_fogFactor;
-in float v_skyLight;
-in float v_blockLight;
+in float v_skyExposure;
 in float v_ao;
 
 out vec4 fragColor;
@@ -129,23 +130,36 @@ void main() {
 
   vec3 normal = normalize(v_normal);
   vec3 sunDir = normalize(u_sunDir);
-  float NdotL = max(dot(normal, sunDir), 0.0);
+
+  // ---- Hemisphere ambient ----
+  // Surfaces facing up receive more ambient light than those facing down.
   float NdotU = max(dot(normal, vec3(0.0, 1.0, 0.0)), 0.0);
+  float ambient = u_ambientIntensity * (0.3 + 0.7 * NdotU);
 
-  float ambient = 0.05 + 0.15 * NdotU;
-  float diffuse = NdotL * u_daylight;
-  float minLight = max(v_skyLight * u_daylight * 0.8, v_blockLight * 0.6);
+  // ---- Directional sunlight ----
+  float NdotL = max(dot(normal, sunDir), 0.0);
+  float diffuse = NdotL * u_sunIntensity;
 
-  float light = max(ambient, minLight);
-  light = max(light, diffuse * 0.6);
-  light = max(light, ambient + (1.0 - ambient) * v_skyLight * u_daylight * 0.25);
-  light = mix(0.15, 1.0, light);
+  // ---- Sky exposure ----
+  // Baked per-vertex value: 1.0 = fully open to sky, 0.0 = underground.
+  // Provides a soft ambient boost for exposed surfaces.
+  float skyAmbient = u_ambientIntensity * v_skyExposure * 0.35;
 
-  albedo.rgb *= light;
-  float aoFactor = clamp(1.0 - v_ao, 0.0, 1.0);
-  albedo.rgb *= aoFactor;
+  // ---- Combine lighting ----
+  // Three independent components, each multiplied by AO:
+  //   1. Hemisphere ambient (untinted)
+  //   2. Directional sunlight (tinted by sun color for warm sunrise/sunset)
+  //   3. Sky exposure (untinted, baked per-vertex openness to sky)
+  float aoFactor = 1.0 - v_ao * 0.4;
 
-  fragColor.rgb = mix(albedo.rgb, u_fogColor.rgb, v_fogFactor);
+  vec3 litColor = vec3(ambient * aoFactor)
+                + u_sunColor * (diffuse * aoFactor)
+                + vec3(skyAmbient * aoFactor);
+
+  vec3 finalLighting = albedo.rgb * litColor;
+
+  // ---- Apply fog ----
+  fragColor.rgb = mix(finalLighting, u_fogColor.rgb, v_fogFactor);
   fragColor.a = albedo.a;
 }
 )glsl";
@@ -177,10 +191,12 @@ layout(std140, binding = 0) uniform CameraBlock {
 
 layout(std140, binding = 2) uniform TimeBlock {
   float u_timeElapsed;
-  float u_sunAngle;
   float u_daylight;
-  float u_lightLevel;
-  vec3 u_sunDir;
+  float u_sunIntensity;
+  float u_ambientIntensity;
+  vec3  u_sunDir;
+  float u_timeOfDay;
+  vec3  u_sunColor;
   float u_pad;
 };
 
@@ -192,20 +208,56 @@ void main() {
   vec4 rayWorld = u_invProjView * rayClip;
   vec3 viewDir = normalize(rayWorld.xyz / rayWorld.w - u_camTime.xyz);
 
-  vec3 daySkyTop = vec3(0.2, 0.5, 1.0);
-  vec3 daySkyBot = vec3(0.6, 0.8, 1.0);
-  vec3 nightSky = vec3(0.01, 0.01, 0.03);
-  vec3 duskColor = vec3(0.9, 0.5, 0.2);
+  // ---- Sky gradient colors ----
+  vec3 daySkyTop    = vec3(0.2, 0.5, 1.0);
+  vec3 daySkyBot    = vec3(0.6, 0.8, 1.0);
+  vec3 nightSkyTop  = vec3(0.005, 0.005, 0.02);
+  vec3 nightSkyBot  = vec3(0.01, 0.01, 0.03);
+  vec3 sunsetColor  = vec3(0.9, 0.4, 0.15);
+  vec3 sunriseColor = vec3(0.85, 0.45, 0.2);
 
-  float skyGradient = clamp(viewDir.y * 2.0, 0.0, 1.0);
+  // ---- Determine if we're near sunrise or sunset ----
+  float sunElevation = u_sunDir.y; // -1 below, +1 overhead
+  float horizonGlow = exp(-abs(sunElevation) * 8.0); // peaks at horizon
+
+  // ---- Sky gradient ----
+  float skyGradient = clamp(viewDir.y * 2.0 + 0.3, 0.0, 1.0);
   vec3 daySky = mix(daySkyBot, daySkyTop, skyGradient);
-  vec3 sky = mix(nightSky, daySky, u_daylight);
+  vec3 nightSky = mix(nightSkyBot, nightSkyTop, skyGradient);
 
+  // ---- Horizon glow (sunset/sunrise band) ----
+  float horizonBand = exp(-abs(viewDir.y) * 12.0);
+  // u_sunDir.x = +1 at sunrise (east), -1 at sunset (west)
+  float sunriseBlend = u_sunDir.x * 0.5 + 0.5; // 0=west(sunset), 1=east(sunrise)
+  vec3 horizonColor = mix(sunsetColor, sunriseColor, sunriseBlend);
+  vec3 horizonGlowColor = horizonBand * horizonGlow * horizonColor * u_sunIntensity;
+
+  // ---- Blend day/night sky ----
+  vec3 skyColor = mix(nightSky, daySky, u_daylight);
+  skyColor += horizonGlowColor;
+
+  // ---- Sun rendering ----
   vec3 sunDir = normalize(u_sunDir);
   float sunDot = max(dot(viewDir, sunDir), 0.0);
-  float sunGlow = pow(sunDot, 600.0) * u_daylight;
 
-  fragColor.rgb = sky + sunGlow * vec3(1.0, 0.9, 0.6);
+  // Sun disc (sharp bright point)
+  float sunDisc = pow(sunDot, 1200.0) * u_sunIntensity;
+  // Sun glow (soft halo around sun)
+  float sunGlow = pow(sunDot, 120.0) * u_sunIntensity * 0.5;
+  // Sun corona (very wide faint glow)
+  float sunCorona = pow(sunDot, 20.0) * u_sunIntensity * 0.15;
+
+  vec3 sunRenderColor = u_sunColor * (sunDisc + sunGlow) + sunCorona * vec3(1.0, 0.7, 0.3);
+
+  // ---- Star field (visible at night) ----
+  float starIntensity = 1.0 - u_daylight;
+  starIntensity = max(0.0, starIntensity * starIntensity - 0.1);
+  // Simple pseudo-random stars based on view direction
+  vec3 starCoord = viewDir * 200.0;
+  float starSeed = fract(sin(dot(starCoord, vec3(12.9898, 78.233, 45.543))) * 43758.5453);
+  float star = step(0.997, starSeed) * starIntensity;
+
+  fragColor.rgb = skyColor + sunRenderColor + vec3(star);
   fragColor.a = 1.0;
 }
 )glsl";

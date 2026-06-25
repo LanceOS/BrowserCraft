@@ -397,7 +397,7 @@ bool greedyMesh(
 
           float ld[4];
           for (int32_t ci = 0; ci < 4; ++ci)
-            ld[ci] = packLight(sky[ci], blk[ci], ao[ci]);
+            ld[ci] = packLight(sky[ci], 0, ao[ci]); // block light disabled — single sun source
 
           bool flip = (ao[0] + ao[2]) > (ao[1] + ao[3]);
 

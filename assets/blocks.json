@@ -130,7 +130,7 @@
             "name": "Lava",
             "is_opaque": false,
             "is_liquid": true,
-            "light_emission": 15,
+            "light_emission": 0,
             "hardness": 100.0,
             "blast_resistance": 100.0,
             "faces": {
@@ -151,7 +151,7 @@
             "id": 13,
             "name": "Powerstone Ore",
             "is_opaque": true,
-            "light_emission": 4,
+            "light_emission": 0,
             "hardness": 3.0,
             "blast_resistance": 3.0,
             "faces": {

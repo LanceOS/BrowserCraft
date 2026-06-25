@@ -343,7 +343,11 @@ void Game::render(float, float) {
       m_session.state() == GameState::Paused ||
       m_session.state() == GameState::GeneratingWorld) {
     float daylightFactor = m_dayNightCycle.daylight();
-    m_renderer->render(m_worldController->world(), m_camera, worldTimeSeconds, daylightFactor);
+    float ambientIntensity = m_dayNightCycle.ambientIntensity();
+    float timeOfDay = worldTimeSeconds / m_dayNightCycle.dayLength();
+    m_renderer->render(m_worldController->world(), m_camera,
+                       worldTimeSeconds, daylightFactor,
+                       ambientIntensity, timeOfDay);
   } else {
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);

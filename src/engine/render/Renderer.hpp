@@ -28,7 +28,7 @@ class Renderer {
 public:
   static constexpr int32_t VERTEX_STRIDE_FLOATS = 10;
   static constexpr int32_t CAMERA_BLOCK_FLOATS = 80;
-  static constexpr int32_t TIME_BLOCK_FLOATS = 8;
+  static constexpr int32_t TIME_BLOCK_FLOATS = 12;
 
   Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config);
   ~Renderer();
@@ -37,7 +37,8 @@ public:
   Renderer& operator=(const Renderer&) = delete;
 
   /// Render a frame.
-  void render(World& world, const CameraView& camera, float timeSeconds, float daylightFactor);
+  void render(World& world, const CameraView& camera, float timeSeconds, float daylightFactor,
+              float ambientIntensity, float normalizedTimeOfDay);
 
   /// Resize to match the framebuffer.
   auto updateFramebufferSize() -> float;

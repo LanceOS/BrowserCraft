@@ -62,11 +62,11 @@ TEST_CASE("VanillaBlockFactory sets material properties correctly", "[world][blo
     CHECK(def->material.lightEmission == 0);
   }
 
-  SECTION("Lava is liquid, transparent, emits light") {
+  SECTION("Lava is liquid, transparent") {
     auto* def = reg.tryGet(voxel::BlockId::LAVA);
     REQUIRE(def != nullptr);
     CHECK(def->material.liquid == true);
-    CHECK(def->material.lightEmission == 15);
+    CHECK(def->material.lightEmission == 0);
   }
 
   SECTION("Oak Leaves are foliage, transparent") {
@@ -77,10 +77,10 @@ TEST_CASE("VanillaBlockFactory sets material properties correctly", "[world][blo
     CHECK(def->material.foliage == true);
   }
 
-  SECTION("Powerstone Ore emits dim light") {
+  SECTION("Powerstone Ore has no light emission") {
     auto* def = reg.tryGet(voxel::BlockId::POWERSTONE_ORE);
     REQUIRE(def != nullptr);
-    CHECK(def->material.lightEmission == 4);
+    CHECK(def->material.lightEmission == 0);
   }
 }
 
