@@ -2,7 +2,9 @@
 
 #include "Chunk.hpp"
 #include "ChunkManager.hpp"
+#include "ChunkJobQueue.hpp"
 #include "BlockRegistry.hpp"
+#include "VoxelStore.hpp"
 #include "engine/core/Config.hpp"
 #include "engine/alloc/SharedPool.hpp"
 #include <glm/glm.hpp>
@@ -28,14 +30,6 @@ inline auto mod(int32_t value, int32_t size) -> int32_t {
   return r < 0 ? r + size : r;
 }
 
-/// Deterministic chunk seed for world generation.
-inline auto chunkSeed(int32_t chunkX, int32_t chunkZ, uint32_t seed) -> uint32_t {
-  uint32_t h = seed ^ static_cast<uint32_t>(chunkX) * 374761393u
-                      ^ static_cast<uint32_t>(chunkZ) * 668265263u;
-  h = (h ^ (h >> 13)) * 1274126177u;
-  return h;
-}
-
 struct WorldBlockRef {
   const Chunk* chunk;
   int32_t localX;
@@ -52,6 +46,9 @@ public:
   using MeshCallback = std::function<void(int32_t slotIndex)>;
   using SaveLoadCallback = std::function<void(int32_t chunkX, int32_t chunkZ)>;
   using SaveDirtyCallback = std::function<void(int32_t chunkX, int32_t chunkZ)>;
+
+  /// Access the job queue for fine-grained control.
+  [[nodiscard]] auto jobQueue() -> ChunkJobQueue& { return m_jobQueue; }
 
   World(SharedPool& pool,
         BlockRegistry& blocks,
@@ -138,19 +135,16 @@ public:
   template <typename F>
   void forEachEntry(F&& cb) { m_chunks.forEachEntry(std::forward<F>(cb)); }
 
+  /// Access the low-level voxel store.
+  [[nodiscard]] auto store() -> VoxelStore& { return m_store; }
+  [[nodiscard]] auto store() const -> const VoxelStore& { return m_store; }
+
   [[nodiscard]] auto hasChunkKey(int64_t key) const -> bool { return m_chunks.hasKey(key); }
   [[nodiscard]] auto chunkCount() const -> size_t { return m_chunks.size(); }
 
 private:
   void ensureVisibleRadius(int32_t centerCX, int32_t centerCZ);
   void unloadFarChunks(int32_t centerCX, int32_t centerCZ);
-  void pumpQueues();
-  struct PendingChunkJob {
-    int32_t slotIndex;
-    int32_t chunkX;
-    int32_t chunkZ;
-  };
-  [[nodiscard]] auto resolvePendingChunk(const PendingChunkJob& job) -> Chunk*;
   void requestRemesh(Chunk& chunk);
   void markChunkDirty(int32_t cx, int32_t cz);
   void requestNeighborRemeshes(const Chunk& chunk);
@@ -166,22 +160,16 @@ private:
   const GameConfig& m_config;
 
   ChunkManager m_chunks;
+  VoxelStore m_store;
   // @see notes/chunk-slot-mapping-stability.md
-  struct ChunkSlotCoord {
-    int32_t cx;
-    int32_t cz;
-  };
   std::unordered_map<int32_t, ChunkSlotCoord> m_slotToChunk;
-  // @see notes/chunk-pending-queue-stability.md
-  std::deque<PendingChunkJob> m_pendingGen;
-  std::deque<PendingChunkJob> m_pendingMesh;
+
+  ChunkJobQueue m_jobQueue;
 
   int32_t m_centerChunkX = 0;
   int32_t m_centerChunkZ = 0;
   bool m_hasCenter = false;
 
-  GenCallback m_onGenerate;
-  MeshCallback m_onMesh;
   SaveLoadCallback m_onSaveLoad;
   SaveDirtyCallback m_onMarkDirty;
   void* m_saveManager = nullptr;

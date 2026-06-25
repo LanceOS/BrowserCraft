@@ -22,6 +22,14 @@ inline auto chunkKey(int32_t cx, int32_t cz) -> int64_t {
   return (static_cast<int64_t>(cx) << 32) | (static_cast<uint32_t>(cz));
 }
 
+/// Deterministic chunk seed for world generation.
+inline auto chunkSeed(int32_t chunkX, int32_t chunkZ, uint32_t seed) -> uint32_t {
+  uint32_t h = seed ^ static_cast<uint32_t>(chunkX) * 374761393u
+                      ^ static_cast<uint32_t>(chunkZ) * 668265263u;
+  h = (h ^ (h >> 13)) * 1274126177u;
+  return h;
+}
+
 /// Represents one chunk in the world.
 struct Chunk {
   int32_t chunkX;

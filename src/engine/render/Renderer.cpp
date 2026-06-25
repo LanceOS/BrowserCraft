@@ -13,7 +13,23 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
     m_skyShader(shaders::skyVertex, shaders::skyFragment),
     m_cameraUbo(0, CAMERA_BLOCK_FLOATS * sizeof(float)),
     m_timeUbo(2, TIME_BLOCK_FLOATS * sizeof(float)),
-    m_textures(16, 16, std::max(1, AssetManager::get().getTextureLayerCount()))
+    m_textures(16, 16, std::max(1, AssetManager::get().getTextureLayerCount())),
+    m_masterVbo([&]{
+        int32_t poolCap = (config.renderDistance * 2 + 1) * (config.renderDistance * 2 + 1) + 8;
+        size_t vboSize = static_cast<size_t>(poolCap) * config.maxVertsPerChunk * config.vertexStrideFloats * sizeof(float);
+        return std::make_unique<PersistentBuffer>(vboSize, GL_ARRAY_BUFFER);
+    }()),
+    m_masterIbo([&]{
+        int32_t poolCap = (config.renderDistance * 2 + 1) * (config.renderDistance * 2 + 1) + 8;
+        size_t iboSize = static_cast<size_t>(poolCap) * config.maxIndicesPerChunk * sizeof(uint32_t);
+        return std::make_unique<PersistentBuffer>(iboSize, GL_ELEMENT_ARRAY_BUFFER);
+    }()),
+    m_indirectBatcher([&]{
+        int32_t poolCap = (config.renderDistance * 2 + 1) * (config.renderDistance * 2 + 1) + 8;
+        return std::make_unique<IndirectBatcher>(poolCap);
+    }()),
+    m_chunkSyncer(m_masterVbo.get(), m_masterIbo.get(), m_indirectBatcher.get(), config),
+    m_drawDispatcher(m_chunkShader, m_skyShader, m_textures, *m_indirectBatcher, m_masterVao, m_skyVao)
 {
   m_chunkShader.bindUniformBlock("CameraBlock", 0);
   m_chunkShader.bindUniformBlock("TimeBlock", 2);
@@ -36,16 +52,6 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
   gl::Disable(GL_CULL_FACE);
   gl::Enable(GL_BLEND);
   gl::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  // Initialize master persistently mapped buffers
-  int32_t rd = m_config.renderDistance;
-  int32_t poolCap = (rd * 2 + 1) * (rd * 2 + 1) + 8;
-  size_t vboSize = static_cast<size_t>(poolCap) * m_config.maxVertsPerChunk * m_config.vertexStrideFloats * sizeof(float);
-  size_t iboSize = static_cast<size_t>(poolCap) * m_config.maxIndicesPerChunk * sizeof(uint32_t);
-
-  m_masterVbo = std::make_unique<PersistentBuffer>(vboSize, GL_ARRAY_BUFFER);
-  m_masterIbo = std::make_unique<PersistentBuffer>(iboSize, GL_ELEMENT_ARRAY_BUFFER);
-  m_indirectBatcher = std::make_unique<IndirectBatcher>(poolCap);
 
   gl::GenVertexArrays(1, &m_masterVao);
   gl::BindVertexArray(m_masterVao);
@@ -82,7 +88,7 @@ auto Renderer::updateFramebufferSize() -> float {
 
 void Renderer::render(World& world, const CameraView& camera,
                        float timeSeconds, float daylightFactor) {
-  syncChunks(world);
+  bool hasTransparentChunks = m_chunkSyncer.sync(world);
 
   gl::Viewport(0, 0, m_fbWidth, m_fbHeight);
 
@@ -111,38 +117,8 @@ void Renderer::render(World& world, const CameraView& camera,
     m_timeUbo.upload(timeData, sizeof(timeData));
   }
 
-  renderSky();
-
-  // ---- Render chunks ----
-  m_chunkShader.use();
-  m_textures.bind(0);
-  gl::Uniform1i(m_chunkShader.uniform("u_blockTextures"), 0);
-
-  m_indirectBatcher->dispatchCulling(&camera.viewProjectionMatrix[0][0]);
-
-  // Re-bind chunk shader after dispatchCulling switches to compute program
-  m_chunkShader.use();
-
-  gl::BindVertexArray(m_masterVao);
-
-  // Pass 1: opaque only
-  gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
-  gl::DepthMask(GL_TRUE);
-  gl::DepthFunc(GL_LESS);
-  m_indirectBatcher->drawIndirect();
-
-  // Pass 2: transparent only (skip if no transparent chunks are loaded)
-  if (m_hasTransparentChunks) {
-    gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
-    gl::DepthMask(GL_FALSE);
-    gl::DepthFunc(GL_LEQUAL);
-    m_indirectBatcher->drawIndirect();
-  }
-
-  gl::BindVertexArray(0);
-
-  gl::DepthMask(GL_TRUE);
-  gl::DepthFunc(GL_LESS);
+  m_drawDispatcher.renderSky();
+  m_drawDispatcher.renderChunks(hasTransparentChunks, &camera.viewProjectionMatrix[0][0]);
 }
 
 void Renderer::dispose() {
@@ -159,68 +135,6 @@ void Renderer::dispose() {
 }
 
 // ---- Private ----
-
-void Renderer::syncChunks(World& world) {
-  std::vector<bool> activeSlots(m_indirectBatcher->capacity(), false);
-  m_hasTransparentChunks = false;
-
-  // Upload new/updated meshes
-  world.forEachEntry([&](int64_t key, Chunk& chunk) {
-    if (chunk.hasTransparent) {
-      m_hasTransparentChunks = true;
-    }
-    auto slot = world.getChunkSlot(chunk);
-    // @see notes/renderer-slot-index-bounds.md
-    if (slot.slotIndex < 0 || slot.slotIndex >= static_cast<int32_t>(m_indirectBatcher->capacity())) {
-      return;
-    }
-
-    activeSlots[slot.slotIndex] = true;
-
-    if (chunk.state == ChunkState::MeshReady) {
-      if (chunk.indexCount > 0 && chunk.vertexCount > 0) {
-        const int32_t stride = m_config.vertexStrideFloats;
-
-        size_t vboOffset = static_cast<size_t>(slot.slotIndex) * m_config.maxVertsPerChunk * stride * sizeof(float);
-        size_t iboOffset = static_cast<size_t>(slot.slotIndex) * m_config.maxIndicesPerChunk * sizeof(uint32_t);
-        int32_t baseVertex = slot.slotIndex * m_config.maxVertsPerChunk;
-
-        // Directly copy vertices and indices to the persistently mapped GPU memory
-        std::memcpy(static_cast<uint8_t*>(m_masterVbo->mappedPtr()) + vboOffset,
-                    slot.vertices, static_cast<size_t>(chunk.vertexCount) * stride * sizeof(float));
-        std::memcpy(static_cast<uint8_t*>(m_masterIbo->mappedPtr()) + iboOffset,
-                    slot.indices, chunk.indexCount * sizeof(uint32_t));
-
-        ChunkCullData cullData{};
-        cullData.min[0] = static_cast<float>(chunk.chunkX * m_config.chunkSize);
-        cullData.min[1] = 0.0f;
-        cullData.min[2] = static_cast<float>(chunk.chunkZ * m_config.chunkSize);
-        cullData.min[3] = 1.0f;
-        cullData.max[0] = cullData.min[0] + static_cast<float>(m_config.chunkSize);
-        cullData.max[1] = static_cast<float>(m_config.worldHeight);
-        cullData.max[2] = cullData.min[2] + static_cast<float>(m_config.chunkSize);
-        cullData.max[3] = 1.0f;
-        cullData.indexCount = chunk.indexCount;
-        cullData.firstIndex = static_cast<uint32_t>(iboOffset / sizeof(uint32_t));
-        cullData.baseVertex = static_cast<uint32_t>(baseVertex);
-        cullData.slotIndex = static_cast<uint32_t>(slot.slotIndex);
-        m_indirectBatcher->updateChunkData(slot.slotIndex, cullData);
-      } else {
-        ChunkCullData emptyData{};
-        m_indirectBatcher->updateChunkData(slot.slotIndex, emptyData);
-      }
-      world.markUploaded(chunk);
-    }
-  });
-
-  // Zero out slots that are no longer active
-  for (uint32_t i = 0; i < m_indirectBatcher->capacity(); ++i) {
-    if (!activeSlots[i]) {
-       ChunkCullData emptyData{};
-       m_indirectBatcher->updateChunkData(i, emptyData);
-    }
-  }
-}
 
 void Renderer::uploadCameraBlock(const CameraView& camera, float timeSeconds,
                                   float daylightFactor, float skyR, float skyG, float skyB) {
@@ -256,18 +170,6 @@ void Renderer::uploadCameraBlock(const CameraView& camera, float timeSeconds,
   cb[79] = 0.0f;
 
   m_cameraUbo.upload(cb, CAMERA_BLOCK_FLOATS * sizeof(float));
-}
-
-void Renderer::renderSky() {
-  gl::DepthMask(GL_FALSE);
-  gl::Disable(GL_DEPTH_TEST);
-  gl::Disable(GL_CULL_FACE);
-  m_skyShader.use();
-  gl::BindVertexArray(m_skyVao);
-  gl::DrawArrays(GL_TRIANGLES, 0, 3);
-  gl::BindVertexArray(0);
-  gl::Enable(GL_DEPTH_TEST);
-  gl::DepthMask(GL_TRUE);
 }
 
 void Renderer::seedTextureArray() {

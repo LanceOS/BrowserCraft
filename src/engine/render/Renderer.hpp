@@ -5,6 +5,8 @@
 #include "Texture2DArray.hpp"
 #include "PersistentBuffer.hpp"
 #include "IndirectBatcher.hpp"
+#include "ChunkSyncer.hpp"
+#include "DrawDispatcher.hpp"
 #include "CameraView.hpp"
 #include "../math/Frustum.hpp"
 #include "../math/AABB.hpp"
@@ -43,10 +45,8 @@ public:
   void dispose();
 
 private:
-  void syncChunks(World& world);
   void uploadCameraBlock(const CameraView& camera, float timeSeconds,
                          float daylightFactor, float skyR, float skyG, float skyB);
-  void renderSky();
   void seedTextureArray();
 
   GLFWwindow* m_window;
@@ -59,7 +59,6 @@ private:
   Texture2DArray m_textures;
 
   Frustum m_frustum;
-  bool m_hasTransparentChunks = false;
   std::array<float, CAMERA_BLOCK_FLOATS> m_cameraBlock{};
 
   // Sky fullscreen triangle
@@ -71,6 +70,9 @@ private:
   std::unique_ptr<PersistentBuffer> m_masterVbo;
   std::unique_ptr<PersistentBuffer> m_masterIbo;
   std::unique_ptr<IndirectBatcher> m_indirectBatcher;
+
+  ChunkSyncer m_chunkSyncer;
+  DrawDispatcher m_drawDispatcher;
 
   int32_t m_fbWidth = 1;
   int32_t m_fbHeight = 1;

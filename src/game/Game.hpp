@@ -5,8 +5,6 @@
 #include <memory>
 #include <string>
 #include <thread>
-#include <queue>
-#include <mutex>
 
 #include "engine/core/Config.hpp"
 #include "engine/core/GameLoop.hpp"
@@ -22,15 +20,14 @@
 #include "engine/ecs/systems/PlayerSpawnSystem.hpp"
 #include "engine/audio/AudioEngine.hpp"
 #include "engine/threading/WorkerThreadPool.hpp"
-#include "engine/save/SaveManager.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
 #include "world/BlockRegistry.hpp"
-#include "world/World.hpp"
 #include "engine/render/Renderer.hpp"
 #include "engine/render/CameraView.hpp"
 #include "world/daynight/DayNightCycle.hpp"
 #include "ui/UIManager.hpp"
 #include "game/GameSession.hpp"
+#include "game/WorldController.hpp"
 #include "game/BlockInteractionAudio.hpp"
 
 namespace voxel {
@@ -57,7 +54,8 @@ public:
   auto input() -> InputState& { return m_input; }
   auto ui() -> UIManager& { return *m_ui; }
   auto session() -> GameSession& { return m_session; }
-  auto world() -> World& { return *m_world; }
+  auto world() -> World& { return m_worldController->world(); }
+  auto worldController() -> WorldController& { return *m_worldController; }
   auto renderer() -> Renderer& { return *m_renderer; }
   auto camera() -> CameraView& { return m_camera; }
   auto blockRegistry() -> BlockRegistry& { return m_blocks; }
@@ -73,11 +71,8 @@ private:
   void syncPlayerWithCamera();
   void createPlayer();
   [[nodiscard]] auto playerIndex() const -> int32_t;
-  void configureSaveWorld(const std::string& slotId, bool startFresh);
   void startWorld(GameMode mode, const std::string& slotId, bool startFresh);
   void updateCamera();
-  void processGenJobs();
-  auto makeRandomWorldSeed() -> uint32_t;
 
   GLFWwindow* m_window;
   GameConfig m_config;
@@ -87,7 +82,7 @@ private:
   InputState m_input;
   BlockRegistry m_blocks;
   std::unique_ptr<SharedPool> m_pool;
-  std::unique_ptr<World> m_world;
+  std::unique_ptr<WorldController> m_worldController;
   std::unique_ptr<Renderer> m_renderer;
   std::unique_ptr<UIManager> m_ui;
   CameraView m_camera;
@@ -101,16 +96,9 @@ private:
   std::unique_ptr<WorkerThreadPool> m_meshPool;
   std::unique_ptr<WorkerThreadPool> m_ioPool;
 
-  // Completion queues: workers push slot indices here instead of main thread polling all slots.
-  std::queue<int32_t> m_completedGenSlots;
-  std::queue<int32_t> m_completedMeshSlots;
-  mutable std::mutex m_completionMutex;
   WorldGenPipeline m_worldGenPipeline;
   std::mt19937 m_worldSeedRng;
   daynight::DayNightCycle m_dayNightCycle;
-
-  // Save
-  std::unique_ptr<SaveManager> m_saveManager;
   std::string m_saveDir;
 
   // ECS

@@ -154,15 +154,33 @@ void EntityCollisions::resolveMovement(
           }
           body.velocity.y = 0.0f;
           subDy = 0.0f;
-        } else {
-          // Ground far below — side collision at a hole edge
+        }
+      }  // groundY >= 0
+
+      // Side-collision fallback (ground far below or no ground at all):
+      // only let gravity pull the player down when their AABB footprint
+      // is 100 % over air.  Otherwise hold them on the surface to
+      // prevent wall-clipping on deep drops.
+      if (groundY < 0 || (groundY >= 0 && (stepPos.y + body.aabbMin.y - static_cast<float>(groundY + 1)) > 1.5f)) {
+        int32_t checkY = static_cast<int32_t>(std::floor(yStep.y + body.aabbMin.y));
+        int32_t minGX = static_cast<int32_t>(std::floor(stepPos.x + body.aabbMin.x));
+        int32_t maxGX = static_cast<int32_t>(std::floor(stepPos.x + body.aabbMax.x));
+        int32_t minGZ = static_cast<int32_t>(std::floor(stepPos.z + body.aabbMin.z));
+        int32_t maxGZ = static_cast<int32_t>(std::floor(stepPos.z + body.aabbMax.z));
+        int32_t solidCols = 0, totalCols = 0;
+        for (int32_t gz = minGZ; gz <= maxGZ; ++gz) {
+          for (int32_t gx = minGX; gx <= maxGX; ++gx) {
+            ++totalCols;
+            if (m_world.isSolid(gx, checkY, gz)) ++solidCols;
+          }
+        }
+        if (totalCols > 0 && solidCols == 0) {
           stepPos = yStep;
           body.onGround = 0;
+        } else {
+          body.velocity.y = 0.0f;
+          body.onGround = 1;
         }
-      } else {
-        // No ground anywhere — definitely a side collision
-        stepPos = yStep;
-        body.onGround = 0;
       }
     } else {
       // Hit ceiling

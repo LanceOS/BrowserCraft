@@ -3,7 +3,6 @@
 #include "engine/workers/mesher/GreedyMesher.hpp"
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
 #include <thread>
 #include "engine/assets/AssetManager.hpp"
 
@@ -67,7 +66,9 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   m_pool = SharedPool::create(poolCap, makeDims(config));
 
   // Wire world gen callback through thread pool
-  m_world.reset(new World(*m_pool, m_blocks, config,
+  m_worldController = std::make_unique<WorldController>(*m_pool, m_blocks, config);
+  m_worldController->createWorld(
+    // Gen callback
     [this](int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t) {
       m_genPool->submitAndForget([this, slotIndex, chunkX, chunkZ]() {
         auto slot = m_pool->view(slotIndex);
@@ -76,12 +77,10 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
           m_config.chunkSize, m_config.worldHeight, m_config.chunkSize,
           chunkSeed(chunkX, chunkZ, m_config.worldSeed));
         *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
-        {
-          std::lock_guard lock(m_completionMutex);
-          m_completedGenSlots.push(slotIndex);
-        }
+        m_worldController->onGenCompleted(slotIndex);
       });
     },
+    // Mesh callback
     [this](int32_t slotIndex) {
       m_meshPool->submitAndForget([this, slotIndex]() {
         auto slot = m_pool->view(slotIndex);
@@ -105,27 +104,24 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
         if (hasTransparent) {
           *slot.status |= 0x10000;
         }
-        {
-          std::lock_guard lock(m_completionMutex);
-          m_completedMeshSlots.push(slotIndex);
-        }
+        m_worldController->onMeshCompleted(slotIndex);
         (void)ok;
       });
     },
     // Save load callback
     [this](int32_t cx, int32_t cz) {
-      if (m_saveManager) m_saveManager->requestLoad(cx, cz);
+      if (auto* sm = m_worldController->saveManager()) sm->requestLoad(cx, cz);
     },
     // Mark dirty callback
     [this](int32_t cx, int32_t cz) {
-      if (m_saveManager) m_saveManager->markDirty(cx, cz);
+      if (auto* sm = m_worldController->saveManager()) sm->markDirty(cx, cz);
     }
-  ));
+  );
 
   m_renderer = std::make_unique<Renderer>(window, m_blocks, config);
 
   m_saveDir = options.saveDir;
-  configureSaveWorld(options.saveSlotId, false);
+  m_worldController->configureSaveWorld(m_saveDir, options.saveSlotId, false, m_ioPool.get());
 
   m_audioRegistry.seedBuiltinSounds();
   m_blockAudio = std::make_unique<BlockInteractionAudio>(m_audioEngine, m_audioRegistry, m_blocks);
@@ -158,11 +154,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
 }
 
 Game::~Game() {
-  if (m_saveManager) m_saveManager->flushPending();
-}
-
-auto Game::makeRandomWorldSeed() -> uint32_t {
-  return m_worldSeedRng();
+  if (auto* sm = m_worldController->saveManager()) sm->flushPending();
 }
 
 void Game::initECS() { createPlayer(); }
@@ -193,7 +185,7 @@ void Game::initSystems() {
   // --- Player controller ---
   auto controller = std::make_unique<PlayerControllerSystem>(
     m_window, m_input, m_transforms, m_bodies, m_players,
-    *m_world, m_camera, m_config, *m_ui, m_session,
+    m_worldController->world(), m_camera, m_config, *m_ui, m_session,
     m_cameraDirty);
   // Keep a non-owning pointer for direct access (e.g. pushPlayerOutOfBlocks).
   m_playerController = controller.get();
@@ -201,38 +193,17 @@ void Game::initSystems() {
 
   // --- Player spawn (runs once when terrain is ready) ---
   m_systems.add(std::make_unique<PlayerSpawnSystem>(
-    m_transforms, m_bodies, *m_world, m_config,
+    m_transforms, m_bodies, m_worldController->world(), m_config,
     m_spawnedToSurface, m_cameraDirty, &m_playerController->collisions()));
-}
-
-void Game::configureSaveWorld(const std::string& slotId, bool startFresh) {
-  std::string selectedSlot = slotId.empty() ? "default" : slotId;
-
-  if (m_saveManager && !startFresh) {
-    m_saveManager->flushPending();
-  }
-  m_saveManager.reset();
-
-  if (m_world) {
-    m_world->clear();
-  }
-
-  if (startFresh) {
-    std::error_code ec;
-    std::filesystem::remove_all(m_saveDir + "/" + selectedSlot, ec);
-  }
-
-  m_saveManager = std::make_unique<SaveManager>(m_saveDir, selectedSlot, *m_pool, *m_world, m_ioPool.get());
-  m_world->attachSaveManager(m_saveManager.get());
 }
 
 void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh) {
   if (startFresh) {
-    m_config.worldSeed = makeRandomWorldSeed();
+    m_config.worldSeed = static_cast<uint32_t>(m_worldSeedRng());
     m_worldGenPipeline = WorldGenPipeline(m_config.worldSeed);
   }
 
-  configureSaveWorld(slotId, startFresh);
+  m_worldController->configureSaveWorld(m_saveDir, slotId, startFresh, m_ioPool.get());
   m_session.startSingleplayer(mode);
   m_dayNightCycle.setTime(daynight::kMiddayTimeSeconds);
 
@@ -276,52 +247,18 @@ void Game::syncPlayerWithCamera() {
 }
 
 
-void Game::processGenJobs() {
-  // Drain completed gen jobs from the lock-free completion queue.
-  // Workers push slot indices after setting VOXELS_READY status.
-  std::queue<int32_t> genSlots;
-  std::queue<int32_t> meshSlots;
-  {
-    std::lock_guard lock(m_completionMutex);
-    genSlots.swap(m_completedGenSlots);
-    meshSlots.swap(m_completedMeshSlots);
-  }
-
-  while (!genSlots.empty()) {
-    int32_t i = genSlots.front();
-    genSlots.pop();
-    auto* chunk = m_world->getChunkBySlotIndex(i);
-    if (chunk && chunk->state == ChunkState::Generating) {
-      m_world->onWorldGenDone(i);
-    }
-  }
-
-  while (!meshSlots.empty()) {
-    int32_t i = meshSlots.front();
-    meshSlots.pop();
-    auto* chunk = m_world->getChunkBySlotIndex(i);
-    if (chunk && chunk->state == ChunkState::Meshing) {
-      auto slot = m_pool->view(i);
-      // Extract transparent flag from the high bit of status
-      int32_t rawStatus = *slot.status;
-      chunk->hasTransparent = (rawStatus & 0x10000) != 0;
-      m_world->onMeshDone(i, *slot.vertexCount, *slot.indexCount, true);
-    }
-  }
-}
-
 void Game::update(float dt) {
   if (m_session.state() == GameState::InGame ||
       m_session.state() == GameState::GeneratingWorld) {
     m_dayNightCycle.advance(dt);
 
-    processGenJobs();
-    if (m_saveManager) m_saveManager->processPending();
-    m_world->update(m_camera.position);
+    m_worldController->processGenJobs();
+    m_worldController->processSavePending();
+    m_worldController->world().update(m_camera.position);
 
     m_systems.update(*this, dt);
 
-    if (m_session.state() == GameState::GeneratingWorld && m_world->isReady()) {
+    if (m_session.state() == GameState::GeneratingWorld && m_worldController->world().isReady()) {
       m_session.markWorldReady();
     }
   }
@@ -334,7 +271,7 @@ void Game::render(float, float) {
       m_session.state() == GameState::Paused ||
       m_session.state() == GameState::GeneratingWorld) {
     float daylightFactor = m_dayNightCycle.daylight();
-    m_renderer->render(*m_world, m_camera, worldTimeSeconds, daylightFactor);
+    m_renderer->render(m_worldController->world(), m_camera, worldTimeSeconds, daylightFactor);
   } else {
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);

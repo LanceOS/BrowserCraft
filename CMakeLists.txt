@@ -112,6 +112,8 @@ add_library(voxel_engine STATIC
   src/engine/ecs/systems/PlayerSpawnSystem.cpp
   src/engine/assets/AssetManager.cpp
   src/world/BlockRegistry.cpp
+  src/world/VoxelStore.cpp
+  src/world/ChunkJobQueue.cpp
   src/world/Chunk.cpp
   src/world/ChunkManager.cpp
   src/world/World.cpp
@@ -123,6 +125,8 @@ add_library(voxel_engine STATIC
   src/engine/render/UniformBuffer.cpp
   src/engine/render/Texture2DArray.cpp
   src/engine/render/ChunkMesh.cpp
+  src/engine/render/ChunkSyncer.cpp
+  src/engine/render/DrawDispatcher.cpp
   src/engine/render/Renderer.cpp
   src/engine/core/InputState.cpp
   src/engine/core/GameLoop.cpp
@@ -136,6 +140,7 @@ add_library(voxel_engine STATIC
   src/engine/workers/mesher/GreedyMesher.cpp
   src/content/biomes/BiomeSampler.cpp
   src/game/GameSession.cpp
+  src/game/WorldController.cpp
   src/game/Game.cpp
   src/ui/UIManager.cpp
 )
