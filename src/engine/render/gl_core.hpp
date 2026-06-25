@@ -71,6 +71,7 @@ using PFN_GenerateMipmap = void (*)(GLenum);
 using PFN_TexParameteri = void (*)(GLenum, GLenum, GLint);
 using PFN_ActiveTexture = void (*)(GLenum);
 using PFN_DeleteTextures = void (*)(GLsizei, const GLuint*);
+using PFN_PixelStorei = void (*)(GLenum, GLint);
 
 // Draw
 using PFN_DrawElements = void (*)(GLenum, GLsizei, GLenum, const void*);
@@ -139,6 +140,7 @@ extern PFN_GenerateMipmap GenerateMipmap;
 extern PFN_TexParameteri TexParameteri;
 extern PFN_ActiveTexture ActiveTexture;
 extern PFN_DeleteTextures DeleteTextures;
+extern PFN_PixelStorei PixelStorei;
 
 extern PFN_DrawElements DrawElements;
 extern PFN_DrawArrays DrawArrays;
@@ -182,6 +184,11 @@ void loadGLFunctions();
 #endif
 #ifndef GL_RGBA16F
 #define GL_RGBA16F 0x881A
+#endif
+
+// Pixel store constants
+#ifndef GL_UNPACK_ALIGNMENT
+#define GL_UNPACK_ALIGNMENT 0x0CF5
 #endif
 
 } // namespace voxel::gl

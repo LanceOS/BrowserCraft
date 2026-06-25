@@ -12,6 +12,10 @@ bool Texture2DArray::supportsHighBitDepthTextures() {
 Texture2DArray::Texture2DArray(int32_t width, int32_t height, int32_t layers)
   : m_width(width), m_height(height), m_layers(layers),
     m_highBitDepth(supportsHighBitDepthTextures()) {
+  // Use tight pixel packing for optimal memory transfer.
+  // Safe for both 8-bit (4 bytes/pixel) and 16-bit (8 bytes/pixel) formats.
+  gl::PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
   gl::GenTextures(1, &m_texture);
   gl::BindTexture(GL_TEXTURE_2D_ARRAY, m_texture);
 
@@ -57,6 +61,18 @@ void Texture2DArray::uploadLayer(int32_t layer, const uint16_t* rgba, int32_t w,
 void Texture2DArray::uploadLayer8(int32_t layer, const uint8_t* rgba, int32_t w, int32_t h) {
   gl::BindTexture(GL_TEXTURE_2D_ARRAY, m_texture);
   gl::TexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, layer, w, h, 1, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+}
+
+void Texture2DArray::uploadAllLayers(const uint16_t* rgba, int32_t w, int32_t h, int32_t count) {
+  gl::BindTexture(GL_TEXTURE_2D_ARRAY, m_texture);
+  // Single call uploads all layers at once — far less driver overhead than
+  // N individual uploadLayer calls.
+  gl::TexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, w, h, count, GL_RGBA, GL_UNSIGNED_SHORT, rgba);
+}
+
+void Texture2DArray::uploadAllLayers8(const uint8_t* rgba, int32_t w, int32_t h, int32_t count) {
+  gl::BindTexture(GL_TEXTURE_2D_ARRAY, m_texture);
+  gl::TexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, w, h, count, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 }
 
 void Texture2DArray::generateMipmaps() {

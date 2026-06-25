@@ -19,10 +19,14 @@ public:
   Texture2DArray(Texture2DArray&&) noexcept;
   Texture2DArray& operator=(Texture2DArray&&) noexcept;
 
-  /// Upload a 16-bit-per-channel RGBA texture layer.
+  /// Upload a single 16-bit-per-channel RGBA texture layer.
   void uploadLayer(int32_t layer, const uint16_t* rgba, int32_t w, int32_t h);
-  /// Upload an 8-bit-per-channel RGBA texture layer (fallback path).
+  /// Upload a single 8-bit-per-channel RGBA texture layer (fallback path).
   void uploadLayer8(int32_t layer, const uint8_t* rgba, int32_t w, int32_t h);
+  /// Upload all layers at once with a single TexSubImage3D call (16-bit).
+  void uploadAllLayers(const uint16_t* rgba, int32_t w, int32_t h, int32_t count);
+  /// Upload all layers at once with a single TexSubImage3D call (8-bit fallback).
+  void uploadAllLayers8(const uint8_t* rgba, int32_t w, int32_t h, int32_t count);
   void generateMipmaps();
   void bind(uint32_t unit) const;
   [[nodiscard]] auto texture() const -> uint32_t { return m_texture; }
