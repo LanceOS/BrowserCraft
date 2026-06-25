@@ -35,17 +35,6 @@ public:
                  uint32_t* genSeed, int32_t sizeX, int32_t sizeY, int32_t sizeZ);
 
 private:
-  // @see notes/world-generation-registered-ids.md
-  static constexpr uint8_t STONE = 3;
-  static constexpr uint8_t DIRT = 2;
-  // Use a registered solid block id so generated columns never rely on
-  // undefined block IDs that would disappear during meshing.
-  static constexpr uint8_t BEDROCK = 7;
-  // Use an explicitly empty placeholder rather than an undefined fluid ID.
-  // Dedicated fluid playback (water block + swimming) needs a dedicated block
-  // definition path before a non-empty sea-fill layer can be restored.
-  static constexpr uint8_t WATER = 0;
-
   SimplexNoise m_densityNoise;
   biome::BiomeSampler m_biomeSampler;
   CaveCarver m_caveCarver;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/core/TickContext.hpp"
 #include <vector>
 #include <string>
 #include <memory>
@@ -25,8 +26,8 @@ inline auto stageOrder(SystemStage stage) -> int {
   return 0;
 }
 
-/// Interface for game systems.
-template <typename TState>
+/// Interface for game systems. Receives a TickContext instead of a Game
+/// reference, making dependencies explicit and enabling unit testing.
 struct System {
   virtual ~System() = default;
 
@@ -36,24 +37,23 @@ struct System {
   /// Execution stage determines ordering.
   [[nodiscard]] virtual auto stage() const -> SystemStage = 0;
 
-  /// Called each tick.
-  virtual void update(TState& state, float dt) = 0;
+  /// Called each tick with the per-frame context.
+  virtual void update(TickContext& ctx) = 0;
 };
 
 /// Manages an ordered collection of systems, executed by stage each tick.
-template <typename TState>
 class SystemManager {
 public:
   /// Add a system. Systems are sorted by stage after insertion.
-  void add(std::unique_ptr<System<TState>> system) {
+  void add(std::unique_ptr<System> system) {
     m_systems.push_back(std::move(system));
     sort();
   }
 
   /// Run all systems in stage order.
-  void update(TState& state, float dt) {
+  void update(TickContext& ctx) {
     for (auto& sys : m_systems) {
-      sys->update(state, dt);
+      sys->update(ctx);
     }
   }
 
@@ -67,7 +67,7 @@ private:
       });
   }
 
-  std::vector<std::unique_ptr<System<TState>>> m_systems;
+  std::vector<std::unique_ptr<System>> m_systems;
 };
 
 } // namespace voxel

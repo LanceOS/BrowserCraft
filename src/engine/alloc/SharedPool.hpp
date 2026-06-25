@@ -46,40 +46,36 @@ struct ChunkSlot {
 };
 
 /// Shared memory pool for chunk data, accessible from multiple threads.
-/// In the TS version this used SharedArrayBuffer; in C++ native we use a
-/// mutex-protected std::vector<uint8_t>.
+/// - acquire() / release(): main thread only (protected by mutex)
+/// - view(): any thread (returns pointers into the shared buffer)
 class SharedPool {
 public:
-  /// Create a new pool (owner side, allocates the buffer).
+  /// Create a new pool (allocates the buffer).
   static auto create(int32_t capacity, ChunkDimensions dims) -> std::unique_ptr<SharedPool>;
 
-  /// Attach to an existing buffer (worker side).
-  static auto attach(uint8_t* buffer, size_t bufferSize, int32_t capacity, ChunkDimensions dims)
-    -> std::unique_ptr<SharedPool>;
-
-  /// Acquire a free slot (owner side only). Returns nullopt if none free.
+  /// Acquire a free slot. Main thread only. Returns nullopt if none free.
   auto acquire() -> std::optional<ChunkSlot>;
 
-  /// Release a slot back to the free list (owner side only).
+  /// Release a slot back to the free list. Main thread only.
   void release(ChunkSlot slot);
 
-  /// Get a view of a slot by index (both sides).
-  auto view(int32_t slotIndex) -> ChunkSlot;
+  /// Get a view of a slot by index. Thread-safe for reads/writes to
+  /// different slots (each slot is a disjoint memory region).
+  [[nodiscard]] auto view(int32_t slotIndex) const -> ChunkSlot;
 
   [[nodiscard]] auto capacity() const -> int32_t { return m_capacity; }
   [[nodiscard]] auto dimensions() const -> ChunkDimensions { return m_dims; }
   [[nodiscard]] auto slotByteSize() const -> size_t { return m_slotByteSize; }
-  [[nodiscard]] auto buffer() -> uint8_t* { return m_ownedBuffer.data(); }
-  [[nodiscard]] auto bufferSize() const -> size_t { return m_ownedBuffer.size(); }
+  [[nodiscard]] auto buffer() -> uint8_t* { return m_buffer.data(); }
+  [[nodiscard]] auto bufferSize() const -> size_t { return m_buffer.size(); }
 
 private:
-  SharedPool(int32_t capacity, ChunkDimensions dims, bool owner);
+  SharedPool(int32_t capacity, ChunkDimensions dims);
 
   void computeLayout();
 
   int32_t m_capacity;
   ChunkDimensions m_dims;
-  bool m_owner; // true = main thread (can acquire/release), false = worker
 
   size_t m_headerBytes = 32;
   size_t m_voxelsBytes = 0;
@@ -89,9 +85,7 @@ private:
   size_t m_indicesBytes = 0;
   size_t m_slotByteSize = 0;
 
-  std::vector<uint8_t> m_ownedBuffer;
-  uint8_t* m_externalBuffer = nullptr;
-  size_t m_externalBufferSize = 0;
+  std::vector<uint8_t> m_buffer;
 
   std::mutex m_mutex;
   std::vector<int32_t> m_freeList;

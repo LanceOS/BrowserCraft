@@ -2,6 +2,7 @@
 
 #include "engine/audio/AudioEngine.hpp"
 #include "world/BlockRegistry.hpp"
+#include "world/BlockIds.hpp"
 
 namespace voxel {
 
@@ -20,10 +21,8 @@ public:
     if (!def) return;
 
     auto soundId = audio::SoundId::STONE_BREAK;
-    if (blockId == 2 || blockId == 3 || def->material.foliage) {
+    if (blockId == BlockId::DIRT || blockId == BlockId::STONE || def->material.foliage) {
       soundId = audio::SoundId::GRASS_BREAK;
-    } else if (blockId == 5 || blockId == 17 || blockId == 54 || blockId == 58) {
-      soundId = audio::SoundId::WOOD_BREAK;
     }
 
     auto* buffer = m_registry.get(soundId);
@@ -38,7 +37,7 @@ public:
     if (!def) return;
 
     auto soundId = audio::SoundId::STONE_STEP;
-    if (blockId == 2 || blockId == 3 || def->material.foliage) {
+    if (blockId == BlockId::DIRT || blockId == BlockId::STONE || def->material.foliage) {
       soundId = audio::SoundId::GRASS_STEP;
     }
 

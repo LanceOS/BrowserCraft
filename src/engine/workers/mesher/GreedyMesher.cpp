@@ -3,6 +3,7 @@
 #include <cstring>
 #include <algorithm>
 #include <new>
+#include <vector>
 
 namespace voxel {
 namespace mesher {
@@ -215,6 +216,13 @@ static constexpr DirInfo kDirs[6] = {
   {{ 0, 0,-1}, 2, 0, 1, -1},  // Z- (back)
 };
 
+namespace {
+struct GreedyMeshScratch {
+  std::vector<uint8_t> mask;
+};
+thread_local GreedyMeshScratch g_scratch;
+}
+
 // ======================================================================
 // Public API
 // ======================================================================
@@ -227,7 +235,8 @@ bool greedyMesh(
     float* vertexOut,
     uint32_t* indexOut,
     uint32_t& vertexCountOut,
-    uint32_t& indexCountOut)
+    uint32_t& indexCountOut,
+    bool* hasTransparentOut)
 {
   const int32_t SX = cfg.sizeX;
   const int32_t SY = cfg.sizeY;
@@ -239,9 +248,13 @@ bool greedyMesh(
   uint32_t vo = 0; // float offset into vertexOut
   uint32_t io = 0; // index count
 
-  // Scratch mask — largest case is SY * max(SX,SZ) = 256*16 = 4096.
-  static constexpr int32_t MASK_SZ = 256 * 16;
-  uint8_t mask[MASK_SZ];
+  // Scratch mask sized to the largest face for this chunk configuration.
+  const auto neededScratch =
+    static_cast<size_t>(std::max({SX * SY, SX * SZ, SY * SZ}));
+  if (g_scratch.mask.size() < neededScratch) {
+    g_scratch.mask.resize(neededScratch);
+  }
+  uint8_t* mask = g_scratch.mask.data();
 
   for (int32_t di = 0; di < 6; ++di) {
     const auto& info = kDirs[di];
@@ -259,11 +272,12 @@ bool greedyMesh(
     int32_t uSz      = sizes[uAxis];
     int32_t vSz      = sizes[vAxis];
 
-    if (uSz * vSz > MASK_SZ) return false;
+    size_t needed = static_cast<size_t>(uSz) * vSz;
+    std::memset(mask, 0, needed);
 
     for (int32_t sl = 0; sl < sliceCnt; ++sl) {
       // ---- Build mask ----
-      std::memset(mask, 0, static_cast<size_t>(uSz) * vSz);
+      std::memset(mask, 0, needed);
 
       for (int32_t v = 0; v < vSz; ++v) {
         for (int32_t u = 0; u < uSz; ++u) {
@@ -294,6 +308,9 @@ bool greedyMesh(
 
           const auto* def = blocks.tryGet(bid);
           if (!def) { mask[v * uSz + u] = 0; continue; }
+          if (hasTransparentOut && !def->material.opaque) {
+            *hasTransparentOut = true;
+          }
 
           // Texture layer for this face direction
           uint8_t tlayer;

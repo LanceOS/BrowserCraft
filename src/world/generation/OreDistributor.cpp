@@ -1,13 +1,14 @@
 #include "OreDistributor.hpp"
+#include "world/BlockIds.hpp"
 #include <cmath>
 
 namespace voxel {
 
 struct OreConfig { uint8_t blockId; int32_t minY, maxY, veinsPerChunk, veinSize; };
 static constexpr OreConfig ORE_CONFIGS[] = {
-  {14, 5, 64, 20, 8},  // coal
-  {15, 5, 32, 12, 6},  // iron
-  {16, 5, 16,  4, 4},  // gold
+  {BlockId::COAL_ORE, 5, 64, 20, 8},
+  {BlockId::IRON_ORE, 5, 32, 12, 6},
+  {BlockId::GOLD_ORE, 5, 16,  4, 4},
   // Diamond ore not yet registered in blocks.json — skip for now
 };
 
@@ -33,8 +34,8 @@ void OreDistributor::distribute(uint8_t* voxels, int32_t sizeX, int32_t sizeY, i
         z += rng() > 0.5f ? 1 : -1;
         if (x < 0 || x >= sizeX || y < 0 || y >= sizeY || z < 0 || z >= sizeZ) continue;
         int32_t idx = (y * sizeZ + z) * sizeX + x;
-        // Replace stone (3) or grass (1) with ore — most veins spawn in stone underground
-        if (voxels[idx] == 3 || voxels[idx] == 1) voxels[idx] = cfg.blockId;
+        // Replace stone or grass with ore
+        if (voxels[idx] == BlockId::STONE || voxels[idx] == BlockId::GRASS) voxels[idx] = cfg.blockId;
       }
     }
   }

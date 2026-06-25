@@ -3,7 +3,7 @@
 #include "Chunk.hpp"
 #include <unordered_map>
 #include <optional>
-#include <string>
+#include <cstdint>
 
 namespace voxel {
 
@@ -25,7 +25,7 @@ public:
   /// Insert a chunk.
   void set(Chunk chunk) {
     auto key = chunk.key();
-    m_chunks[std::move(key)] = std::move(chunk);
+    m_chunks[key] = std::move(chunk);
   }
 
   /// Check if a chunk is loaded.
@@ -33,8 +33,8 @@ public:
     return m_chunks.contains(Chunk::makeKey(chunkX, chunkZ));
   }
 
-  /// Check by string key.
-  [[nodiscard]] auto hasKey(const std::string& key) const -> bool {
+  /// Check by packed key.
+  [[nodiscard]] auto hasKey(int64_t key) const -> bool {
     return m_chunks.contains(key);
   }
 
@@ -63,20 +63,20 @@ public:
   /// Expose entries for iteration (key, chunk pairs).
   template <typename F>
   void forEachEntry(F&& callback) const {
-    for (const auto& entry : m_chunks) {
-      callback(entry.first, entry.second);
+    for (const auto& [key, chunk] : m_chunks) {
+      callback(key, chunk);
     }
   }
 
   template <typename F>
   void forEachEntry(F&& callback) {
-    for (auto& entry : m_chunks) {
-      callback(entry.first, entry.second);
+    for (auto& [key, chunk] : m_chunks) {
+      callback(key, chunk);
     }
   }
 
 private:
-  std::unordered_map<std::string, Chunk> m_chunks;
+  std::unordered_map<int64_t, Chunk> m_chunks;
 };
 
 } // namespace voxel

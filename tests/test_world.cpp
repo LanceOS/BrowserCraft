@@ -3,6 +3,7 @@
 #include "world/BlockRegistry.hpp"
 #include "engine/core/Config.hpp"
 #include "engine/alloc/SharedPool.hpp"
+#include "MockWorker.hpp"
 
 namespace {
 
@@ -40,12 +41,12 @@ TEST_CASE("World basic chunk lifecycle", "[world]") {
   int genCount = 0;
   int meshCount = 0;
 
-  voxel::World world(
-    *pool, blocks, cfg,
+  voxel::TestChunkWorker worker(
     [&](int32_t, int32_t, int32_t, uint32_t) { ++genCount; },
-    [&](int32_t) { ++meshCount; },
-    {}, {} // no save callbacks
+    [&](int32_t) { ++meshCount; }
   );
+  // Null persistence — chunks go through generation path
+  voxel::World world(*pool, blocks, cfg, worker, nullptr);
 
   // Initially centered at origin — not ready
   REQUIRE_FALSE(world.isReady());
@@ -66,9 +67,8 @@ TEST_CASE("World getBlockIdAt returns 0 for unloaded chunks", "[world]") {
   auto pool = voxel::SharedPool::create(16, makeDims(cfg));
   voxel::BlockRegistry blocks(256);
 
-  voxel::World world(*pool, blocks, cfg,
-    [](int32_t, int32_t, int32_t, uint32_t) {},
-    [](int32_t) {}, {}, {});
+  voxel::TestChunkWorker worker;
+  voxel::World world(*pool, blocks, cfg, worker, nullptr);
 
   REQUIRE(world.getBlockIdAt(100, 64, 100) == 0);
 }
@@ -91,9 +91,8 @@ TEST_CASE("World isSolid and isFluid", "[world]") {
   water.collision = voxel::EMPTY_BLOCK_AABB;
   blocks.register_(std::move(water));
 
-  voxel::World world(*pool, blocks, cfg,
-    [](int32_t, int32_t, int32_t, uint32_t) {},
-    [](int32_t) {}, {}, {});
+  voxel::TestChunkWorker worker;
+  voxel::World world(*pool, blocks, cfg, worker, nullptr);
 
   // Unloaded chunks — both return false
   REQUIRE_FALSE(world.isSolid(0, 64, 0));
@@ -123,6 +122,6 @@ TEST_CASE("ChunkState transitions", "[world]") {
   REQUIRE(c.state == voxel::ChunkState::QueuedGen);
 
   auto key = c.key();
-  REQUIRE(key == "0:0");
-  REQUIRE(voxel::Chunk::makeKey(5, -3) == "5:-3");
+  REQUIRE(key == voxel::chunkKey(0, 0));
+  REQUIRE(voxel::Chunk::makeKey(5, -3) == voxel::chunkKey(5, -3));
 }

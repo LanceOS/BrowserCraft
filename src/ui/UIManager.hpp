@@ -67,6 +67,10 @@ public:
   /// Render inventory panel.
   void renderInventory(bool open);
 
+  /// Show or hide the FPS counter overlay.
+  void setShowFps(bool show) { m_showFps = show; }
+  [[nodiscard]] auto isFpsVisible() const -> bool { return m_showFps; }
+
   [[nodiscard]] auto isInventoryOpen() const -> bool { return m_inventoryOpen; }
   void setInventoryOpen(bool open) { m_inventoryOpen = open; }
 
@@ -78,12 +82,19 @@ private:
   void renderMainMenu();
   void renderGameModeMenu();
   void renderPauseMenu();
+  void renderFpsOverlay();
   void renderOptionsMenu();
 
   GLFWwindow* m_window;
   Callbacks m_callbacks;
   UIState m_state = UIState::MainMenu;
   bool m_inventoryOpen = false;
+  // FPS counter
+  double m_fpsLastSampleTime = 0.0;
+  int m_fpsFrameCount = 0;
+  float m_currentFps = 0.0f;
+  bool m_showFps = true;
+
   int32_t m_renderDistance = 8;
   int32_t m_gameModeIndex = 0; // 0 = Survival, 1 = Creative
   std::array<char, 64> m_slotId{};

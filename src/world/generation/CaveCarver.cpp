@@ -1,5 +1,6 @@
 #include "CaveCarver.hpp"
 #include "SimplexNoise.hpp"
+#include "world/BlockIds.hpp"
 #include <algorithm>
 
 namespace voxel {
@@ -61,7 +62,7 @@ void CaveCarver::carveSphere(uint8_t* voxels, float cx, float cy, float cz, floa
         float dz = static_cast<float>(z) - cz;
         if (dx*dx + dy*dy + dz*dz > r2) continue;
         int32_t idx = (y * sizeZ + z) * sizeX + x;
-        if (voxels[idx] != 0 && voxels[idx] != 8 && voxels[idx] != 10) {
+        if (voxels[idx] != BlockId::AIR && voxels[idx] != BlockId::WATER && voxels[idx] != BlockId::MOSSY_STONE) {
           voxels[idx] = 0;
         }
       }

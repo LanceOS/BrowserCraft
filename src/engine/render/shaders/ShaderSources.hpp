@@ -39,10 +39,10 @@ struct ChunkCullData {
     uint firstIndex;
     uint baseVertex;
     uint slotIndex;
+    uint hasTransparent;
     uint pad1;
     uint pad2;
     uint pad3;
-    uint pad4;
 };
 
 layout(std430, binding = 0) readonly buffer InputChunks {
@@ -207,65 +207,6 @@ void main() {
 
   fragColor.rgb = sky + sunGlow * vec3(1.0, 0.9, 0.6);
   fragColor.a = 1.0;
-}
-)glsl";
-
-inline const char* cullingCompute = R"glsl(#version 460 core
-
-layout(local_size_x = 64) in;
-
-struct ChunkCullData {
-    vec4 min;
-    vec4 max;
-    uint indexCount;
-    uint firstIndex;
-    uint baseVertex;
-    uint slotIndex;
-    uint pad1;
-    uint pad2;
-    uint pad3;
-    uint pad4;
-};
-
-struct DrawCommand {
-    uint count;
-    uint instanceCount;
-    uint firstIndex;
-    uint baseVertex;
-    uint baseInstance;
-};
-
-layout(std430, binding = 0) readonly buffer InputChunks {
-    ChunkCullData chunks[];
-};
-
-layout(std430, binding = 1) writeonly buffer OutputCommands {
-    DrawCommand commands[];
-};
-
-uniform uint u_maxChunks;
-
-void main() {
-    uint idx = gl_GlobalInvocationID.x;
-    // @see notes/renderer-culling-fallback.md
-    if (idx >= u_maxChunks) return;
-
-    ChunkCullData chunk = chunks[idx];
-    commands[idx].count = 0;
-    commands[idx].instanceCount = 0;
-    commands[idx].firstIndex = 0;
-    commands[idx].baseVertex = 0;
-    commands[idx].baseInstance = 0;
-
-    if (chunk.indexCount == 0) {
-        return;
-    }
-
-    commands[idx].count = chunk.indexCount;
-    commands[idx].instanceCount = 1;
-    commands[idx].firstIndex = chunk.firstIndex;
-    commands[idx].baseVertex = chunk.baseVertex;
-    commands[idx].baseInstance = chunk.slotIndex;
 }
 )glsl";
 

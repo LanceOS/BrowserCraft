@@ -1,4 +1,5 @@
 #include "WorldGenPipeline.hpp"
+#include "world/BlockIds.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
@@ -39,12 +40,12 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
         int32_t index = (y * sizeZ + z) * sizeX + x;
 
         if (y == 0) {
-          voxels[index] = BEDROCK;
+          voxels[index] = BlockId::BEDROCK;
           continue;
         }
 
         if (y > baseHeight) {
-          voxels[index] = (y <= seaLevel && rule.name != "desert") ? WATER : 0;
+          voxels[index] = (y <= seaLevel && rule.name != "desert") ? BlockId::WATER : BlockId::AIR;
           continue;
         }
 
@@ -64,7 +65,7 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
         } else if (y > baseHeight - rule.depth) {
           voxels[index] = rule.fillerBlock;
         } else {
-          voxels[index] = STONE;
+          voxels[index] = BlockId::STONE;
         }
       }
     }

@@ -1,20 +1,18 @@
 #include "World.hpp"
 #include <cstring>
+#include <algorithm>
 
 namespace voxel {
 
 World::World(SharedPool& pool,
              BlockRegistry& blocks,
              const GameConfig& config,
-             GenCallback onGenerate,
-             MeshCallback onMesh,
-             SaveLoadCallback onSaveLoad,
-             SaveDirtyCallback onMarkDirty)
+             IChunkWorker& worker,
+             IChunkPersistence* persistence)
   : m_pool(pool), m_blocks(blocks), m_config(config),
-    m_onGenerate(std::move(onGenerate)),
-    m_onMesh(std::move(onMesh)),
-    m_onSaveLoad(std::move(onSaveLoad)),
-    m_onMarkDirty(std::move(onMarkDirty))
+    m_store(pool, blocks, m_chunks, config),
+    m_jobQueue(worker),
+    m_persistence(persistence)
 {}
 
 void World::update(glm::vec3 cameraPos) {
@@ -27,7 +25,8 @@ void World::update(glm::vec3 cameraPos) {
 
   ensureVisibleRadius(cx, cz);
   unloadFarChunks(cx, cz);
-  pumpQueues();
+  m_jobQueue.pump(m_chunks, m_pool, m_slotToChunk, m_config.worldSeed);
+  flushDeferredRemeshes();
 }
 
 auto World::isReady() const -> bool {
@@ -58,13 +57,6 @@ auto World::getChunkBySlotIndex(int32_t slotIndex) -> Chunk* {
   return m_chunks.getMut(it->second.cx, it->second.cz);
 }
 
-auto World::resolvePendingChunk(const PendingChunkJob& job) -> Chunk* {
-  auto* chunk = getChunkBySlotIndex(job.slotIndex);
-  if (!chunk) return nullptr;
-  if (chunk->chunkX != job.chunkX || chunk->chunkZ != job.chunkZ) return nullptr;
-  return chunk;
-}
-
 auto World::getChunkSlot(const Chunk& chunk) -> ChunkSlot {
   return m_pool.view(chunk.slotIndex);
 }
@@ -82,20 +74,11 @@ auto World::resolveBlock(int32_t worldX, int32_t worldY, int32_t worldZ) -> std:
 }
 
 auto World::getBlockIdAt(int32_t worldX, int32_t worldY, int32_t worldZ) const -> uint8_t {
-  if (worldY < 0 || worldY >= m_config.worldHeight) return 0;
-  return getBlockId(worldX, worldY, worldZ);
+  return m_store.getBlockId(worldX, worldY, worldZ);
 }
 
 auto World::getBlockId(int32_t worldX, int32_t worldY, int32_t worldZ) const -> uint8_t {
-  int32_t cx = worldToChunk(worldX, m_config.chunkSize);
-  int32_t cz = worldToChunk(worldZ, m_config.chunkSize);
-  auto* chunk = m_chunks.get(cx, cz);
-  if (!chunk) return 0;
-  auto slot = const_cast<World*>(this)->m_pool.view(chunk->slotIndex);
-  int32_t localX = mod(worldX, m_config.chunkSize);
-  int32_t localZ = mod(worldZ, m_config.chunkSize);
-  int32_t idx = (worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX;
-  return slot.voxels[idx];
+  return m_store.getBlockId(worldX, worldY, worldZ);
 }
 
 auto World::setBlockIdAt(int32_t worldX, int32_t worldY, int32_t worldZ, uint8_t blockId) -> bool {
@@ -103,14 +86,17 @@ auto World::setBlockIdAt(int32_t worldX, int32_t worldY, int32_t worldZ, uint8_t
   if (!ref) return false;
   auto slot = m_pool.view(ref->chunk->slotIndex);
   if (slot.voxels[ref->index] == blockId) return false;
-  slot.voxels[ref->index] = blockId;
+  m_store.setBlockId(*ref->chunk, worldY, ref->localX, ref->localZ, blockId);
   if (blockId == 0) slot.redstone[ref->index] = 0;
   markChunkDirty(ref->chunk->chunkX, ref->chunk->chunkZ);
-  // Need mutable access to the chunk for remesh
   auto* mutChunk = m_chunks.getMut(ref->chunk->chunkX, ref->chunk->chunkZ);
   if (mutChunk) {
     requestRemesh(*mutChunk);
-    requestBoundaryNeighborRemeshes(*mutChunk, ref->localX, ref->localZ);
+    // Defer boundary neighbor remeshes — flushed in flushDeferredRemeshes()
+    if (ref->localX == 0 || ref->localX == m_config.chunkSize - 1 ||
+        ref->localZ == 0 || ref->localZ == m_config.chunkSize - 1) {
+      m_deferredBoundaryEdits.emplace_back(ref->chunk->chunkX, ref->chunk->chunkZ);
+    }
   }
   return true;
 }
@@ -132,26 +118,25 @@ auto World::setRedstonePackedAt(int32_t worldX, int32_t worldY, int32_t worldZ, 
   auto* mutChunk = m_chunks.getMut(ref->chunk->chunkX, ref->chunk->chunkZ);
   if (mutChunk) {
     requestRemesh(*mutChunk);
-    requestBoundaryNeighborRemeshes(*mutChunk, ref->localX, ref->localZ);
+    // Defer boundary neighbor remeshes
+    if (ref->localX == 0 || ref->localX == m_config.chunkSize - 1 ||
+        ref->localZ == 0 || ref->localZ == m_config.chunkSize - 1) {
+      m_deferredBoundaryEdits.emplace_back(ref->chunk->chunkX, ref->chunk->chunkZ);
+    }
   }
   return true;
 }
 
+auto World::isSolidInChunk(int32_t worldX, int32_t worldY, int32_t worldZ, const Chunk& chunk) const -> bool {
+  return m_store.isSolidInChunk(worldX, worldY, worldZ, chunk);
+}
+
 auto World::isSolid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool {
-  if (worldY < 0 || worldY >= m_config.worldHeight) return false;
-  uint8_t blockId = getBlockId(worldX, worldY, worldZ);
-  if (blockId == 0) return false;
-  auto* block = m_blocks.tryGet(blockId);
-  if (!block) return false;
-  return block->collision.hasVolume();
+  return m_store.isSolid(worldX, worldY, worldZ);
 }
 
 auto World::isFluid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool {
-  if (worldY < 0 || worldY >= m_config.worldHeight) return false;
-  uint8_t blockId = getBlockId(worldX, worldY, worldZ);
-  if (blockId == 0) return false;
-  auto* block = m_blocks.tryGet(blockId);
-  return block && block->material.liquid;
+  return m_store.isFluid(worldX, worldY, worldZ);
 }
 
 void World::markUploaded(const Chunk& chunk) {
@@ -172,8 +157,8 @@ void World::clear() {
 
   m_chunks = ChunkManager{};
   m_slotToChunk.clear();
-  m_pendingGen.clear();
-  m_pendingMesh.clear();
+  m_jobQueue.clear();
+  m_pendingUploadSlots.clear();
   m_hasCenter = false;
 }
 
@@ -185,7 +170,7 @@ void World::onWorldGenDone(int32_t slotIndex) {
   chunk->state = ChunkState::VoxelsReady;
   chunk->needsRemesh = false;
   markChunkDirty(chunk->chunkX, chunk->chunkZ);
-  m_pendingMesh.push_back(PendingChunkJob{chunk->slotIndex, chunk->chunkX, chunk->chunkZ});
+  m_jobQueue.pushMesh(chunk->slotIndex, chunk->chunkX, chunk->chunkZ);
   requestNeighborRemeshes(*chunk);
 }
 
@@ -196,10 +181,17 @@ void World::onMeshDone(int32_t slotIndex, uint32_t vertexCount, uint32_t indexCo
   chunk->vertexCount = vertexCount;
   chunk->indexCount = indexCount;
   chunk->state = success ? ChunkState::MeshReady : ChunkState::MeshFailed;
+  if (success) {
+    m_pendingUploadSlots.push_back(slotIndex);
+  }
   if (chunk->needsRemesh) {
     chunk->needsRemesh = false;
     requestRemesh(*chunk);
   }
+}
+
+auto World::drainPendingUploadSlots() -> std::vector<int32_t> {
+  return std::move(m_pendingUploadSlots);
 }
 
 void World::onSaveLoadSuccess(int32_t chunkX, int32_t chunkZ,
@@ -217,7 +209,7 @@ void World::onSaveLoadSuccess(int32_t chunkX, int32_t chunkZ,
   *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
   chunk->state = ChunkState::VoxelsReady;
   chunk->needsRemesh = false;
-  m_pendingMesh.push_back(PendingChunkJob{chunk->slotIndex, chunk->chunkX, chunk->chunkZ});
+  m_jobQueue.pushMesh(chunk->slotIndex, chunk->chunkX, chunk->chunkZ);
   requestNeighborRemeshes(*chunk);
 }
 
@@ -226,7 +218,7 @@ void World::onSaveLoadFailed(int32_t chunkX, int32_t chunkZ) {
   if (!chunk) return;
   if (chunk->state != ChunkState::LoadingFromDisk) return;
   chunk->state = ChunkState::QueuedGen;
-  m_pendingGen.push_back(PendingChunkJob{chunk->slotIndex, chunk->chunkX, chunk->chunkZ});
+  m_jobQueue.pushGen(chunk->slotIndex, chunk->chunkX, chunk->chunkZ);
 }
 
 // ---- Private ----
@@ -252,12 +244,12 @@ void World::ensureVisibleRadius(int32_t centerCX, int32_t centerCZ) {
         m_slotToChunk[chunk.slotIndex] = {cx, cz};
       }
 
-      if (m_onSaveLoad) {
+      if (m_persistence) {
         inserted->state = ChunkState::LoadingFromDisk;
-        m_onSaveLoad(cx, cz);
+        m_persistence->requestLoad(cx, cz);
       } else {
         inserted->state = ChunkState::QueuedGen;
-        m_pendingGen.push_back(PendingChunkJob{inserted->slotIndex, inserted->chunkX, inserted->chunkZ});
+        m_jobQueue.pushGen(inserted->slotIndex, inserted->chunkX, inserted->chunkZ);
       }
     }
   }
@@ -286,41 +278,6 @@ void World::unloadFarChunks(int32_t centerCX, int32_t centerCZ) {
   }
 }
 
-void World::pumpQueues() {
-  // World-gen queue
-  while (!m_pendingGen.empty()) {
-    PendingChunkJob job = m_pendingGen.front();
-    m_pendingGen.erase(m_pendingGen.begin());
-
-    auto* chunk = resolvePendingChunk(job);
-    if (!chunk) {
-      continue;
-    }
-
-    auto slot = m_pool.view(chunk->slotIndex);
-    *slot.status = static_cast<int32_t>(ChunkSlotStatus::GENERATING);
-    chunk->state = ChunkState::Generating;
-    m_onGenerate(chunk->slotIndex, chunk->chunkX, chunk->chunkZ,
-                 chunkSeed(chunk->chunkX, chunk->chunkZ, m_config.worldSeed));
-  }
-
-  // Mesh queue
-  while (!m_pendingMesh.empty()) {
-    PendingChunkJob job = m_pendingMesh.front();
-    m_pendingMesh.erase(m_pendingMesh.begin());
-
-    auto* chunk = resolvePendingChunk(job);
-    if (!chunk) {
-      continue;
-    }
-
-    auto slot = m_pool.view(chunk->slotIndex);
-    *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESHING);
-    chunk->state = ChunkState::Meshing;
-    m_onMesh(chunk->slotIndex);
-  }
-}
-
 void World::requestRemesh(Chunk& chunk) {
   if (chunk.state == ChunkState::LoadingFromDisk) return;
   if (chunk.state == ChunkState::QueuedMesh) return;
@@ -334,11 +291,11 @@ void World::requestRemesh(Chunk& chunk) {
     return;
   }
   chunk.state = ChunkState::QueuedMesh;
-  m_pendingMesh.push_back(PendingChunkJob{chunk.slotIndex, chunk.chunkX, chunk.chunkZ});
+  m_jobQueue.pushMesh(chunk.slotIndex, chunk.chunkX, chunk.chunkZ);
 }
 
 void World::markChunkDirty(int32_t cx, int32_t cz) {
-  if (m_onMarkDirty) m_onMarkDirty(cx, cz);
+  if (m_persistence) m_persistence->markDirty(cx, cz);
 }
 
 auto World::chunkHasVoxelData(const Chunk& chunk) const -> bool {
@@ -367,6 +324,22 @@ void World::requestBoundaryNeighborRemeshes(const Chunk& chunk, int32_t localX, 
   if (localX == m_config.chunkSize - 1) requestNeighborRemesh(chunk, 1, 0);
   if (localZ == 0) requestNeighborRemesh(chunk, 0, -1);
   if (localZ == m_config.chunkSize - 1) requestNeighborRemesh(chunk, 0, 1);
+}
+
+void World::flushDeferredRemeshes() {
+  // Deduplicate by chunk coordinates using a local set
+  // Since the vector is typically small (< 81 entries at render dist 4),
+  // a simple O(n) dedup is fine.
+  std::sort(m_deferredBoundaryEdits.begin(), m_deferredBoundaryEdits.end());
+  auto last = std::unique(m_deferredBoundaryEdits.begin(), m_deferredBoundaryEdits.end());
+  
+  for (auto it = m_deferredBoundaryEdits.begin(); it != last; ++it) {
+    auto* chunk = m_chunks.getMut(it->first, it->second);
+    if (!chunk) continue;
+    requestBoundaryNeighborRemeshes(*chunk, 0, 0); // localX=0 triggers both X edges
+    requestBoundaryNeighborRemeshes(*chunk, m_config.chunkSize - 1, m_config.chunkSize - 1);
+  }
+  m_deferredBoundaryEdits.clear();
 }
 
 void World::requestNeighborRemesh(const Chunk& chunk, int32_t dx, int32_t dz) {

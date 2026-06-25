@@ -46,6 +46,7 @@ UIManager::UIManager(GLFWwindow* window, Callbacks callbacks)
   ImGui_ImplGlfw_InitForOpenGL(window, false);
   ImGui_ImplOpenGL3_Init("#version 460");
   m_initialized = true;
+  m_fpsLastSampleTime = glfwGetTime();
 }
 
 UIManager::~UIManager() {
@@ -57,6 +58,16 @@ UIManager::~UIManager() {
 }
 
 void UIManager::beginFrame() {
+  // ---- FPS tracking ----
+  m_fpsFrameCount++;
+  double now = glfwGetTime();
+  double elapsed = now - m_fpsLastSampleTime;
+  if (elapsed >= 0.5) { // update twice per second
+    m_currentFps = static_cast<float>(m_fpsFrameCount / elapsed);
+    m_fpsFrameCount = 0;
+    m_fpsLastSampleTime = now;
+  }
+
   ImGui_ImplOpenGL3_NewFrame();
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
@@ -70,6 +81,7 @@ void UIManager::beginFrame() {
     case UIState::InGame:
       renderHotbar(-1);
       renderInventory(m_inventoryOpen);
+      if (m_showFps) renderFpsOverlay();
       break;
     case UIState::Inventory:   break;
   }
@@ -226,6 +238,17 @@ void UIManager::renderPauseMenu() {
   }
   ImGui::EndChild();
 
+  ImGui::End();
+}
+
+void UIManager::renderFpsOverlay() {
+  ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 10.0f, 10.0f),
+                          ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+  ImGui::SetNextWindowBgAlpha(0.35f);
+  ImGui::Begin("FpsOverlay", nullptr,
+    ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing);
+  ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "FPS: %.0f", m_currentFps);
   ImGui::End();
 }
 
