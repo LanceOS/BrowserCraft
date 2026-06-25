@@ -25,6 +25,8 @@ namespace BlockId {
   inline constexpr uint8_t COAL_ORE      = 14;
   inline constexpr uint8_t IRON_ORE      = 15;
   inline constexpr uint8_t GOLD_ORE      = 16;
+  inline constexpr uint8_t TALL_GRASS    = 17;
+  inline constexpr uint8_t FERN          = 18;
 } // namespace BlockId
 
 } // namespace voxel

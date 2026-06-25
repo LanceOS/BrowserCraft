@@ -104,6 +104,8 @@ void AssetManager::loadAssets() {
                 else if (texName.find("gold_ore") != std::string::npos) color = 0xFFFFD700; // Gold
                 else if (texName.find("diamond_ore") != std::string::npos) color = 0xFF4FC3F7; // Cyan-blue
                 else if (texName.find("powerstone_ore") != std::string::npos) color = 0xFF9B30FF; // Purple
+                else if (texName.find("tall_grass") != std::string::npos) { color = 0xFF2E8B2E; hasTransparency = true; } // Sea green
+                else if (texName.find("fern") != std::string::npos) { color = 0xFF3CB371; hasTransparency = true; } // Medium sea green
 
                 std::mt19937 rng(std::hash<std::string>{}(texName));
                 std::uniform_int_distribution<int> dist(-15, 15);

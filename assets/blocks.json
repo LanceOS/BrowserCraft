@@ -14,7 +14,9 @@
         "iron_ore": "iron_ore.png",
         "gold_ore": "gold_ore.png",
         "diamond_ore": "diamond_ore.png",
-        "powerstone_ore": "powerstone_ore.png"
+        "powerstone_ore": "powerstone_ore.png",
+        "tall_grass": "tall_grass.png",
+        "fern": "fern.png"
     },
     "blocks": [
         {
@@ -184,6 +186,28 @@
             "blast_resistance": 3.0,
             "faces": {
                 "all": "gold_ore"
+            }
+        },
+        {
+            "id": 17,
+            "name": "Tall Grass",
+            "is_opaque": false,
+            "is_foliage": true,
+            "hardness": 0.0,
+            "blast_resistance": 0.0,
+            "faces": {
+                "all": "tall_grass"
+            }
+        },
+        {
+            "id": 18,
+            "name": "Fern",
+            "is_opaque": false,
+            "is_foliage": true,
+            "hardness": 0.0,
+            "blast_resistance": 0.0,
+            "faces": {
+                "all": "fern"
             }
         }
     ]

@@ -2,6 +2,7 @@
 #include "engine/alloc/SharedPool.hpp"
 #include "engine/workers/mesher/GreedyMesher.hpp"
 #include "world/blocks/VanillaBlockFactory.hpp"
+#include "content/flora/DefaultFlora.hpp"
 #include <algorithm>
 #include <cmath>
 #include <thread>
@@ -96,6 +97,10 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     VanillaBlockFactory factory;
     factory.registerAll(m_blocks);
   }
+
+  // Flora system — registers additional blocks and provides metadata
+  m_flora = flora::createDefaultFloraRegistry();
+  m_flora->registerAllBlocks(m_blocks);
 
   // Thread pool (use hardware concurrency, min 1)
   int32_t threads = std::max(1u, std::thread::hardware_concurrency());

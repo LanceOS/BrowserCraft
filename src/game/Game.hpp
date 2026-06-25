@@ -31,6 +31,7 @@
 #include "game/GameSession.hpp"
 #include "game/WorldController.hpp"
 #include "game/BlockInteractionAudio.hpp"
+#include "content/flora/FloraRegistry.hpp"
 
 namespace voxel {
 
@@ -83,6 +84,7 @@ private:
 
   InputState m_input;
   BlockRegistry m_blocks;
+  std::unique_ptr<flora::FloraRegistry> m_flora;
   std::unique_ptr<SharedPool> m_pool;
   std::unique_ptr<WorldController> m_worldController;
   std::unique_ptr<Renderer> m_renderer;
