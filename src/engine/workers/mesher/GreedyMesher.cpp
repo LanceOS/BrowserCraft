@@ -409,12 +409,30 @@ bool greedyMesh(
           writeVtx(vertexOut, vo, tr[0],tr[1],tr[2], nx,ny,nz, uv[3][0],uv[3][1], tlF, ld[3]); vo += S;
 
           uint32_t base = (vo / S) - 4;
+
+          // Faces X+ (di=0), Y+ (di=2), and Z- (di=5) produce a computed
+          // normal opposite to the face normal with the default winding.
+          // Reverse the winding for those three directions so that the
+          // geometric normal matches the per-vertex normal, giving correct
+          // diffuse lighting.
+          bool reverseWind = (di == 0 || di == 2 || di == 5);
+
           if (!flip) {
-            indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+2;
-            indexOut[io++] = base+1; indexOut[io++] = base+3; indexOut[io++] = base+2;
+            if (!reverseWind) {
+              indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+2;
+              indexOut[io++] = base+1; indexOut[io++] = base+3; indexOut[io++] = base+2;
+            } else {
+              indexOut[io++] = base;   indexOut[io++] = base+2; indexOut[io++] = base+3;
+              indexOut[io++] = base+1; indexOut[io++] = base;   indexOut[io++] = base+3;
+            }
           } else {
-            indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+3;
-            indexOut[io++] = base;   indexOut[io++] = base+3; indexOut[io++] = base+2;
+            if (!reverseWind) {
+              indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+3;
+              indexOut[io++] = base;   indexOut[io++] = base+3; indexOut[io++] = base+2;
+            } else {
+              indexOut[io++] = base;   indexOut[io++] = base+2; indexOut[io++] = base+1;
+              indexOut[io++] = base+2; indexOut[io++] = base+3; indexOut[io++] = base+1;
+            }
           }
         }
       }
