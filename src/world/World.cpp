@@ -290,7 +290,7 @@ void World::pumpQueues() {
   // World-gen queue
   while (!m_pendingGen.empty()) {
     PendingChunkJob job = m_pendingGen.front();
-    m_pendingGen.erase(m_pendingGen.begin());
+    m_pendingGen.pop_front();
 
     auto* chunk = resolvePendingChunk(job);
     if (!chunk) {
@@ -307,7 +307,7 @@ void World::pumpQueues() {
   // Mesh queue
   while (!m_pendingMesh.empty()) {
     PendingChunkJob job = m_pendingMesh.front();
-    m_pendingMesh.erase(m_pendingMesh.begin());
+    m_pendingMesh.pop_front();
 
     auto* chunk = resolvePendingChunk(job);
     if (!chunk) {

@@ -7,6 +7,7 @@
 #include "engine/alloc/SharedPool.hpp"
 #include <glm/glm.hpp>
 #include <vector>
+#include <deque>
 #include <unordered_map>
 #include <cmath>
 #include <cstdint>
@@ -168,8 +169,8 @@ private:
   };
   std::unordered_map<int32_t, ChunkSlotCoord> m_slotToChunk;
   // @see notes/chunk-pending-queue-stability.md
-  std::vector<PendingChunkJob> m_pendingGen;
-  std::vector<PendingChunkJob> m_pendingMesh;
+  std::deque<PendingChunkJob> m_pendingGen;
+  std::deque<PendingChunkJob> m_pendingMesh;
 
   int32_t m_centerChunkX = 0;
   int32_t m_centerChunkZ = 0;
