@@ -35,16 +35,18 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
 
   const uint32_t visibleCommands = m_indirectBatcher.commandCount();
 
-  // Pass 1: opaque only.
+  // Pass 1: opaque only — no blending (alpha-test discards foliage texels).
   if (visibleCommands > 0u) {
+    gl::Disable(GL_BLEND);
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
     gl::DepthMask(GL_TRUE);
     gl::DepthFunc(GL_LESS);
     m_indirectBatcher.drawIndirect(visibleCommands);
   }
 
-  // Pass 2: transparent only.
+  // Pass 2: transparent only — blending enabled for semi-transparent surfaces.
   if (visibleCommands > 0u && m_indirectBatcher.hasVisibleTransparent()) {
+    gl::Enable(GL_BLEND);
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
     gl::DepthMask(GL_FALSE);
     gl::DepthFunc(GL_LEQUAL);
