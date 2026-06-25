@@ -51,7 +51,7 @@ struct FloraProperties {
   uint16_t blockId = 0;
   std::string name;
   FloraRenderType renderType = FloraRenderType::FOLIAGE_CUBE;
-  std::vector<uint8_t> textureLayers;  /// Texture layer index for each growth stage.
+  std::vector<uint16_t> textureLayers;  /// Texture layer index for each growth stage.
   std::vector<SoilType> acceptableSoil;
   std::vector<std::string> biomeAffinity;  /// Biome names where this flora naturally spawns.
   LightRequirements lightRequirements;

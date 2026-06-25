@@ -55,6 +55,7 @@ PFN_GenerateMipmap GenerateMipmap;
 PFN_TexParameteri TexParameteri;
 PFN_ActiveTexture ActiveTexture;
 PFN_DeleteTextures DeleteTextures;
+PFN_PixelStorei PixelStorei;
 
 PFN_DrawElements DrawElements;
 PFN_DrawArrays DrawArrays;
@@ -120,6 +121,7 @@ void loadGLFunctions() {
   LOAD(TexParameteri);
   LOAD(ActiveTexture);
   LOAD(DeleteTextures);
+  LOAD(PixelStorei);
 
   LOAD(DrawElements);
   LOAD(DrawArrays);

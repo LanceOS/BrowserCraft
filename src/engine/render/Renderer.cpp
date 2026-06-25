@@ -179,11 +179,19 @@ void Renderer::seedTextureArray() {
   if (layers == 0) return;
 
   const auto& pixelData = AssetManager::get().getTextureData();
-  size_t bytesPerLayer = 16 * 16 * 4;
 
-  for (int32_t layer = 0; layer < layers; ++layer) {
-    const uint8_t* layerData = pixelData.data() + (layer * bytesPerLayer);
-    m_textures.uploadLayer(layer, layerData, 16, 16);
+  if (m_textures.isHighBitDepth()) {
+    // Single upload for all layers — far less driver overhead than N calls.
+    m_textures.uploadAllLayers(pixelData.data(), 16, 16, layers);
+  } else {
+    // Fallback: convert all layers to 8-bit at once, then single upload.
+    const size_t totalPixels = static_cast<size_t>(layers) * 16 * 16 * 4;
+    std::vector<uint8_t> fallbackData(totalPixels);
+    const uint16_t* src = pixelData.data();
+    for (size_t i = 0; i < totalPixels; ++i) {
+      fallbackData[i] = static_cast<uint8_t>(src[i] >> 8);
+    }
+    m_textures.uploadAllLayers8(fallbackData.data(), 16, 16, layers);
   }
   m_textures.generateMipmaps();
 }

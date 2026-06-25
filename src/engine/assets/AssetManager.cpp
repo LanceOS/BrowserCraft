@@ -78,47 +78,50 @@ void AssetManager::loadAssets() {
 
             int width, height, channels;
             stbi_set_flip_vertically_on_load(true);
-            unsigned char* data = stbi_load(filename.c_str(), &width, &height, &channels, 4);
+            // Use 16-bit loading for high color depth
+            stbi_us* data = stbi_load_16(filename.c_str(), &width, &height, &channels, 4);
 
-            std::vector<uint8_t> imgData(16 * 16 * 4);
+            std::vector<uint16_t> imgData(16 * 16 * 4);
             if (data && width == 16 && height == 16) {
                 std::copy(data, data + (16 * 16 * 4), imgData.begin());
             } else {
                 if (data) std::cerr << "Texture " << filename << " is not 16x16. Procedurally generating fallback..." << std::endl;
                 else std::cerr << "Failed to load texture " << filename << ". Procedurally generating fallback..." << std::endl;
                 
-                // Procedural generation fallback
-                uint32_t color = 0xFFFFFFFF;
+                // Procedural generation fallback (16-bit per channel)
+                uint32_t color8 = 0xFFFFFFFF;
                 bool hasTransparency = false;
-                if (texName.find("grass") != std::string::npos) color = 0xFF228B22; // Green
-                else if (texName.find("dirt") != std::string::npos) color = 0xFF13458B; // Brown (ABGR)
-                else if (texName.find("stone") != std::string::npos) color = 0xFF808080; // Gray
-                else if (texName.find("oak_log_top") != std::string::npos) color = 0xFF8B6914; // Brown-orange
-                else if (texName.find("oak_log_side") != std::string::npos) color = 0xFF5C4033; // Dark brown
-                else if (texName.find("oak_planks") != std::string::npos) color = 0xFFCD853F; // Wood planks
-                else if (texName.find("oak_leaves") != std::string::npos) { color = 0xFF1E8B1E; hasTransparency = true; } // Green foliage
-                else if (texName.find("water") != std::string::npos) { color = 0xFF1E3A8A; hasTransparency = true; } // Blue water
-                else if (texName.find("lava") != std::string::npos) { color = 0xFFFF4500; } // Orange-red lava
-                else if (texName.find("coal_ore") != std::string::npos) color = 0xFF333333; // Dark gray
-                else if (texName.find("iron_ore") != std::string::npos) color = 0xFFD4A574; // Sandy brown
-                else if (texName.find("gold_ore") != std::string::npos) color = 0xFFFFD700; // Gold
-                else if (texName.find("diamond_ore") != std::string::npos) color = 0xFF4FC3F7; // Cyan-blue
-                else if (texName.find("powerstone_ore") != std::string::npos) color = 0xFF9B30FF; // Purple
-                else if (texName.find("tall_grass") != std::string::npos) { color = 0xFF2E8B2E; hasTransparency = true; } // Sea green
-                else if (texName.find("fern") != std::string::npos) { color = 0xFF3CB371; hasTransparency = true; } // Medium sea green
+                if (texName.find("grass") != std::string::npos) color8 = 0xFF228B22; // Green
+                else if (texName.find("dirt") != std::string::npos) color8 = 0xFF13458B; // Brown (ABGR)
+                else if (texName.find("stone") != std::string::npos) color8 = 0xFF808080; // Gray
+                else if (texName.find("oak_log_top") != std::string::npos) color8 = 0xFF8B6914; // Brown-orange
+                else if (texName.find("oak_log_side") != std::string::npos) color8 = 0xFF5C4033; // Dark brown
+                else if (texName.find("oak_planks") != std::string::npos) color8 = 0xFFCD853F; // Wood planks
+                else if (texName.find("oak_leaves") != std::string::npos) { color8 = 0xFF1E8B1E; hasTransparency = true; } // Green foliage
+                else if (texName.find("water") != std::string::npos) { color8 = 0xFF1E3A8A; hasTransparency = true; } // Blue water
+                else if (texName.find("lava") != std::string::npos) { color8 = 0xFFFF4500; } // Orange-red lava
+                else if (texName.find("coal_ore") != std::string::npos) color8 = 0xFF333333; // Dark gray
+                else if (texName.find("iron_ore") != std::string::npos) color8 = 0xFFD4A574; // Sandy brown
+                else if (texName.find("gold_ore") != std::string::npos) color8 = 0xFFFFD700; // Gold
+                else if (texName.find("diamond_ore") != std::string::npos) color8 = 0xFF4FC3F7; // Cyan-blue
+                else if (texName.find("powerstone_ore") != std::string::npos) color8 = 0xFF9B30FF; // Purple
+                else if (texName.find("tall_grass") != std::string::npos) { color8 = 0xFF2E8B2E; hasTransparency = true; } // Sea green
+                else if (texName.find("fern") != std::string::npos) { color8 = 0xFF3CB371; hasTransparency = true; } // Medium sea green
+
+                // Scale 8-bit color components to 16-bit range
+                uint16_t rBase = static_cast<uint16_t>((color8 & 0xFF) * 257);
+                uint16_t gBase = static_cast<uint16_t>(((color8 >> 8) & 0xFF) * 257);
+                uint16_t bBase = static_cast<uint16_t>(((color8 >> 16) & 0xFF) * 257);
+                uint16_t aBase = hasTransparency ? 51400U : 65535U;
 
                 std::mt19937 rng(std::hash<std::string>{}(texName));
-                std::uniform_int_distribution<int> dist(-15, 15);
+                std::uniform_int_distribution<int> dist(-15 * 257, 15 * 257);
 
                 for (int i = 0; i < 16 * 16; ++i) {
-                    int r = std::clamp<int>((color & 0xFF) + dist(rng), 0, 255);
-                    int g = std::clamp<int>(((color >> 8) & 0xFF) + dist(rng), 0, 255);
-                    int b = std::clamp<int>(((color >> 16) & 0xFF) + dist(rng), 0, 255);
-                    int a = hasTransparency ? 200 : 255;
-                    imgData[i * 4 + 0] = r;
-                    imgData[i * 4 + 1] = g;
-                    imgData[i * 4 + 2] = b;
-                    imgData[i * 4 + 3] = a;
+                    imgData[i * 4 + 0] = static_cast<uint16_t>(std::clamp<int>(rBase + dist(rng), 0, 65535));
+                    imgData[i * 4 + 1] = static_cast<uint16_t>(std::clamp<int>(gBase + dist(rng), 0, 65535));
+                    imgData[i * 4 + 2] = static_cast<uint16_t>(std::clamp<int>(bBase + dist(rng), 0, 65535));
+                    imgData[i * 4 + 3] = aBase;
                 }
             }
             if (data) stbi_image_free(data);
@@ -175,7 +178,7 @@ size_t AssetManager::getBlockCount() const {
     return m_blockDefs.size();
 }
 
-const std::vector<uint8_t>& AssetManager::getTextureData() const {
+const std::vector<uint16_t>& AssetManager::getTextureData() const {
     return m_textureData;
 }
 
