@@ -6,9 +6,9 @@
 #include "engine/core/InputState.hpp"
 #include "engine/core/Config.hpp"
 #include "engine/render/CameraView.hpp"
+#include "engine/collision/EntityCollisions.hpp"
 #include "ui/UIManager.hpp"
 #include "game/GameSession.hpp"
-#include "world/World.hpp"
 #include <GLFW/glfw3.h>
 
 namespace voxel {
@@ -40,18 +40,13 @@ public:
   [[nodiscard]] auto stage() const -> SystemStage override;
   void update(Game& state, float dt) override;
 
-public:
-  /// Push the player entity at \a entityIndex upward until they are no longer
-  /// colliding with blocks.  Called after spawning to prevent the player from
-  /// being stuck inside terrain.  \a entityIndex is a raw component-store index
-  /// (not an EntityManager ID), obtained from EntityManager::indexOf().
-  void pushPlayerOutOfBlocks(int32_t entityIndex);
+  /// Collision engine shared with PlayerSpawnSystem.
+  [[nodiscard]] auto collisions() -> EntityCollisions& { return m_collisions; }
+  [[nodiscard]] auto collisions() const -> const EntityCollisions& { return m_collisions; }
 
 private:
   void applyMouseLook(float dt);
   void applyMovement(float dt, cmp::Transform& transform, cmp::RigidBody& body, cmp::Player& player, const glm::vec3& moveDir);
-  auto collidesAt(const glm::vec3& candidatePosition, const cmp::RigidBody& body) const -> bool;
-  auto groundHeightAt(float worldX, float worldZ, int32_t startY) const -> int32_t;
   void syncCameraFromPlayer();
   void handleInventoryToggle();
 
@@ -65,14 +60,13 @@ private:
   ComponentStore<cmp::Transform>& m_transforms;
   ComponentStore<cmp::RigidBody>& m_bodies;
   ComponentStore<cmp::Player>& m_players;
-  World& m_world;
   CameraView& m_camera;
-  const GameConfig& m_config;
   UIManager& m_ui;
   GameSession& m_session;
   bool& m_cameraDirty;
   int32_t m_cachedPlayerIndex = -1;
   bool m_prevOnGround = true; // previous frame's grounded state (from proximity check, not body.onGround). Used for auto-jump on landing. Initialised true so the first frame after spawn doesn't false-trigger justLanded.
+  EntityCollisions m_collisions;
 };
 
 } // namespace voxel

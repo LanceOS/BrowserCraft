@@ -107,6 +107,7 @@ add_library(voxel_engine STATIC
   src/engine/alloc/SharedPool.cpp
   src/engine/ecs/EntityManager.cpp
   src/engine/ecs/SystemManager.cpp
+  src/engine/collision/EntityCollisions.cpp
   src/engine/ecs/systems/PlayerControllerSystem.cpp
   src/engine/ecs/systems/PlayerSpawnSystem.cpp
   src/engine/assets/AssetManager.cpp

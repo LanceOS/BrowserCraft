@@ -202,7 +202,7 @@ void Game::initSystems() {
   // --- Player spawn (runs once when terrain is ready) ---
   m_systems.add(std::make_unique<PlayerSpawnSystem>(
     m_transforms, m_bodies, *m_world, m_config,
-    m_spawnedToSurface, m_cameraDirty, m_playerController));
+    m_spawnedToSurface, m_cameraDirty, &m_playerController->collisions()));
 }
 
 void Game::configureSaveWorld(const std::string& slotId, bool startFresh) {

@@ -1,5 +1,4 @@
 #include "PlayerSpawnSystem.hpp"
-#include "PlayerControllerSystem.hpp"
 #include "game/Game.hpp"
 #include "engine/ecs/EntityManager.hpp"
 #include <algorithm>
@@ -14,14 +13,14 @@ PlayerSpawnSystem::PlayerSpawnSystem(
     const GameConfig& config,
     bool& spawnedToSurface,
     bool& cameraDirty,
-    PlayerControllerSystem* playerController)
+    EntityCollisions* collisions)
   : m_transforms(transforms)
   , m_bodies(bodies)
   , m_world(world)
   , m_config(config)
   , m_spawnedToSurface(spawnedToSurface)
   , m_cameraDirty(cameraDirty)
-  , m_playerController(playerController)
+  , m_collisions(collisions)
 {}
 
 auto PlayerSpawnSystem::name() const -> const std::string& {
@@ -76,7 +75,7 @@ void PlayerSpawnSystem::update(Game& state, float /*dt*/) {
     // Verify the player is not colliding; push upward in small steps if
     // they somehow ended up inside geometry (e.g. partial blocks,
     // overhangs, or terrain that generates after the scan).
-    if (m_playerController && idx >= 0) m_playerController->pushPlayerOutOfBlocks(idx);
+    if (m_collisions && idx >= 0) m_collisions->pushOutOfBlocks(transform.position, body);
 
     // Start with zero velocity — let gravity pull the player down to
     // the surface rather than marking them as grounded immediately.

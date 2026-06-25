@@ -4,12 +4,11 @@
 #include "engine/ecs/ComponentStore.hpp"
 #include "engine/ecs/components/Components.hpp"
 #include "engine/core/Config.hpp"
-#include "world/World.hpp"
+#include "engine/collision/EntityCollisions.hpp"
 
 namespace voxel {
 
 class Game;
-class PlayerControllerSystem;
 
 /// Handles the one-time operation of placing the player on the surface when
 /// a new world starts.  Waits until the centre chunk has voxel data, scans a
@@ -24,7 +23,7 @@ public:
     const GameConfig& config,
     bool& spawnedToSurface,
     bool& cameraDirty,
-    PlayerControllerSystem* playerController);
+    EntityCollisions* collisions);
 
   [[nodiscard]] auto name() const -> const std::string& override;
   [[nodiscard]] auto stage() const -> SystemStage override;
@@ -37,7 +36,7 @@ private:
   const GameConfig& m_config;
   bool& m_spawnedToSurface;
   bool& m_cameraDirty;
-  PlayerControllerSystem* m_playerController;
+  EntityCollisions* m_collisions;
 };
 
 } // namespace voxel
