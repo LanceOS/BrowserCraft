@@ -169,11 +169,20 @@ void PlayerControllerSystem::applyMovement(
   float speed = m_input.isHeld(InputState::KEY_SHIFT) ? player.sprintSpeed
                                                       : player.walkSpeed;
 
-  if (m_input.isPressed(InputState::KEY_SPACE) && (body.onGround || body.isFluid)) {
+  // Jump trigger: tap Space (isPressed) for a single jump, or hold Space
+  // and auto-jump when the player next lands on ground (onGround transition).
+  bool spaceHeld = m_input.isHeld(InputState::KEY_SPACE);
+  bool justLanded = body.onGround && !m_prevOnGround;
+  if (spaceHeld && (body.onGround || body.isFluid) &&
+      (m_input.isPressed(InputState::KEY_SPACE) || justLanded)) {
     body.velocity.y = body.isFluid ? kSwimSpeed : kJumpSpeed;
     body.onGround = 0;
     body.isFluid = 0;
   }
+  // Save onGround for next frame's auto-jump detection.
+  // We save before movement so justLanded captures the onGround transition
+  // from the collision resolution of the previous frame.
+  m_prevOnGround = body.onGround;
 
   // Apply gravity
   body.velocity.y -= body.gravity * dt;

@@ -72,6 +72,7 @@ private:
   GameSession& m_session;
   bool& m_cameraDirty;
   int32_t m_cachedPlayerIndex = -1;
+  bool m_prevOnGround = true; // previous frame's onGround, used for auto-jump on landing. Initialised true so the first frame after spawn doesn't false-trigger justLanded.
 };
 
 } // namespace voxel
