@@ -113,6 +113,17 @@ void PlayerControllerSystem::update(Game& /*state*/, float dt) {
   syncCameraFromPlayer();
 }
 
+void PlayerControllerSystem::pushPlayerOutOfBlocks() {
+  int32_t idx = m_cachedPlayerIndex;
+  if (idx < 0 || !m_bodies.has(idx) || !m_transforms.has(idx)) return;
+  auto& transform = m_transforms.get(idx);
+  auto& body = m_bodies.get(idx);
+  int32_t maxIter = 256; // safety limit
+  while (collidesAt(transform.position, body) && --maxIter > 0) {
+    transform.position.y += 0.05f;
+  }
+}
+
 // ---- Private helpers ----
 
 void PlayerControllerSystem::handleInventoryToggle() {
@@ -195,13 +206,19 @@ void PlayerControllerSystem::applyMovement(
     nextPosition = yStep;
     body.onGround = 0;
   } else if (body.velocity.y <= 0.0f) {
-    // Landed on ground
+    // Landed on ground — snap to surface
     int32_t groundY = groundHeightAt(
         nextPosition.x, nextPosition.z,
         std::max(0, static_cast<int32_t>(std::floor(nextPosition.y + body.aabbMin.y))));
     if (groundY >= 0) {
       nextPosition.y = static_cast<float>(groundY + 1);
       body.onGround = 1;
+      // If we are still colliding after snapping (e.g. inside a block from
+      // spawning or clipping), push upward until clear.
+      int32_t safetyIters = 64;
+      while (collidesAt(nextPosition, body) && --safetyIters > 0) {
+        nextPosition.y += 0.05f;
+      }
     } else {
       body.onGround = 0;
     }

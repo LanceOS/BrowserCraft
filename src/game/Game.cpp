@@ -190,11 +190,13 @@ void Game::createPlayer() {
 }
 
 void Game::initSystems() {
-  m_playerController = std::make_unique<PlayerControllerSystem>(
+  auto controller = std::make_unique<PlayerControllerSystem>(
     m_window, m_input, m_transforms, m_bodies, m_players,
     *m_world, m_camera, m_config, *m_ui, m_session,
     m_cameraDirty, m_playerEntityId);
-  m_systems.add(std::move(m_playerController));
+  // Keep a non-owning pointer for direct access (e.g. pushPlayerOutOfBlocks).
+  m_playerController = controller.get();
+  m_systems.add(std::move(controller));
 }
 
 void Game::configureSaveWorld(const std::string& slotId, bool startFresh) {
@@ -325,6 +327,10 @@ void Game::update(float dt) {
         }
         if (groundY >= 0) {
           transform.position.y = static_cast<float>(groundY + 1);
+          // Push player upward if they spawned inside a block (e.g. bedrock
+          // at Y=0 or uneven terrain). Without this the player gets stuck
+          // because every movement axis collides.
+          if (m_playerController) m_playerController->pushPlayerOutOfBlocks();
           body.velocity.y = 0.0f;
           body.onGround = 1;
           m_spawnedToSurface = true;

@@ -124,7 +124,7 @@ private:
   TagStore m_friendlyTags;
 
   SystemManager<Game> m_systems;
-  std::unique_ptr<PlayerControllerSystem> m_playerController;
+  PlayerControllerSystem* m_playerController = nullptr;
   bool m_spawnedToSurface = false;
   bool m_cameraDirty = true;
   int32_t m_playerEntityId = 0;

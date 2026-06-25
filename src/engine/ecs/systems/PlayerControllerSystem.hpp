@@ -42,6 +42,13 @@ public:
   void update(Game& state, float dt) override;
 
 private:
+public:
+  /// Push the player entity upward until they are no longer colliding with blocks.
+  /// Called by Game after spawning the player to prevent them from being stuck
+  /// inside terrain.
+  void pushPlayerOutOfBlocks();
+
+private:
   void applyMouseLook(float dt);
   void applyMovement(float dt, cmp::Transform& transform, cmp::RigidBody& body, cmp::Player& player, const glm::vec3& moveDir);
   auto collidesAt(const glm::vec3& candidatePosition, const cmp::RigidBody& body) const -> bool;
