@@ -6,8 +6,8 @@
 namespace voxel {
 namespace daynight {
 
-// 20 minutes real-time = 1 full day/night cycle
-constexpr float kDefaultDayLengthSeconds = 1200.0f;
+// 1 hour real-time = 1 full day/night cycle (60 ticks/s × 3600s = 216,000 ticks)
+constexpr float kDefaultDayLengthSeconds = 3600.0f;
 constexpr float kDefaultNightLightMin = 0.15f;
 constexpr float kMiddayTimeSeconds = kDefaultDayLengthSeconds * 0.5f;
 constexpr float kMidnightTimeSeconds = 0.0f;

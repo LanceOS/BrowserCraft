@@ -146,16 +146,17 @@ void main() {
   float skyAmbient = u_ambientIntensity * v_skyExposure * 0.35;
 
   // ---- Combine lighting ----
-  float light = ambient + max(diffuse, skyAmbient);
-
-  // ---- Ambient occlusion (baked per-vertex) ----
+  // Three independent components, each multiplied by AO:
+  //   1. Hemisphere ambient (untinted)
+  //   2. Directional sunlight (tinted by sun color for warm sunrise/sunset)
+  //   3. Sky exposure (untinted, baked per-vertex openness to sky)
   float aoFactor = 1.0 - v_ao * 0.4;
-  light *= aoFactor;
 
-  // ---- Sun color tint ----
-  // At sunrise/sunset the sun color warms the lit faces.
-  vec3 sunLighting = u_sunColor * diffuse;
-  vec3 finalLighting = albedo.rgb * (light + sunLighting);
+  vec3 litColor = vec3(ambient * aoFactor)
+                + u_sunColor * (diffuse * aoFactor)
+                + vec3(skyAmbient * aoFactor);
+
+  vec3 finalLighting = albedo.rgb * litColor;
 
   // ---- Apply fog ----
   fragColor.rgb = mix(finalLighting, u_fogColor.rgb, v_fogFactor);
@@ -226,8 +227,9 @@ void main() {
 
   // ---- Horizon glow (sunset/sunrise band) ----
   float horizonBand = exp(-abs(viewDir.y) * 12.0);
-  vec3 horizonColor = mix(sunsetColor, sunriseColor,
-                          smoothstep(-1.0, 1.0, u_sunDir.x * 0.5 + 0.5));
+  // u_sunDir.x = +1 at sunrise (east), -1 at sunset (west)
+  float sunriseBlend = u_sunDir.x * 0.5 + 0.5; // 0=west(sunset), 1=east(sunrise)
+  vec3 horizonColor = mix(sunsetColor, sunriseColor, sunriseBlend);
   vec3 horizonGlowColor = horizonBand * horizonGlow * horizonColor * u_sunIntensity;
 
   // ---- Blend day/night sky ----
