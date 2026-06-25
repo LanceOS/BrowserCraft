@@ -208,12 +208,12 @@ struct DirInfo {
 };
 
 static constexpr DirInfo kDirs[6] = {
-  {{ 1, 0, 0}, 0, 1, 2,  1},  // X+ (right)
-  {{-1, 0, 0}, 0, 1, 2, -1},  // X- (left)
+  {{ 1, 0, 0}, 0, 2, 1,  1},  // X+ (right)  — uAxis=Z, vAxis=Y so texture V maps to world Y
+  {{-1, 0, 0}, 0, 2, 1, -1},  // X- (left)   — uAxis=Z, vAxis=Y so texture V maps to world Y
   {{ 0, 1, 0}, 1, 0, 2,  1},  // Y+ (top)
   {{ 0,-1, 0}, 1, 0, 2, -1},  // Y- (bottom)
-  {{ 0, 0, 1}, 2, 0, 1,  1},  // Z+ (front)
-  {{ 0, 0,-1}, 2, 0, 1, -1},  // Z- (back)
+  {{ 0, 0, 1}, 2, 0, 1,  1},  // Z+ (front)  — uAxis=X, vAxis=Y ✓
+  {{ 0, 0,-1}, 2, 0, 1, -1},  // Z- (back)   — uAxis=X, vAxis=Y ✓
 };
 
 namespace {

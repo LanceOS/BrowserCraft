@@ -196,6 +196,7 @@ add_executable(voxel_tests
   tests/test_save_manager.cpp
   tests/test_thread_pool.cpp
   tests/test_player_controller.cpp
+  tests/test_mesher.cpp
 )
 target_link_libraries(voxel_tests PRIVATE voxel_engine Catch2::Catch2WithMain)
 target_precompile_headers(voxel_tests PRIVATE src/pch.hpp)
