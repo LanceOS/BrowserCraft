@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BiomeData.hpp"
-#include "../../engine/workers/worldgen/SimplexNoise.hpp"
+#include "world/generation/SimplexNoise.hpp"
 #include <array>
 
 namespace voxel::biome {

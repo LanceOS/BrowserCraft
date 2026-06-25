@@ -1,9 +1,10 @@
 #include "Renderer.hpp"
 #include "shaders/ShaderSources.hpp"
+#include "world/daynight/DayNightCycle.hpp"
+#include "engine/assets/AssetManager.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
-
 namespace voxel {
 
 Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config)
@@ -12,7 +13,7 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
     m_skyShader(shaders::skyVertex, shaders::skyFragment),
     m_cameraUbo(0, CAMERA_BLOCK_FLOATS * sizeof(float)),
     m_timeUbo(2, TIME_BLOCK_FLOATS * sizeof(float)),
-    m_textures(16, 16, config.textureArrayLayers)
+    m_textures(16, 16, std::max(1, AssetManager::get().getTextureLayerCount()))
 {
   m_chunkShader.bindUniformBlock("CameraBlock", 0);
   m_chunkShader.bindUniformBlock("TimeBlock", 2);
@@ -35,6 +36,34 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
   gl::Disable(GL_CULL_FACE);
   gl::Enable(GL_BLEND);
   gl::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  // Initialize master persistently mapped buffers
+  int32_t rd = m_config.renderDistance;
+  int32_t poolCap = (rd * 2 + 1) * (rd * 2 + 1) + 8;
+  size_t vboSize = static_cast<size_t>(poolCap) * m_config.maxVertsPerChunk * m_config.vertexStrideFloats * sizeof(float);
+  size_t iboSize = static_cast<size_t>(poolCap) * m_config.maxIndicesPerChunk * sizeof(uint32_t);
+
+  m_masterVbo = std::make_unique<PersistentBuffer>(vboSize, GL_ARRAY_BUFFER);
+  m_masterIbo = std::make_unique<PersistentBuffer>(iboSize, GL_ELEMENT_ARRAY_BUFFER);
+  m_indirectBatcher = std::make_unique<IndirectBatcher>(poolCap);
+
+  gl::GenVertexArrays(1, &m_masterVao);
+  gl::BindVertexArray(m_masterVao);
+  gl::BindBuffer(GL_ARRAY_BUFFER, m_masterVbo->buffer());
+  gl::BindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_masterIbo->buffer());
+
+  size_t strideBytes = m_config.vertexStrideFloats * sizeof(float);
+  gl::EnableVertexAttribArray(0);
+  gl::VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(0));
+  gl::EnableVertexAttribArray(1);
+  gl::VertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(12));
+  gl::EnableVertexAttribArray(2);
+  gl::VertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(24));
+  gl::EnableVertexAttribArray(3);
+  gl::VertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(32));
+  gl::EnableVertexAttribArray(4);
+  gl::VertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(36));
+  gl::BindVertexArray(0);
 
   seedTextureArray();
   updateFramebufferSize();
@@ -64,6 +93,24 @@ void Renderer::render(World& world, const CameraView& camera,
   gl::Clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   uploadCameraBlock(camera, timeSeconds, daylightFactor, skyR, skyG, skyB);
+
+  // Upload time block
+  {
+    float sunAngle = daynight::computeSunAngle(timeSeconds);
+    float dayFac = daylightFactor;
+    float timeData[8] = {
+      timeSeconds,           // u_timeElapsed
+      sunAngle,              // u_sunAngle
+      dayFac,                // u_daylight
+      dayFac * 15.0f,        // u_lightLevel
+      std::sin(sunAngle),    // u_sunDir.x
+      std::cos(sunAngle),    // u_sunDir.y
+      0.3f,                  // u_sunDir.z
+      0.0f                   // u_pad
+    };
+    m_timeUbo.upload(timeData, sizeof(timeData));
+  }
+
   renderSky();
 
   // ---- Render chunks ----
@@ -71,105 +118,102 @@ void Renderer::render(World& world, const CameraView& camera,
   m_textures.bind(0);
   gl::Uniform1i(m_chunkShader.uniform("u_blockTextures"), 0);
 
-  m_frustum.extractFrom(camera.viewProjectionMatrix);
+  m_indirectBatcher->dispatchCulling(&camera.viewProjectionMatrix[0][0]);
 
-  struct VisibleChunk {
-    std::string key;
-    ChunkMesh* mesh;
-    int32_t chunkX, chunkZ;
-  };
-  std::vector<VisibleChunk> visible;
+  // Re-bind chunk shader after dispatchCulling switches to compute program
+  m_chunkShader.use();
 
-  world.forEachEntry([&](const std::string& key, const Chunk& chunk) {
-    auto it = m_meshes.find(key);
-    if (it == m_meshes.end() || !it->second.valid()) return;
-
-    auto box = AABB::fromChunk(
-      chunk.chunkX, chunk.chunkZ,
-      static_cast<float>(m_config.chunkSize),
-      static_cast<float>(m_config.worldHeight),
-      static_cast<float>(m_config.chunkSize));
-
-    if (!m_frustum.intersectsAABB(box.minX, box.minY, box.minZ,
-                                   box.maxX, box.maxY, box.maxZ)) return;
-
-    visible.push_back({key, &it->second, chunk.chunkX, chunk.chunkZ});
-  });
-
-  // Sort far-to-near for correct transparent blending
-  int32_t camCX = static_cast<int32_t>(std::floor(camera.position.x / m_config.chunkSize));
-  int32_t camCZ = static_cast<int32_t>(std::floor(camera.position.z / m_config.chunkSize));
-  std::sort(visible.begin(), visible.end(), [camCX, camCZ](const auto& a, const auto& b) {
-    int32_t da = (a.chunkX - camCX) * (a.chunkX - camCX) + (a.chunkZ - camCZ) * (a.chunkZ - camCZ);
-    int32_t db = (b.chunkX - camCX) * (b.chunkX - camCX) + (b.chunkZ - camCZ) * (b.chunkZ - camCZ);
-    return db < da; // far first
-  });
+  gl::BindVertexArray(m_masterVao);
 
   // Pass 1: opaque only
   gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
   gl::DepthMask(GL_TRUE);
   gl::DepthFunc(GL_LESS);
-  for (auto& vc : visible) {
-    gl::Uniform3f(m_chunkShader.uniform("u_chunkTranslation"),
-                  static_cast<float>(vc.chunkX) * m_config.chunkSize, 0.0f,
-                  static_cast<float>(vc.chunkZ) * m_config.chunkSize);
-    vc.mesh->draw();
-  }
+  m_indirectBatcher->drawIndirect();
 
   // Pass 2: transparent only
   gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
   gl::DepthMask(GL_FALSE);
   gl::DepthFunc(GL_LEQUAL);
-  for (auto& vc : visible) {
-    gl::Uniform3f(m_chunkShader.uniform("u_chunkTranslation"),
-                  static_cast<float>(vc.chunkX) * m_config.chunkSize, 0.0f,
-                  static_cast<float>(vc.chunkZ) * m_config.chunkSize);
-    vc.mesh->draw();
-  }
+  m_indirectBatcher->drawIndirect();
+
+  gl::BindVertexArray(0);
 
   gl::DepthMask(GL_TRUE);
   gl::DepthFunc(GL_LESS);
 }
 
 void Renderer::dispose() {
-  m_meshes.clear();
   if (m_skyVao) gl::DeleteVertexArrays(1, &m_skyVao);
   if (m_skyVbo) gl::DeleteBuffers(1, &m_skyVbo);
   m_skyVao = 0;
   m_skyVbo = 0;
+
+  if (m_masterVao) gl::DeleteVertexArrays(1, &m_masterVao);
+  m_masterVao = 0;
+  m_masterVbo.reset();
+  m_masterIbo.reset();
+  m_indirectBatcher.reset();
 }
 
 // ---- Private ----
 
 void Renderer::syncChunks(World& world) {
-  // Remove meshes for chunks no longer in world
-  for (auto it = m_meshes.begin(); it != m_meshes.end();) {
-    if (!world.hasChunkKey(it->first)) {
-      it = m_meshes.erase(it);
-    } else {
-      ++it;
-    }
-  }
+  std::vector<bool> activeSlots(m_indirectBatcher->capacity(), false);
 
   // Upload new/updated meshes
   world.forEachEntry([&](const std::string& key, Chunk& chunk) {
-    if (chunk.state != ChunkState::MeshReady) return;
-    if (chunk.indexCount == 0 || chunk.vertexCount == 0) {
-      world.markUploaded(chunk);
+    auto slot = world.getChunkSlot(chunk);
+    // @see notes/renderer-slot-index-bounds.md
+    if (slot.slotIndex < 0 || slot.slotIndex >= static_cast<int32_t>(m_indirectBatcher->capacity())) {
       return;
     }
 
-    auto& mesh = m_meshes[key];
-    auto slot = world.getChunkSlot(chunk);
-    mesh.upload(
-      slot.vertices,
-      static_cast<size_t>(chunk.vertexCount) * VERTEX_STRIDE_FLOATS,
-      slot.indices,
-      chunk.indexCount,
-      VERTEX_STRIDE_FLOATS
-    );
-    world.markUploaded(chunk);
+    activeSlots[slot.slotIndex] = true;
+
+    if (chunk.state == ChunkState::MeshReady) {
+      if (chunk.indexCount > 0 && chunk.vertexCount > 0) {
+        const int32_t stride = m_config.vertexStrideFloats;
+
+        size_t vboOffset = static_cast<size_t>(slot.slotIndex) * m_config.maxVertsPerChunk * stride * sizeof(float);
+        size_t iboOffset = static_cast<size_t>(slot.slotIndex) * m_config.maxIndicesPerChunk * sizeof(uint32_t);
+        int32_t baseVertex = slot.slotIndex * m_config.maxVertsPerChunk;
+
+        // Directly copy vertices and indices to the persistently mapped GPU memory
+        std::memcpy(static_cast<uint8_t*>(m_masterVbo->mappedPtr()) + vboOffset,
+                    slot.vertices, static_cast<size_t>(chunk.vertexCount) * stride * sizeof(float));
+        std::memcpy(static_cast<uint8_t*>(m_masterIbo->mappedPtr()) + iboOffset,
+                    slot.indices, chunk.indexCount * sizeof(uint32_t));
+
+        ChunkCullData cullData{};
+        cullData.min[0] = static_cast<float>(chunk.chunkX * m_config.chunkSize);
+        cullData.min[1] = 0.0f;
+        cullData.min[2] = static_cast<float>(chunk.chunkZ * m_config.chunkSize);
+        cullData.min[3] = 1.0f;
+        cullData.max[0] = cullData.min[0] + static_cast<float>(m_config.chunkSize);
+        cullData.max[1] = static_cast<float>(m_config.worldHeight);
+        cullData.max[2] = cullData.min[2] + static_cast<float>(m_config.chunkSize);
+        cullData.max[3] = 1.0f;
+        cullData.indexCount = chunk.indexCount;
+        cullData.firstIndex = static_cast<uint32_t>(iboOffset / sizeof(uint32_t));
+        cullData.baseVertex = static_cast<uint32_t>(baseVertex);
+        cullData.slotIndex = static_cast<uint32_t>(slot.slotIndex);
+        m_indirectBatcher->updateChunkData(slot.slotIndex, cullData);
+      } else {
+        ChunkCullData emptyData{};
+        m_indirectBatcher->updateChunkData(slot.slotIndex, emptyData);
+      }
+      world.markUploaded(chunk);
+    }
   });
+
+  // Zero out slots that are no longer active
+  for (uint32_t i = 0; i < m_indirectBatcher->capacity(); ++i) {
+    if (!activeSlots[i]) {
+       ChunkCullData emptyData{};
+       m_indirectBatcher->updateChunkData(i, emptyData);
+    }
+  }
 }
 
 void Renderer::uploadCameraBlock(const CameraView& camera, float timeSeconds,
@@ -221,23 +265,15 @@ void Renderer::renderSky() {
 }
 
 void Renderer::seedTextureArray() {
-  // Create placeholder solid-color textures for each layer.
-  // In the full engine, TexturePipeline generates these from assets.
-  int32_t layers = m_config.textureArrayLayers;
-  std::vector<uint8_t> pixels(16 * 16 * 4);
+  int32_t layers = AssetManager::get().getTextureLayerCount();
+  if (layers == 0) return;
 
-  // Simple palette for different texture indices
+  const auto& pixelData = AssetManager::get().getTextureData();
+  size_t bytesPerLayer = 16 * 16 * 4;
+
   for (int32_t layer = 0; layer < layers; ++layer) {
-    uint8_t r = static_cast<uint8_t>((layer * 37 + 80) % 256);
-    uint8_t g = static_cast<uint8_t>((layer * 53 + 120) % 256);
-    uint8_t b = static_cast<uint8_t>((layer * 71 + 160) % 256);
-    for (int i = 0; i < 16 * 16; ++i) {
-      pixels[i * 4 + 0] = r;
-      pixels[i * 4 + 1] = g;
-      pixels[i * 4 + 2] = b;
-      pixels[i * 4 + 3] = 255;
-    }
-    m_textures.uploadLayer(layer, pixels.data(), 16, 16);
+    const uint8_t* layerData = pixelData.data() + (layer * bytesPerLayer);
+    m_textures.uploadLayer(layer, layerData, 16, 16);
   }
   m_textures.generateMipmaps();
 }

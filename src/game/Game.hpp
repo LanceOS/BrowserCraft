@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GLFW/glfw3.h>
+#include <random>
 #include <memory>
 #include <string>
 #include <thread>
@@ -18,11 +19,12 @@
 #include "engine/audio/AudioEngine.hpp"
 #include "engine/threading/WorkerThreadPool.hpp"
 #include "engine/save/SaveManager.hpp"
-#include "engine/workers/worldgen/WorldGenPipeline.hpp"
+#include "world/generation/WorldGenPipeline.hpp"
 #include "world/BlockRegistry.hpp"
 #include "world/World.hpp"
 #include "engine/render/Renderer.hpp"
 #include "engine/render/CameraView.hpp"
+#include "world/daynight/DayNightCycle.hpp"
 #include "ui/UIManager.hpp"
 #include "game/GameSession.hpp"
 #include "game/BlockInteractionAudio.hpp"
@@ -64,9 +66,18 @@ public:
 private:
   void initECS();
   void initSystems();
+  void syncPlayerWithCamera();
   void createPlayer();
+  void applyPlayerControls(float dt);
+  auto playerIndex() const -> int32_t;
+  auto groundHeightAt(float worldX, float worldZ, int32_t startY) const -> int32_t;
+  auto collidesAt(const glm::vec3& candidatePosition, const cmp::RigidBody& body) const -> bool;
+  void syncCameraFromPlayer();
+  void configureSaveWorld(const std::string& slotId, bool startFresh);
+  void startWorld(GameMode mode, const std::string& slotId, bool startFresh);
   void updateCamera();
   void processGenJobs();
+  auto makeRandomWorldSeed() -> uint32_t;
   void processMeshJobs();
 
   GLFWwindow* m_window;
@@ -90,9 +101,12 @@ private:
   std::unique_ptr<WorkerThreadPool> m_genPool;
   std::unique_ptr<WorkerThreadPool> m_meshPool;
   WorldGenPipeline m_worldGenPipeline;
+  std::mt19937 m_worldSeedRng;
+  daynight::DayNightCycle m_dayNightCycle;
 
   // Save
   std::unique_ptr<SaveManager> m_saveManager;
+  std::string m_saveDir;
 
   // ECS
   EntityManager m_entityManager{1 << 12};
@@ -106,6 +120,7 @@ private:
   TagStore m_friendlyTags;
 
   SystemManager<Game> m_systems;
+  bool m_spawnedToSurface = false;
   int32_t m_playerEntityId = 0;
 };
 

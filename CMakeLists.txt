@@ -55,10 +55,12 @@ add_library(voxel_engine STATIC
   src/engine/alloc/SharedPool.cpp
   src/engine/ecs/EntityManager.cpp
   src/engine/ecs/SystemManager.cpp
+  src/engine/assets/AssetManager.cpp
   src/world/BlockRegistry.cpp
   src/world/Chunk.cpp
   src/world/ChunkManager.cpp
   src/world/World.cpp
+  src/world/daynight/DayNightCycle.cpp
   src/engine/render/gl_core.cpp
   src/engine/render/ShaderProgram.cpp
   src/engine/render/VertexBuffer.cpp
@@ -72,10 +74,11 @@ add_library(voxel_engine STATIC
   src/engine/audio/AudioEngine.cpp
   src/engine/threading/WorkerThreadPool.cpp
   src/engine/save/SaveManager.cpp
-  src/engine/workers/worldgen/SimplexNoise.cpp
-  src/engine/workers/worldgen/CaveCarver.cpp
-  src/engine/workers/worldgen/OreDistributor.cpp
-  src/engine/workers/worldgen/WorldGenPipeline.cpp
+  src/world/generation/SimplexNoise.cpp
+  src/world/generation/CaveCarver.cpp
+  src/world/generation/OreDistributor.cpp
+  src/world/generation/WorldGenPipeline.cpp
+  src/engine/workers/mesher/GreedyMesher.cpp
   src/content/biomes/BiomeSampler.cpp
   src/game/GameSession.cpp
   src/game/Game.cpp

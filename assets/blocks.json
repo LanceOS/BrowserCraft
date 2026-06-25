@@ -1,0 +1,92 @@
+{
+    "textures": {
+        "grass_top": "grass_top.png",
+        "grass_side": "grass_side.png",
+        "dirt": "dirt.png",
+        "stone": "stone.png"
+    },
+    "blocks": [
+        {
+            "id": 1,
+            "name": "Grass",
+            "is_opaque": true,
+            "faces": {
+                "top": "grass_top",
+                "bottom": "dirt",
+                "side": "grass_side"
+            }
+        },
+        {
+            "id": 2,
+            "name": "Dirt",
+            "is_opaque": true,
+            "faces": {
+                "all": "dirt"
+            }
+        },
+        {
+            "id": 3,
+            "name": "Stone",
+            "is_opaque": true,
+            "faces": {
+                "all": "stone"
+            }
+        },
+        {
+            "id": 4,
+            "name": "Sand",
+            "is_opaque": true,
+            "faces": {
+                "all": "dirt"
+            }
+        },
+        {
+            "id": 7,
+            "name": "Bedrock",
+            "is_opaque": true,
+            "faces": {
+                "all": "stone"
+            }
+        },
+        {
+            "id": 8,
+            "name": "Water",
+            "is_opaque": false,
+            "faces": {
+                "all": "grass_side"
+            }
+        },
+        {
+            "id": 10,
+            "name": "Mossy Stone",
+            "is_opaque": true,
+            "faces": {
+                "all": "stone"
+            }
+        },
+        {
+            "id": 14,
+            "name": "Coal Ore",
+            "is_opaque": true,
+            "faces": {
+                "all": "stone"
+            }
+        },
+        {
+            "id": 15,
+            "name": "Iron Ore",
+            "is_opaque": true,
+            "faces": {
+                "all": "stone"
+            }
+        },
+        {
+            "id": 16,
+            "name": "Gold Ore",
+            "is_opaque": true,
+            "faces": {
+                "all": "stone"
+            }
+        }
+    ]
+}

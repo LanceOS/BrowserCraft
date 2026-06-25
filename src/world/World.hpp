@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <optional>
 #include <functional>
+#include <utility>
 
 namespace voxel {
 
@@ -80,8 +81,11 @@ public:
   /// Check if a world position has a liquid block.
   [[nodiscard]] auto isFluid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool;
 
-  /// Check if the world is ready (center chunk has mesh).
+  /// Check if the world is fully render-ready (center chunk mesh has been uploaded).
   [[nodiscard]] auto isReady() const -> bool;
+
+  /// Check if the world has terrain data for the center chunk for gameplay/spawn logic.
+  [[nodiscard]] auto hasTerrain() const -> bool;
 
   /// Attach a save manager for loading/saving chunks.
   void attachSaveManager(void* saveManager) { m_saveManager = saveManager; }
@@ -91,6 +95,7 @@ public:
 
   /// Get chunk by slot index.
   [[nodiscard]] auto getChunkBySlotIndex(int32_t slotIndex) const -> const Chunk*;
+  [[nodiscard]] auto getChunkBySlotIndex(int32_t slotIndex) -> Chunk*;
 
   /// Get chunk slot view.
   [[nodiscard]] auto getChunkSlot(const Chunk& chunk) -> ChunkSlot;
@@ -100,6 +105,8 @@ public:
 
   /// Mark a chunk as uploaded to GPU.
   void markUploaded(const Chunk& chunk);
+  /// Remove all currently loaded chunks and reset world state.
+  void clear();
 
   /// Signal that a world-gen job completed.
   void onWorldGenDone(int32_t slotIndex);
@@ -133,6 +140,12 @@ private:
   void ensureVisibleRadius(int32_t centerCX, int32_t centerCZ);
   void unloadFarChunks(int32_t centerCX, int32_t centerCZ);
   void pumpQueues();
+  struct PendingChunkJob {
+    int32_t slotIndex;
+    int32_t chunkX;
+    int32_t chunkZ;
+  };
+  [[nodiscard]] auto resolvePendingChunk(const PendingChunkJob& job) -> Chunk*;
   void requestRemesh(Chunk& chunk);
   void markChunkDirty(int32_t cx, int32_t cz);
   void requestNeighborRemeshes(const Chunk& chunk);
@@ -140,6 +153,7 @@ private:
   void requestNeighborRemesh(const Chunk& chunk, int32_t dx, int32_t dz);
 
   [[nodiscard]] auto chunkHasVoxelData(const Chunk& chunk) const -> bool;
+  [[nodiscard]] auto chunkHasMeshes(const Chunk& chunk) const -> bool;
   [[nodiscard]] auto getBlockId(int32_t worldX, int32_t worldY, int32_t worldZ) const -> uint8_t;
 
   SharedPool& m_pool;
@@ -147,9 +161,15 @@ private:
   const GameConfig& m_config;
 
   ChunkManager m_chunks;
-  std::unordered_map<int32_t, Chunk*> m_slotToChunk;
-  std::vector<Chunk*> m_pendingGen;
-  std::vector<Chunk*> m_pendingMesh;
+  // @see notes/chunk-slot-mapping-stability.md
+  struct ChunkSlotCoord {
+    int32_t cx;
+    int32_t cz;
+  };
+  std::unordered_map<int32_t, ChunkSlotCoord> m_slotToChunk;
+  // @see notes/chunk-pending-queue-stability.md
+  std::vector<PendingChunkJob> m_pendingGen;
+  std::vector<PendingChunkJob> m_pendingMesh;
 
   int32_t m_centerChunkX = 0;
   int32_t m_centerChunkZ = 0;

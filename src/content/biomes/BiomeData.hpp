@@ -14,7 +14,7 @@ struct BiomeSurfaceRule {
 };
 
 inline constexpr BiomeSurfaceRule PlainsBiome    {"plains",    2, 3, 4,  0.0f};
-inline constexpr BiomeSurfaceRule DesertBiome    {"desert",    4, 4, 4, -1.5f};
+inline constexpr BiomeSurfaceRule DesertBiome    {"desert",    2, 2, 4, -1.5f};
 inline constexpr BiomeSurfaceRule ForestBiome    {"forest",    2, 3, 5,  1.5f};
 inline constexpr BiomeSurfaceRule MountainsBiome {"mountains", 1, 1, 2,  8.0f};
 inline constexpr BiomeSurfaceRule SwampBiome     {"swamp",     3, 3, 6, -2.0f};

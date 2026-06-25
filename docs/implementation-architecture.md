@@ -340,7 +340,13 @@ export default [
 
 **Rule:** If you are adding a new *item*, you should write zero logic code — only data in an array. If you are adding a new *mechanic* (e.g., "items can be dyed"), you write logic once and add data for each dyeable item.
 
-### 4.2 The Switch Statement Rule
+### 4.2 Data-Driven Assets
+
+Visual assets (textures, materials, models) must be completely decoupled from C++ code. The engine should never use hardcoded enumerations (e.g., `enum class Tex`) or hardcoded color generation (e.g., `makeLayer()`) for textures.
+
+Instead, a centralized **Asset Manager** should load these at startup from external JSON/YAML definitions and PNG files. Adding a new block texture should require dropping a PNG into an `assets/` folder and updating a JSON file, requiring zero C++ recompilation.
+
+### 4.3 The Switch Statement Rule
 
 Switch statements on type enums are a debt magnet. Every new enum value requires updating every switch.
 
@@ -501,11 +507,11 @@ Cold Path (on event, <50ms):
 
 ### 5.2 Optimization Rules by Path
 
-| Path | Allocation Budget | Branching | Pattern |
-|:-----|:-----------------|:----------|:--------|
-| Hot | Zero allocations | Minimize branches | SoA iteration, precomputed LUTs |
-| Warm | Zero allocations | Some branches OK | SoA iteration |
-| Cold | Allocation OK | Any branches OK | Factory pattern, composition |
+| Path | Allocation Budget | Branching | Pattern | Memory / CPU specific |
+|:-----|:-----------------|:----------|:--------|:----------------------|
+| Hot | Zero allocations | Minimize branches | SoA iteration, precomputed LUTs | `std::pmr` bump allocators, AVX2 SIMD intrinsics |
+| Warm | Zero allocations | Some branches OK | SoA iteration | `std::pmr` object pools |
+| Cold | Allocation OK | Any branches OK | Factory pattern, composition | Standard heap allocation OK |
 
 ### 5.3 Precomputed Lookup Tables
 

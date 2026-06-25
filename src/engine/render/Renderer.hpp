@@ -3,7 +3,8 @@
 #include "ShaderProgram.hpp"
 #include "UniformBuffer.hpp"
 #include "Texture2DArray.hpp"
-#include "ChunkMesh.hpp"
+#include "PersistentBuffer.hpp"
+#include "IndirectBatcher.hpp"
 #include "CameraView.hpp"
 #include "../math/Frustum.hpp"
 #include "../math/AABB.hpp"
@@ -64,8 +65,11 @@ private:
   uint32_t m_skyVao = 0;
   uint32_t m_skyVbo = 0;
 
-  // Per-chunk meshes keyed by "chunkX:chunkZ"
-  std::unordered_map<std::string, ChunkMesh> m_meshes;
+  // Master VAO and persistently mapped buffers for all chunks
+  uint32_t m_masterVao = 0;
+  std::unique_ptr<PersistentBuffer> m_masterVbo;
+  std::unique_ptr<PersistentBuffer> m_masterIbo;
+  std::unique_ptr<IndirectBatcher> m_indirectBatcher;
 
   int32_t m_fbWidth = 1;
   int32_t m_fbHeight = 1;

@@ -32,7 +32,22 @@ layout(location = 2) in vec2 a_uv;
 layout(location = 3) in float a_texLayer;
 layout(location = 4) in float a_lightData;
 
-uniform vec3 u_chunkTranslation;
+struct ChunkCullData {
+    vec4 min;
+    vec4 max;
+    uint indexCount;
+    uint firstIndex;
+    uint baseVertex;
+    uint slotIndex;
+    uint pad1;
+    uint pad2;
+    uint pad3;
+    uint pad4;
+};
+
+layout(std430, binding = 0) readonly buffer InputChunks {
+    ChunkCullData chunks[];
+};
 
 out vec2 v_uv;
 out vec3 v_normal;
@@ -43,7 +58,10 @@ out float v_blockLight;
 out float v_ao;
 
 void main() {
-  vec3 worldPos = a_pos + u_chunkTranslation;
+  // @see notes/indirect-draw-base-instance.md
+  uint chunkIndex = gl_BaseInstance + uint(gl_InstanceID);
+  vec3 chunkTranslation = chunks[int(chunkIndex)].min.xyz;
+  vec3 worldPos = a_pos + chunkTranslation;
   vec4 clip = u_projView * vec4(worldPos, 1.0);
   gl_Position = clip;
 
@@ -110,7 +128,8 @@ void main() {
   }
 
   vec3 normal = normalize(v_normal);
-  float NdotL = max(dot(normal, u_sunDir), 0.0);
+  vec3 sunDir = normalize(u_sunDir);
+  float NdotL = max(dot(normal, sunDir), 0.0);
   float NdotU = max(dot(normal, vec3(0.0, 1.0, 0.0)), 0.0);
 
   float ambient = 0.05 + 0.15 * NdotU;
@@ -123,7 +142,8 @@ void main() {
   light = mix(0.15, 1.0, light);
 
   albedo.rgb *= light;
-  albedo.rgb *= (1.0 - v_ao * 0.4);
+  float aoFactor = clamp(1.0 - v_ao, 0.0, 1.0);
+  albedo.rgb *= aoFactor;
 
   fragColor.rgb = mix(albedo.rgb, u_fogColor.rgb, v_fogFactor);
   fragColor.a = albedo.a;
@@ -181,11 +201,71 @@ void main() {
   vec3 daySky = mix(daySkyBot, daySkyTop, skyGradient);
   vec3 sky = mix(nightSky, daySky, u_daylight);
 
-  float sunDot = max(dot(viewDir, u_sunDir), 0.0);
+  vec3 sunDir = normalize(u_sunDir);
+  float sunDot = max(dot(viewDir, sunDir), 0.0);
   float sunGlow = pow(sunDot, 600.0) * u_daylight;
 
   fragColor.rgb = sky + sunGlow * vec3(1.0, 0.9, 0.6);
   fragColor.a = 1.0;
+}
+)glsl";
+
+inline const char* cullingCompute = R"glsl(#version 460 core
+
+layout(local_size_x = 64) in;
+
+struct ChunkCullData {
+    vec4 min;
+    vec4 max;
+    uint indexCount;
+    uint firstIndex;
+    uint baseVertex;
+    uint slotIndex;
+    uint pad1;
+    uint pad2;
+    uint pad3;
+    uint pad4;
+};
+
+struct DrawCommand {
+    uint count;
+    uint instanceCount;
+    uint firstIndex;
+    uint baseVertex;
+    uint baseInstance;
+};
+
+layout(std430, binding = 0) readonly buffer InputChunks {
+    ChunkCullData chunks[];
+};
+
+layout(std430, binding = 1) writeonly buffer OutputCommands {
+    DrawCommand commands[];
+};
+
+uniform uint u_maxChunks;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    // @see notes/renderer-culling-fallback.md
+    if (idx >= u_maxChunks) return;
+
+    ChunkCullData chunk = chunks[idx];
+    commands[idx].count = 0;
+    commands[idx].instanceCount = 0;
+    commands[idx].firstIndex = 0;
+    commands[idx].baseVertex = 0;
+    commands[idx].baseInstance = 0;
+
+    if (chunk.indexCount == 0) {
+        return;
+    }
+
+    commands[idx].count = chunk.indexCount;
+    commands[idx].instanceCount = 1;
+    commands[idx].firstIndex = chunk.firstIndex;
+    commands[idx].baseVertex = chunk.baseVertex;
+    commands[idx].baseInstance = chunk.slotIndex;
 }
 )glsl";
 

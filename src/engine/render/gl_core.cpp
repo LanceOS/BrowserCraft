@@ -42,6 +42,10 @@ PFN_BufferData BufferData;
 PFN_BufferSubData BufferSubData;
 PFN_DeleteBuffers DeleteBuffers;
 PFN_BindBufferBase BindBufferBase;
+PFN_CreateBuffers CreateBuffers;
+PFN_NamedBufferStorage NamedBufferStorage;
+PFN_MapNamedBufferRange MapNamedBufferRange;
+PFN_UnmapNamedBuffer UnmapNamedBuffer;
 
 PFN_GenTextures GenTextures;
 PFN_BindTexture BindTexture;
@@ -54,6 +58,11 @@ PFN_DeleteTextures DeleteTextures;
 
 PFN_DrawElements DrawElements;
 PFN_DrawArrays DrawArrays;
+PFN_DrawElementsBaseVertex DrawElementsBaseVertex;
+PFN_MultiDrawElementsIndirect MultiDrawElementsIndirect;
+
+PFN_DispatchCompute DispatchCompute;
+PFN_MemoryBarrier MemoryBarrier;
 
 PFN_Enable Enable;
 PFN_Disable Disable;
@@ -98,6 +107,10 @@ void loadGLFunctions() {
   LOAD(BufferSubData);
   LOAD(DeleteBuffers);
   LOAD(BindBufferBase);
+  LOAD(CreateBuffers);
+  LOAD(NamedBufferStorage);
+  LOAD(MapNamedBufferRange);
+  LOAD(UnmapNamedBuffer);
 
   LOAD(GenTextures);
   LOAD(BindTexture);
@@ -110,6 +123,10 @@ void loadGLFunctions() {
 
   LOAD(DrawElements);
   LOAD(DrawArrays);
+  LOAD(DrawElementsBaseVertex);
+  LOAD(MultiDrawElementsIndirect);
+  LOAD(DispatchCompute);
+  LOAD(MemoryBarrier);
 
   LOAD(Enable);
   LOAD(Disable);
