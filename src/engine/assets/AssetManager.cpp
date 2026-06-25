@@ -52,7 +52,7 @@ void AssetManager::loadAssets() {
     const std::string blocksFile = (std::filesystem::path(assetRoot) / "blocks.json").string();
 
     // Air is always ID 0
-    m_airDef = {0, "Air", false, -1, -1, -1};
+    m_airDef = {0, "Air", false, false, false, 0, 0.0f, 0.0f, -1, -1, -1};
     m_blockDefs[0] = m_airDef;
 
     std::ifstream file(blocksFile);
@@ -89,9 +89,21 @@ void AssetManager::loadAssets() {
                 
                 // Procedural generation fallback
                 uint32_t color = 0xFFFFFFFF;
+                bool hasTransparency = false;
                 if (texName.find("grass") != std::string::npos) color = 0xFF228B22; // Green
                 else if (texName.find("dirt") != std::string::npos) color = 0xFF13458B; // Brown (ABGR)
                 else if (texName.find("stone") != std::string::npos) color = 0xFF808080; // Gray
+                else if (texName.find("oak_log_top") != std::string::npos) color = 0xFF8B6914; // Brown-orange
+                else if (texName.find("oak_log_side") != std::string::npos) color = 0xFF5C4033; // Dark brown
+                else if (texName.find("oak_planks") != std::string::npos) color = 0xFFCD853F; // Wood planks
+                else if (texName.find("oak_leaves") != std::string::npos) { color = 0xFF1E8B1E; hasTransparency = true; } // Green foliage
+                else if (texName.find("water") != std::string::npos) { color = 0xFF1E3A8A; hasTransparency = true; } // Blue water
+                else if (texName.find("lava") != std::string::npos) { color = 0xFFFF4500; } // Orange-red lava
+                else if (texName.find("coal_ore") != std::string::npos) color = 0xFF333333; // Dark gray
+                else if (texName.find("iron_ore") != std::string::npos) color = 0xFFD4A574; // Sandy brown
+                else if (texName.find("gold_ore") != std::string::npos) color = 0xFFFFD700; // Gold
+                else if (texName.find("diamond_ore") != std::string::npos) color = 0xFF4FC3F7; // Cyan-blue
+                else if (texName.find("powerstone_ore") != std::string::npos) color = 0xFF9B30FF; // Purple
 
                 std::mt19937 rng(std::hash<std::string>{}(texName));
                 std::uniform_int_distribution<int> dist(-15, 15);
@@ -100,10 +112,11 @@ void AssetManager::loadAssets() {
                     int r = std::clamp<int>((color & 0xFF) + dist(rng), 0, 255);
                     int g = std::clamp<int>(((color >> 8) & 0xFF) + dist(rng), 0, 255);
                     int b = std::clamp<int>(((color >> 16) & 0xFF) + dist(rng), 0, 255);
+                    int a = hasTransparency ? 200 : 255;
                     imgData[i * 4 + 0] = r;
                     imgData[i * 4 + 1] = g;
                     imgData[i * 4 + 2] = b;
-                    imgData[i * 4 + 3] = 255;
+                    imgData[i * 4 + 3] = a;
                 }
             }
             if (data) stbi_image_free(data);
@@ -120,6 +133,11 @@ void AssetManager::loadAssets() {
             def.id = blockJson["id"].get<uint8_t>();
             def.name = blockJson["name"].get<std::string>();
             def.is_opaque = blockJson.value("is_opaque", true);
+            def.is_liquid = blockJson.value("is_liquid", false);
+            def.is_foliage = blockJson.value("is_foliage", false);
+            def.light_emission = blockJson.value("light_emission", 0);
+            def.hardness = blockJson.value("hardness", 1.5f);
+            def.blast_resistance = blockJson.value("blast_resistance", 6.0f);
 
             auto getTexIndex = [&](const std::string& name) -> int {
                 auto it = textureIndices.find(name);

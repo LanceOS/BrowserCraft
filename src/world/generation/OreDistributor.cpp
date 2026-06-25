@@ -6,10 +6,11 @@ namespace voxel {
 
 struct OreConfig { uint8_t blockId; int32_t minY, maxY, veinsPerChunk, veinSize; };
 static constexpr OreConfig ORE_CONFIGS[] = {
-  {BlockId::COAL_ORE, 5, 64, 20, 8},
-  {BlockId::IRON_ORE, 5, 32, 12, 6},
-  {BlockId::GOLD_ORE, 5, 16,  4, 4},
-  // Diamond ore not yet registered in blocks.json — skip for now
+  {BlockId::COAL_ORE,      5,  64, 20, 8},
+  {BlockId::IRON_ORE,      5,  32, 12, 6},
+  {BlockId::GOLD_ORE,      5,  16,  4, 4},
+  {BlockId::DIAMOND_ORE,   1,  12,  2, 3},
+  {BlockId::POWERSTONE_ORE, 5,  32,  6, 5},
 };
 
 OreDistributor::OreDistributor(uint32_t) {}

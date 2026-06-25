@@ -42,6 +42,8 @@ struct BlockDefinition {
   BlockTextures textures;
   BlockMaterial material;
   BlockAABB collision = FULL_BLOCK_AABB;
+  float hardness = 1.5f;
+  float blastResistance = 6.0f;
 };
 
 } // namespace voxel

@@ -92,6 +92,11 @@ static void registerVanillaBlocks(BlockRegistry& blocks) {
     if (!def.is_opaque) {
         bd.material.transparent = true;
     }
+    bd.material.liquid = def.is_liquid;
+    bd.material.foliage = def.is_foliage;
+    bd.material.lightEmission = def.light_emission;
+    bd.hardness = def.hardness;
+    bd.blastResistance = def.blast_resistance;
     blocks.register_(std::move(bd));
   }
 }

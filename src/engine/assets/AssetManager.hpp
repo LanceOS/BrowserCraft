@@ -12,6 +12,11 @@ struct BlockDef {
     uint8_t id;
     std::string name;
     bool is_opaque;
+    bool is_liquid = false;
+    bool is_foliage = false;
+    uint8_t light_emission = 0;
+    float hardness = 1.5f;
+    float blast_resistance = 6.0f;
     int tex_top;
     int tex_bottom;
     int tex_side;
