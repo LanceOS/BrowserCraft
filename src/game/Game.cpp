@@ -131,8 +131,9 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
 
   // Load saved settings (apply to UI after it's constructed below)
   auto saved = m_saveOrchestrator->loadSettings();
-  m_config.renderDistance = saved.renderDistance;
-  m_session.setRenderDistance(saved.renderDistance);
+  int32_t savedRd = std::clamp(saved.renderDistance, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
+  m_config.renderDistance = savedRd;
+  m_session.setRenderDistance(savedRd);
 
   m_audioRegistry.seedBuiltinSounds();
   m_blockAudio = std::make_unique<BlockInteractionAudio>(m_audioEngine, m_audioRegistry, m_blocks);
@@ -202,13 +203,24 @@ void Game::applyRenderDistance(int32_t newRd) {
   m_worldController.reset();
   m_pool.reset();
 
-  // 4. Update config and session
-  m_config.renderDistance = newRd;
-  m_session.setRenderDistance(newRd);
-  m_saveOrchestrator->settings().setInt("renderDistance", newRd);
+  // 4. Compute pool capacity, capping at a safe maximum to avoid OOM.
+  //    Each slot is ~0.87 MB at current vertex/index limits.
+  constexpr int32_t MAX_POOL_SLOTS = 2048; // ~1.8 GB total (pool + VBO + IBO)
+  int32_t desiredPoolCap = (newRd * 2 + 1) * (newRd * 2 + 1) + 8;
+  int32_t poolCap = std::min(desiredPoolCap, MAX_POOL_SLOTS);
 
-  // 5. Recreate pool with new capacity
-  int32_t poolCap = (newRd * 2 + 1) * (newRd * 2 + 1) + 8;
+  // Recompute effective render distance from the capped pool capacity.
+  int32_t effectiveRd = static_cast<int32_t>(
+    (std::sqrt(static_cast<double>(poolCap - 8)) - 1.0) / 2.0);
+  effectiveRd = std::clamp(effectiveRd, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
+
+  // 5. Update config and session with the effective (capped) render distance.
+  m_config.renderDistance = effectiveRd;
+  m_session.setRenderDistance(effectiveRd);
+  m_saveOrchestrator->settings().setInt("renderDistance", effectiveRd);
+  m_ui->setRenderDistance(effectiveRd);
+
+  // 6. Recreate pool with capped capacity.
   m_pool = SharedPool::create(poolCap, makeDims(m_config));
 
   // 6. Recreate world controller and chunk worker
