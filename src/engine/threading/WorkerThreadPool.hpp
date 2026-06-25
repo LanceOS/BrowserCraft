@@ -35,6 +35,15 @@ public:
     return future;
   }
 
+  /// Submit a void-returning job without creating a packaged_task (avoids heap allocation).
+  void submitAndForget(std::function<void()> job) {
+    {
+      std::lock_guard lock(m_mutex);
+      m_tasks.emplace(std::move(job));
+    }
+    m_cv.notify_one();
+  }
+
   /// Number of worker threads.
   [[nodiscard]] auto threadCount() const -> int32_t { return static_cast<int32_t>(m_threads.size()); }
 

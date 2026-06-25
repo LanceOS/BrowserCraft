@@ -74,7 +74,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   // Wire world gen callback through thread pool
   m_world.reset(new World(*m_pool, m_blocks, config,
     [this](int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t) {
-      m_genPool->submit([this, slotIndex, chunkX, chunkZ]() {
+      m_genPool->submitAndForget([this, slotIndex, chunkX, chunkZ]() {
         auto slot = m_pool->view(slotIndex);
         // @see notes/worldgen-threadsafe-chunk-rng.md
         m_worldGenPipeline.generate(slot.voxels, chunkX, chunkZ,
@@ -88,7 +88,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
       });
     },
     [this](int32_t slotIndex) {
-      m_meshPool->submit([this, slotIndex]() {
+      m_meshPool->submitAndForget([this, slotIndex]() {
         auto slot = m_pool->view(slotIndex);
         mesher::MesherConfig mcfg;
         mcfg.sizeX = m_config.chunkSize;

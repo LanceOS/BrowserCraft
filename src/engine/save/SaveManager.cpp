@@ -27,7 +27,7 @@ void SaveManager::requestLoad(int32_t chunkX, int32_t chunkZ) {
   // Submit file I/O to the thread pool; the main thread processes the result
   // via processPending().
   size_t ds = m_dataSize;
-  m_ioPool->submit([this, chunkX, chunkZ, ds]() {
+  m_ioPool->submitAndForget([this, chunkX, chunkZ, ds]() {
     PendingChunkLoad result{chunkX, chunkZ, {}, {}, {}, false};
     result.voxels.resize(ds);
     result.light.resize(ds);
