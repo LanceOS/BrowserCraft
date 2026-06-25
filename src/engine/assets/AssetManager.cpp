@@ -3,6 +3,8 @@
 #include <iostream>
 #include <stdexcept>
 #include <random>
+#include <filesystem>
+#include <vector>
 
 #include "../../ext/json.hpp"
 
@@ -13,6 +15,30 @@ using json = nlohmann::json;
 
 namespace voxel {
 
+namespace {
+auto findAssetRoot() -> std::string {
+  namespace fs = std::filesystem;
+  const std::string candidateFile = "assets/blocks.json";
+
+  fs::path cursor = fs::current_path();
+  for (int32_t depth = 0; depth < 12; ++depth) {
+    fs::path blocksPath = cursor / candidateFile;
+    if (fs::exists(blocksPath) && fs::is_regular_file(blocksPath)) {
+      return (cursor / "assets").string();
+    }
+
+    if (!cursor.has_parent_path()) break;
+    cursor = cursor.parent_path();
+  }
+
+  return "assets";
+}
+
+auto resolveTexturePath(const std::string& root, const std::string& textureName) -> std::string {
+  return (std::filesystem::path(root) / "textures" / textureName).string();
+}
+} // namespace
+
 AssetManager& AssetManager::get() {
     static AssetManager instance;
     return instance;
@@ -21,14 +47,17 @@ AssetManager& AssetManager::get() {
 void AssetManager::loadAssets() {
     m_blockDefs.clear();
     m_textureData.clear();
-    
+
+    const std::string assetRoot = findAssetRoot();
+    const std::string blocksFile = (std::filesystem::path(assetRoot) / "blocks.json").string();
+
     // Air is always ID 0
     m_airDef = {0, "Air", false, -1, -1, -1};
     m_blockDefs[0] = m_airDef;
 
-    std::ifstream file("assets/blocks.json");
+    std::ifstream file(blocksFile);
     if (!file.is_open()) {
-        std::cerr << "Failed to open assets/blocks.json!" << std::endl;
+        std::cerr << "Failed to open blocks.json at: " << blocksFile << std::endl;
         return;
     }
 
@@ -45,7 +74,7 @@ void AssetManager::loadAssets() {
     if (j.contains("textures")) {
         for (auto it = j["textures"].begin(); it != j["textures"].end(); ++it) {
             std::string texName = it.key();
-            std::string filename = "assets/" + it.value().get<std::string>();
+            std::string filename = resolveTexturePath(assetRoot, it.value().get<std::string>());
 
             int width, height, channels;
             stbi_set_flip_vertically_on_load(true);

@@ -120,6 +120,9 @@ void Renderer::render(World& world, const CameraView& camera,
 
   m_indirectBatcher->dispatchCulling(&camera.viewProjectionMatrix[0][0]);
 
+  // Re-bind chunk shader after dispatchCulling switches to compute program
+  m_chunkShader.use();
+
   gl::BindVertexArray(m_masterVao);
 
   // Pass 1: opaque only
@@ -161,9 +164,12 @@ void Renderer::syncChunks(World& world) {
   // Upload new/updated meshes
   world.forEachEntry([&](const std::string& key, Chunk& chunk) {
     auto slot = world.getChunkSlot(chunk);
-    if (slot.slotIndex >= 0 && slot.slotIndex < static_cast<int32_t>(m_indirectBatcher->capacity())) {
-        activeSlots[slot.slotIndex] = true;
+    // @see notes/renderer-slot-index-bounds.md
+    if (slot.slotIndex < 0 || slot.slotIndex >= static_cast<int32_t>(m_indirectBatcher->capacity())) {
+      return;
     }
+
+    activeSlots[slot.slotIndex] = true;
 
     if (chunk.state == ChunkState::MeshReady) {
       if (chunk.indexCount > 0 && chunk.vertexCount > 0) {

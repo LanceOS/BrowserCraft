@@ -5,17 +5,17 @@
 namespace voxel {
 
 CaveCarver::CaveCarver(uint32_t seed)
-  : m_noise(std::make_unique<SimplexNoise>(seed ^ 0xcafeu))
-  , m_rngState(seed ^ 0xc4e5u) {}
-
-auto CaveCarver::rng() -> float {
-  m_rngState = (m_rngState * 1664525u + 1013904223u);
-  return static_cast<float>(m_rngState) / 4294967296.0f;
-}
+  : m_noise(std::make_unique<SimplexNoise>(seed ^ 0xcafeu)) {}
 
 void CaveCarver::carve(uint8_t* voxels, int32_t baseX, int32_t baseZ,
-                        int32_t sizeX, int32_t sizeY, int32_t sizeZ) {
+                        int32_t sizeX, int32_t sizeY, int32_t sizeZ,
+                        uint32_t chunkSeed) {
   constexpr int32_t numWorms = 4;
+  uint32_t rngState = chunkSeed ^ 0xc4e5u;
+  auto rng = [&]() -> float {
+    rngState = (rngState * 1664525u + 1013904223u);
+    return static_cast<float>(rngState) / 4294967296.0f;
+  };
 
   for (int32_t worm = 0; worm < numWorms; ++worm) {
     float x = rng() * static_cast<float>(sizeX);

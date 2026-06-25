@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <optional>
 #include <functional>
+#include <utility>
 
 namespace voxel {
 
@@ -94,6 +95,7 @@ public:
 
   /// Get chunk by slot index.
   [[nodiscard]] auto getChunkBySlotIndex(int32_t slotIndex) const -> const Chunk*;
+  [[nodiscard]] auto getChunkBySlotIndex(int32_t slotIndex) -> Chunk*;
 
   /// Get chunk slot view.
   [[nodiscard]] auto getChunkSlot(const Chunk& chunk) -> ChunkSlot;
@@ -138,6 +140,12 @@ private:
   void ensureVisibleRadius(int32_t centerCX, int32_t centerCZ);
   void unloadFarChunks(int32_t centerCX, int32_t centerCZ);
   void pumpQueues();
+  struct PendingChunkJob {
+    int32_t slotIndex;
+    int32_t chunkX;
+    int32_t chunkZ;
+  };
+  [[nodiscard]] auto resolvePendingChunk(const PendingChunkJob& job) -> Chunk*;
   void requestRemesh(Chunk& chunk);
   void markChunkDirty(int32_t cx, int32_t cz);
   void requestNeighborRemeshes(const Chunk& chunk);
@@ -153,9 +161,15 @@ private:
   const GameConfig& m_config;
 
   ChunkManager m_chunks;
-  std::unordered_map<int32_t, Chunk*> m_slotToChunk;
-  std::vector<Chunk*> m_pendingGen;
-  std::vector<Chunk*> m_pendingMesh;
+  // @see notes/chunk-slot-mapping-stability.md
+  struct ChunkSlotCoord {
+    int32_t cx;
+    int32_t cz;
+  };
+  std::unordered_map<int32_t, ChunkSlotCoord> m_slotToChunk;
+  // @see notes/chunk-pending-queue-stability.md
+  std::vector<PendingChunkJob> m_pendingGen;
+  std::vector<PendingChunkJob> m_pendingMesh;
 
   int32_t m_centerChunkX = 0;
   int32_t m_centerChunkZ = 0;

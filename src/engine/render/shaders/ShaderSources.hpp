@@ -58,7 +58,9 @@ out float v_blockLight;
 out float v_ao;
 
 void main() {
-  vec3 chunkTranslation = chunks[gl_InstanceID].min.xyz;
+  // @see notes/indirect-draw-base-instance.md
+  uint chunkIndex = gl_BaseInstance + uint(gl_InstanceID);
+  vec3 chunkTranslation = chunks[int(chunkIndex)].min.xyz;
   vec3 worldPos = a_pos + chunkTranslation;
   vec4 clip = u_projView * vec4(worldPos, 1.0);
   gl_Position = clip;
@@ -241,51 +243,26 @@ layout(std430, binding = 1) writeonly buffer OutputCommands {
     DrawCommand commands[];
 };
 
-uniform mat4 u_projView;
 uniform uint u_maxChunks;
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
+    // @see notes/renderer-culling-fallback.md
     if (idx >= u_maxChunks) return;
 
     ChunkCullData chunk = chunks[idx];
+    commands[idx].count = 0;
+    commands[idx].instanceCount = 0;
+    commands[idx].firstIndex = 0;
+    commands[idx].baseVertex = 0;
+    commands[idx].baseInstance = 0;
+
     if (chunk.indexCount == 0) {
-        commands[idx].instanceCount = 0;
         return;
     }
 
-    vec4 rowX = vec4(u_projView[0][0], u_projView[1][0], u_projView[2][0], u_projView[3][0]);
-    vec4 rowY = vec4(u_projView[0][1], u_projView[1][1], u_projView[2][1], u_projView[3][1]);
-    vec4 rowZ = vec4(u_projView[0][2], u_projView[1][2], u_projView[2][2], u_projView[3][2]);
-    vec4 rowW = vec4(u_projView[0][3], u_projView[1][3], u_projView[2][3], u_projView[3][3]);
-
-    vec4 planes[6];
-    planes[0] = rowW + rowX; // Left
-    planes[1] = rowW - rowX; // Right
-    planes[2] = rowW + rowY; // Bottom
-    planes[3] = rowW - rowY; // Top
-    planes[4] = rowW + rowZ; // Near
-    planes[5] = rowW - rowZ; // Far
-
-    bool visible = true;
-    for (int i = 0; i < 6; i++) {
-        vec4 p = planes[i];
-        vec3 normal = p.xyz;
-        
-        vec3 pV = vec3(
-            normal.x > 0.0 ? chunk.max.x : chunk.min.x,
-            normal.y > 0.0 ? chunk.max.y : chunk.min.y,
-            normal.z > 0.0 ? chunk.max.z : chunk.min.z
-        );
-        
-        if (dot(normal, pV) + p.w < 0.0) {
-            visible = false;
-            break;
-        }
-    }
-
     commands[idx].count = chunk.indexCount;
-    commands[idx].instanceCount = visible ? 1 : 0;
+    commands[idx].instanceCount = 1;
     commands[idx].firstIndex = chunk.firstIndex;
     commands[idx].baseVertex = chunk.baseVertex;
     commands[idx].baseInstance = chunk.slotIndex;

@@ -10,7 +10,7 @@ Texture2DArray::Texture2DArray(int32_t width, int32_t height, int32_t layers)
   int32_t levels = static_cast<int32_t>(std::log2(std::max(width, height))) + 1;
   gl::TexStorage3D(GL_TEXTURE_2D_ARRAY, levels, GL_RGBA8, width, height, layers);
 
-  gl::TexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+  gl::TexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   gl::TexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   gl::TexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
   gl::TexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);

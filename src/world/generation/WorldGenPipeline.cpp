@@ -14,7 +14,8 @@ WorldGenPipeline::WorldGenPipeline(uint32_t seed, const WorldGenerationConfig& c
 {}
 
 void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
-                                 int32_t sizeX, int32_t sizeY, int32_t sizeZ) {
+                                 int32_t sizeX, int32_t sizeY, int32_t sizeZ,
+                                 uint32_t chunkSeed) {
   int32_t baseX = chunkX * sizeX;
   int32_t baseZ = chunkZ * sizeZ;
 
@@ -70,16 +71,15 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
   }
 
   // Post-processing
-  m_caveCarver.carve(voxels, baseX, baseZ, sizeX, sizeY, sizeZ);
-  m_oreDist.distribute(voxels, sizeX, sizeY, sizeZ);
+  m_caveCarver.carve(voxels, baseX, baseZ, sizeX, sizeY, sizeZ, chunkSeed);
+  m_oreDist.distribute(voxels, sizeX, sizeY, sizeZ, chunkSeed);
 }
 
 void WorldGenPipeline::fillChunk(uint8_t* voxels, int32_t* chunkXPtr, int32_t* chunkZPtr,
                                   uint32_t* genSeed, int32_t sizeX, int32_t sizeY, int32_t sizeZ) {
   int32_t cx = *chunkXPtr;
   int32_t cz = *chunkZPtr;
-  *genSeed = 0;
-  generate(voxels, cx, cz, sizeX, sizeY, sizeZ);
+  generate(voxels, cx, cz, sizeX, sizeY, sizeZ, genSeed ? *genSeed : 0);
 }
 
 } // namespace voxel

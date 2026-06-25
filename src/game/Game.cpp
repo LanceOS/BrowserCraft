@@ -73,8 +73,10 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     [this](int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t) {
       m_genPool->submit([this, slotIndex, chunkX, chunkZ]() {
         auto slot = m_pool->view(slotIndex);
+        // @see notes/worldgen-threadsafe-chunk-rng.md
         m_worldGenPipeline.generate(slot.voxels, chunkX, chunkZ,
-          m_config.chunkSize, m_config.worldHeight, m_config.chunkSize);
+          m_config.chunkSize, m_config.worldHeight, m_config.chunkSize,
+          chunkSeed(chunkX, chunkZ, m_config.worldSeed));
         *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
       });
     },
