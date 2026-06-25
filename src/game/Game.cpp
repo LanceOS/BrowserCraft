@@ -45,12 +45,22 @@ public:
       mcfg.maxIndices = m_config.maxIndicesPerChunk;
       mcfg.strideFloats = m_config.vertexStrideFloats;
 
+      // Compute output pointers into the persistently mapped GPU VBO/IBO.
+      // The mesher writes directly to GPU memory — no CPU staging copy needed.
+      intptr_t vboBase = reinterpret_cast<intptr_t>(m_vboPtr);
+      intptr_t iboBase = reinterpret_cast<intptr_t>(m_iboPtr);
+      size_t vboStride = static_cast<size_t>(m_config.maxVertsPerChunk)
+                       * m_config.vertexStrideFloats * sizeof(float);
+      size_t iboStride = static_cast<size_t>(m_config.maxIndicesPerChunk)
+                       * sizeof(uint32_t);
+
       uint32_t vc = 0, ic = 0;
       bool hasTransparent = false;
       bool ok = mesher::greedyMesh(
           slot.voxels, slot.light, m_blocks, mcfg,
-          slot.vertices, slot.indices, vc, ic,
-          &hasTransparent);
+          reinterpret_cast<float*>(vboBase + slotIndex * vboStride),
+          reinterpret_cast<uint32_t*>(iboBase + slotIndex * iboStride),
+          vc, ic, &hasTransparent);
       *slot.vertexCount = static_cast<uint32_t>(vc);
       *slot.indexCount = ic;
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
@@ -62,6 +72,14 @@ public:
     });
   }
 
+  void setGpuTargets(float* vboPtr, size_t vboMaxBytes,
+                     uint32_t* iboPtr, size_t iboMaxBytes) override {
+    m_vboPtr = vboPtr;
+    m_vboMaxBytes = vboMaxBytes;
+    m_iboPtr = iboPtr;
+    m_iboMaxBytes = iboMaxBytes;
+  }
+
 private:
   WorkerThreadPool& m_genPool;
   WorkerThreadPool& m_meshPool;
@@ -70,6 +88,10 @@ private:
   const GameConfig& m_config;
   WorldController& m_controller;
   BlockRegistry& m_blocks;
+  float* m_vboPtr = nullptr;
+  size_t m_vboMaxBytes = 0;
+  uint32_t* m_iboPtr = nullptr;
+  size_t m_iboMaxBytes = 0;
 };
 
 static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
@@ -122,6 +144,12 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   m_worldController->createWorld(*m_chunkWorker, nullptr);
 
   m_renderer = std::make_unique<Renderer>(window, m_blocks, config);
+
+  // Wire GPU VBO/IBO targets to the chunk worker so meshers write directly
+  // to persistently mapped GPU memory, bypassing CPU-side staging buffers.
+  m_chunkWorker->setGpuTargets(
+      m_renderer->vboPtr(), m_renderer->vboBytes(),
+      m_renderer->iboPtr(), m_renderer->iboBytes());
 
   m_saveDir = options.saveDir;
   m_currentSaveSlug = options.saveSlotId.empty() ? std::string("default") : options.saveSlotId;

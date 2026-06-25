@@ -41,8 +41,6 @@ struct ChunkSlot {
   uint8_t* voxels;
   uint8_t* light;
   uint8_t* redstone;
-  float* vertices;
-  uint32_t* indices;
 };
 
 /// Shared memory pool for chunk data, accessible from multiple threads.

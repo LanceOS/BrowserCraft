@@ -45,6 +45,12 @@ public:
 
   void dispose();
 
+  /// Accessors for GPU buffer targets (used by ChunkWorker for direct mesh output).
+  [[nodiscard]] auto vboPtr() const -> float* { return static_cast<float*>(m_masterVbo->mappedPtr()); }
+  [[nodiscard]] auto vboBytes() const -> size_t { return m_masterVbo->capacity(); }
+  [[nodiscard]] auto iboPtr() const -> uint32_t* { return static_cast<uint32_t*>(m_masterIbo->mappedPtr()); }
+  [[nodiscard]] auto iboBytes() const -> size_t { return m_masterIbo->capacity(); }
+
 private:
   void uploadCameraBlock(const CameraView& camera, float timeSeconds,
                          float daylightFactor, float skyR, float skyG, float skyB);

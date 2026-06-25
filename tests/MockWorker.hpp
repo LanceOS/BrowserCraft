@@ -23,6 +23,12 @@ public:
     if (m_meshFn) m_meshFn(slotIndex);
   }
 
+  void setGpuTargets(float*, size_t, uint32_t*, size_t) override {
+    // No-op: test mock writes to SharedPool slot vertex/index buffers,
+    // but those have been removed. Tests that call mesh() directly
+    // must provide their own output handling via the MeshFn lambda.
+  }
+
 private:
   GenFn m_genFn;
   MeshFn m_meshFn;

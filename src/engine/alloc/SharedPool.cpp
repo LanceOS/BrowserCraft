@@ -18,8 +18,9 @@ void SharedPool::computeLayout() {
   m_voxelsBytes = static_cast<size_t>(m_dims.sizeX) * m_dims.sizeY * m_dims.sizeZ;
   m_lightBytes = m_voxelsBytes;
   m_redstoneBytes = m_voxelsBytes;
-  m_vertsBytes = static_cast<size_t>(m_dims.maxVertsPerChunk) * m_dims.vertexStrideFloats * 4;
-  m_indicesBytes = static_cast<size_t>(m_dims.maxIndicesPerChunk) * 4;
+  // Vertex and index buffers removed — mesher writes directly to GPU VBO/IBO
+  m_vertsBytes = 0;
+  m_indicesBytes = 0;
 
   size_t unaligned =
     m_headerBytes + m_voxelsBytes + m_lightBytes +
@@ -89,10 +90,7 @@ auto SharedPool::view(int32_t slotIndex) const -> ChunkSlot {
   slot.voxels = buf + base + m_headerBytes;
   slot.light = buf + base + m_headerBytes + m_voxelsBytes;
   slot.redstone = buf + base + m_headerBytes + m_voxelsBytes + m_lightBytes;
-  slot.vertices = reinterpret_cast<float*>(
-    buf + base + m_headerBytes + m_voxelsBytes + m_lightBytes + m_redstoneBytes);
-  slot.indices = reinterpret_cast<uint32_t*>(
-    buf + base + m_headerBytes + m_voxelsBytes + m_lightBytes + m_redstoneBytes + m_vertsBytes);
+  // slot.vertices and slot.indices removed — mesher writes directly to GPU.
   return slot;
 }
 

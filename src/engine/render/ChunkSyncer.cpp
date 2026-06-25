@@ -34,13 +34,8 @@ void ChunkSyncer::sync(World& world) {
       size_t iboOffset = static_cast<size_t>(slot.slotIndex) * m_config.maxIndicesPerChunk * sizeof(uint32_t);
       int32_t baseVertex = slot.slotIndex * m_config.maxVertsPerChunk;
 
-      // Directly copy vertices and indices to the persistently mapped GPU memory
-      std::memcpy(static_cast<uint8_t*>(m_masterVbo->mappedPtr()) + vboOffset,
-                  slot.vertices, static_cast<size_t>(chunk->vertexCount) * stride * sizeof(float));
-      std::memcpy(static_cast<uint8_t*>(m_masterIbo->mappedPtr()) + iboOffset,
-                  slot.indices, chunk->indexCount * sizeof(uint32_t));
-
-      // Ensure GPU sees the uploaded vertex/index data before drawing
+      // Vertex/index data was already written directly to the GPU VBO/IBO
+      // by the mesher on the worker thread. No CPU-side copy needed.
       gl::MemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
 
       ChunkCullData cullData{};
