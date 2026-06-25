@@ -15,6 +15,7 @@ Usage: ./scripts/rebuild-and-launch.sh [--clean] [--debug|--release] [--build-di
   --clean       Delete and recreate the build directory
   --debug       Configure for Debug
   --release     Configure for Release (default)
+  --unity       Enable unity/jumbo builds (faster full rebuilds)
   --build-dir   Override build directory (defaults to ./build)
   --target      Override executable target name (defaults to voxel_app)
 EOF
@@ -42,6 +43,10 @@ while [[ $# -gt 0 ]]; do
       fi
       BUILD_DIR="$2"
       shift 2
+      ;;
+    --unity)
+      EXTRA_CMAKE_ARGS="${EXTRA_CMAKE_ARGS} -DUSE_UNITY_BUILD=ON"
+      shift
       ;;
     --target)
       if [[ $# -lt 2 ]]; then

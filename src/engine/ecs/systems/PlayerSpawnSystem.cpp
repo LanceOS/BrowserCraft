@@ -78,8 +78,10 @@ void PlayerSpawnSystem::update(Game& state, float /*dt*/) {
     // overhangs, or terrain that generates after the scan).
     if (m_playerController && idx >= 0) m_playerController->pushPlayerOutOfBlocks(idx);
 
+    // Start with zero velocity — let gravity pull the player down to
+    // the surface rather than marking them as grounded immediately.
     body.velocity.y = 0.0f;
-    body.onGround = 1;
+    body.onGround = 0;
     m_spawnedToSurface = true;
     m_cameraDirty = true;
   } else {

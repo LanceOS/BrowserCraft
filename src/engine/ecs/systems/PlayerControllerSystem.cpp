@@ -169,20 +169,35 @@ void PlayerControllerSystem::applyMovement(
   float speed = m_input.isHeld(InputState::KEY_SHIFT) ? player.sprintSpeed
                                                       : player.walkSpeed;
 
+  // Check ground contact every tick (60 Hz).  We use a fresh proximity scan
+  // instead of relying on body.onGround, because body.onGround can be
+  // spuriously zeroed by sub-step iteration quirks (step-assist raising,
+  // overshoot, etc.) even when the player is visually on the surface.
+  int32_t gY = groundHeightAt(
+      transform.position.x, transform.position.z,
+      std::max(0, static_cast<int32_t>(
+          std::floor(transform.position.y + body.aabbMin.y))));
+  bool grounded = false;
+  if (gY >= 0) {
+    float feetY = transform.position.y + body.aabbMin.y;
+    float surfY = static_cast<float>(gY + 1);
+    grounded = (feetY - surfY) <= 0.2f; // tight — step-assist height is 0.52
+  }
+
   // Jump trigger: tap Space (isPressed) for a single jump, or hold Space
-  // and auto-jump when the player next lands on ground (onGround transition).
+  // and auto-jump when the player next lands (grounded transition).
   bool spaceHeld = m_input.isHeld(InputState::KEY_SPACE);
-  bool justLanded = body.onGround && !m_prevOnGround;
-  if (spaceHeld && (body.onGround || body.isFluid) &&
+  bool justLanded = grounded && !m_prevOnGround;
+  if (spaceHeld && (grounded || body.isFluid) &&
       (m_input.isPressed(InputState::KEY_SPACE) || justLanded)) {
     body.velocity.y = body.isFluid ? kSwimSpeed : kJumpSpeed;
     body.onGround = 0;
     body.isFluid = 0;
   }
-  // Save onGround for next frame's auto-jump detection.
-  // We save before movement so justLanded captures the onGround transition
-  // from the collision resolution of the previous frame.
-  m_prevOnGround = body.onGround;
+  // Save grounded state (not body.onGround) for next frame's transition
+  // detection.  body.onGround can be stale after sub-step overrides; our
+  // own proximity check is trustworthy.
+  m_prevOnGround = grounded;
 
   // Apply gravity
   body.velocity.y -= body.gravity * dt;
@@ -221,23 +236,39 @@ void PlayerControllerSystem::applyMovement(
       stepPos = yStep;
       body.onGround = 0;
     } else if (subDy <= 0.0f) {
-      // Landed on ground — snap to surface
+      // Potential landing — check if ground is close enough to snap to.
+      // groundHeightAt scans all the way down; only snap if the ground is
+      // within ~1.5 blocks of the player's feet.  If it's further, the
+      // collision is from a side block (e.g. standing at the edge of a
+      // hole) — let gravity pull the player down naturally instead of
+      // teleporting them to the bottom.
       int32_t groundY = groundHeightAt(
           stepPos.x, stepPos.z,
           std::max(0, static_cast<int32_t>(std::floor(stepPos.y + body.aabbMin.y))));
       if (groundY >= 0) {
-        stepPos.y = static_cast<float>(groundY + 1);
-        body.onGround = 1;
-        // Safety push-up if still colliding
-        int32_t safetyIters = 64;
-        while (collidesAt(stepPos, body) && --safetyIters > 0) {
-          stepPos.y += 0.05f;
+        float feetY = stepPos.y + body.aabbMin.y;
+        float surfaceY = static_cast<float>(groundY + 1);
+        float distToGround = feetY - surfaceY;
+        if (distToGround <= 1.5f) {
+          // Ground is close — snap to it
+          stepPos.y = surfaceY;
+          body.onGround = 1;
+          // Safety push-up if still colliding
+          int32_t safetyIters = 64;
+          while (collidesAt(stepPos, body) && --safetyIters > 0) {
+            stepPos.y += 0.05f;
+          }
+          body.velocity.y = 0.0f;
+          subDy = 0.0f; // Ground absorbs remaining fall
+        } else {
+          // Ground is far below — the collision was from a block to the
+          // side (edge of a hole, partial step, etc.).  Don't snap, let
+          // gravity keep pulling us down.
+          body.onGround = 0;
         }
       } else {
         body.onGround = 0;
       }
-      body.velocity.y = 0.0f;
-      subDy = 0.0f; // Ground absorbs remaining fall
     } else {
       // Hit ceiling
       body.velocity.y = 0.0f;
