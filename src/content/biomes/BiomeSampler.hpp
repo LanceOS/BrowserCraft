@@ -2,6 +2,7 @@
 
 #include "BiomeData.hpp"
 #include "BiomeClassifier.hpp"
+#include "IClimateSource.hpp"
 #include "world/generation/SimplexNoise.hpp"
 #include <array>
 
@@ -10,7 +11,9 @@ namespace voxel::biome {
 /// Samples temperature and humidity noise, then classifies into biomes.
 /// Owns the noise instances but delegates classification logic to the
 /// stateless BiomeClassifier (which can be tested with synthetic values).
-class BiomeSampler {
+/// Implements IClimateSource so it can be passed to WorldGenPipeline
+/// or replaced with a different climate strategy.
+class BiomeSampler : public IClimateSource {
 public:
   explicit BiomeSampler(uint32_t seed);
 

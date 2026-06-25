@@ -1,7 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include "SimplexNoise.hpp"
+#include "content/biomes/IClimateSource.hpp"
+#include "content/biomes/BiomeClassifier.hpp"
 #include "content/biomes/BiomeSampler.hpp"
 #include "CaveCarver.hpp"
 #include "OreDistributor.hpp"
@@ -44,9 +47,22 @@ struct WorldGenerationConfig {
 
 /// Full world generation pipeline for a single chunk.
 /// Call generate() with a ChunkSlot to fill its voxels, light, and redstone arrays.
+///
+/// Climate noise is obtained through an IClimateSource interface so that
+/// different strategies (Simplex, flat preset, debug) can be swapped in
+/// without modifying this class.
 class WorldGenPipeline {
 public:
+  /// Construct with a seed — creates a default BiomeSampler internally.
   explicit WorldGenPipeline(uint32_t seed, const WorldGenerationConfig& config = {});
+
+  /// Construct with an external climate source (non-owning reference).
+  /// Allows callers to provide a custom IClimateSource strategy.
+  /// The seed parameter is used for terrain noise (continental, detail,
+  /// density, cave, ore) independent of the climate source.
+  explicit WorldGenPipeline(biome::IClimateSource& climateSource,
+                            uint32_t seed,
+                            const WorldGenerationConfig& config = {});
 
   /// Generate terrain into the given voxel array.
   void generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
@@ -66,10 +82,14 @@ private:
                                             float lacunarity,
                                             float persistence) -> float;
 
+  /// Owned BiomeSampler (only used when constructed via seed-based ctor).
+  std::unique_ptr<biome::BiomeSampler> m_ownedSampler;
+  /// Non-owning pointer — points to m_ownedSampler or an external IClimateSource.
+  biome::IClimateSource* m_climateSource;
+
   SimplexNoise m_continentalNoise;
   SimplexNoise m_detailNoise;
   SimplexNoise m_densityNoise;
-  biome::BiomeSampler m_biomeSampler;
   CaveCarver m_caveCarver;
   OreDistributor m_oreDist;
   WorldGenerationConfig m_config;

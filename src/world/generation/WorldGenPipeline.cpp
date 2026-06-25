@@ -7,10 +7,24 @@
 namespace voxel {
 
 WorldGenPipeline::WorldGenPipeline(uint32_t seed, const WorldGenerationConfig& config)
-  : m_continentalNoise(seed ^ 0x1a2b3cu),
+  : m_ownedSampler(std::make_unique<biome::BiomeSampler>(seed)),
+    m_climateSource(m_ownedSampler.get()),
+    m_continentalNoise(seed ^ 0x1a2b3cu),
     m_detailNoise(seed ^ 0x4d5e6fu),
     m_densityNoise(seed),
-    m_biomeSampler(seed),
+    m_caveCarver(seed),
+    m_oreDist(seed),
+    m_config(config)
+{}
+
+WorldGenPipeline::WorldGenPipeline(biome::IClimateSource& climateSource,
+                                   uint32_t seed,
+                                   const WorldGenerationConfig& config)
+  : m_ownedSampler(nullptr),
+    m_climateSource(&climateSource),
+    m_continentalNoise(seed ^ 0x1a2b3cu),
+    m_detailNoise(seed ^ 0x4d5e6fu),
+    m_densityNoise(seed),
     m_caveCarver(seed),
     m_oreDist(seed),
     m_config(config)
@@ -83,7 +97,7 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
       // ---- 3. Climate sampling & biome blending ----
       // Sample temperature + humidity once and share across all consumers.
       // This eliminates 3× redundant noise evaluations per column.
-      auto climate = m_biomeSampler.sampleClimate(worldX, worldZ);
+      auto climate = m_climateSource->sampleClimate(worldX, worldZ);
       const auto& rule = biome::BiomeClassifier::sampleBiome(climate);
       float heightBias = biome::BiomeClassifier::blendedHeightBias(climate);
 
