@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <cstddef>
 #include <mutex>
 #include <optional>
 #include <memory>
@@ -16,6 +17,12 @@ enum class ChunkSlotStatus : int32_t {
   MESH_READY = 4,
   GPU_UPLOADED = 5,
 };
+
+/// Render metadata written by the mesher and consumed by the render path.
+/// Stored separately from the lifecycle status word so lifecycle code can
+/// remain unaware of render-specific state.
+inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_TRANSPARENT = 1u << 0;
+inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_OPAQUE = 1u << 1;
 
 struct ChunkDimensions {
   int32_t sizeX;
@@ -32,7 +39,8 @@ struct ChunkSlot {
   int32_t slotIndex;
   uint8_t* buffer;       // base of the entire pool buffer
   size_t baseByteOffset; // offset to this slot
-  int32_t* status;       // ChunkSlotStatus
+  int32_t* status;       // ChunkSlotStatus lifecycle state
+  uint32_t* renderFlags; // ChunkRenderFlags metadata
   uint32_t* vertexCount;
   uint32_t* indexCount;
   int32_t* chunkX;
@@ -41,8 +49,6 @@ struct ChunkSlot {
   uint8_t* voxels;
   uint8_t* light;
   uint8_t* redstone;
-  float* vertices;
-  uint32_t* indices;
 };
 
 /// Shared memory pool for chunk data, accessible from multiple threads.
@@ -58,6 +64,10 @@ public:
 
   /// Release a slot back to the free list. Main thread only.
   void release(ChunkSlot slot);
+
+  /// Grow the pool to accommodate more slots. Existing slots keep their
+  /// indices and data. Does nothing if newCapacity <= current capacity.
+  void resize(int32_t newCapacity);
 
   /// Get a view of a slot by index. Thread-safe for reads/writes to
   /// different slots (each slot is a disjoint memory region).

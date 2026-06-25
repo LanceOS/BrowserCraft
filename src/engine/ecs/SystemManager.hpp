@@ -59,6 +59,9 @@ public:
 
   [[nodiscard]] auto count() const -> size_t { return m_systems.size(); }
 
+  /// Remove all systems.
+  void clear() { m_systems.clear(); }
+
 private:
   void sort() {
     std::sort(m_systems.begin(), m_systems.end(),

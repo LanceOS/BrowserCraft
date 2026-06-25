@@ -41,10 +41,10 @@ struct ChunkCullData {
     uint firstIndex;
     uint baseVertex;
     uint slotIndex;
+    uint hasOpaque;
     uint hasTransparent;
     uint pad1;
     uint pad2;
-    uint pad3;
 };
 
 layout(std430, binding = 0) readonly buffer InputChunks {
@@ -54,13 +54,13 @@ layout(std430, binding = 0) readonly buffer InputChunks {
 out vec2 v_uv;
 out vec3 v_normal;
 out float v_texLayer;
-out float v_fogFactor;
+out vec3 v_worldPos;
 out float v_skyExposure;
 out float v_ao;
 
 void main() {
   // @see notes/indirect-draw-base-instance.md
-  uint chunkIndex = gl_BaseInstance + uint(gl_InstanceID);
+  uint chunkIndex = gl_BaseInstance;
   vec3 chunkTranslation = chunks[int(chunkIndex)].min.xyz;
   vec3 worldPos = a_pos + chunkTranslation;
   vec4 clip = u_projView * vec4(worldPos, 1.0);
@@ -69,13 +69,10 @@ void main() {
   v_uv = a_uv;
   v_normal = a_normal;
   v_texLayer = a_texLayer;
+  v_worldPos = worldPos;
   uint packedLight = uint(a_lightData + 0.5);
   v_skyExposure = float(packedLight & 0x0Fu) / 15.0;
   v_ao = float((packedLight >> 16u) & 0x03u) / 3.0;
-
-  float dist = length(u_camTime.xyz - worldPos);
-  float fogDistance = u_fogColor.a;
-  v_fogFactor = clamp(dist / fogDistance, 0.0, 1.0);
 }
 )glsl";
 
@@ -109,7 +106,7 @@ uniform int u_opaquePass;
 in vec2 v_uv;
 in vec3 v_normal;
 in float v_texLayer;
-in float v_fogFactor;
+in vec3 v_worldPos;
 in float v_skyExposure;
 in float v_ao;
 
@@ -158,8 +155,11 @@ void main() {
 
   vec3 finalLighting = albedo.rgb * litColor;
 
-  // ---- Apply fog ----
-  fragColor.rgb = mix(finalLighting, u_fogColor.rgb, v_fogFactor);
+  // ---- Per-fragment fog ----
+  float fogDist = u_fogColor.a;
+  float fragDist = distance(u_camTime.xyz, v_worldPos);
+  float fogFactor = clamp(fragDist / fogDist, 0.0, 1.0);
+  fragColor.rgb = mix(finalLighting, u_fogColor.rgb, fogFactor);
   fragColor.a = albedo.a;
 }
 )glsl";

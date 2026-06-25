@@ -339,9 +339,9 @@ TEST_CASE("GreedyMesher handles multiple block types with distinct textures",
 }
 
 // ======================================================================
-// Test: Non-opaque blocks produce transparent mesh flag
+// Test: Non-opaque blocks produce transparent mesh flag and opaque geometry flag
 // ======================================================================
-TEST_CASE("GreedyMesher sets hasTransparentOut for non-opaque blocks",
+TEST_CASE("GreedyMesher reports opaque and transparent geometry independently",
           "[mesher][face]") {
   BlockRegistry reg(256);
   registerTestBlock(reg, 1, "Opaque",   0, 0, 0, true);
@@ -366,20 +366,24 @@ TEST_CASE("GreedyMesher sets hasTransparentOut for non-opaque blocks",
   std::vector<uint32_t> indices(cfg.maxIndices, 0);
   uint32_t vertexCount = 0, indexCount = 0;
   bool hasTransparent = false;
+  bool hasOpaque = false;
 
   // Opaque block only → should not set transparent flag
   mesher::greedyMesh(voxels.data(), light.data(), reg, cfg,
                       vertices.data(), indices.data(),
-                      vertexCount, indexCount, &hasTransparent);
+                      vertexCount, indexCount, &hasTransparent, &hasOpaque);
   CHECK(hasTransparent == false);
+  CHECK(hasOpaque == true);
 
   // Add transparent block
   voxels[(1 * SZ + 1) * SX + 1] = 2;
   hasTransparent = false;
+  hasOpaque = false;
   mesher::greedyMesh(voxels.data(), light.data(), reg, cfg,
                       vertices.data(), indices.data(),
-                      vertexCount, indexCount, &hasTransparent);
+                      vertexCount, indexCount, &hasTransparent, &hasOpaque);
   CHECK(hasTransparent == true);
+  CHECK(hasOpaque == false);
 }
 
 // ======================================================================

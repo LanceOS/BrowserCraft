@@ -210,7 +210,6 @@ void Renderer::seedTextureArray() {
     }
     m_textures.uploadAllLayers8(fallbackData.data(), 16, 16, layers);
   }
-  m_textures.generateMipmaps();
 }
 
 } // namespace voxel

@@ -59,6 +59,7 @@ void ChunkJobQueue::pump(
 
     auto slot = pool.view(chunk->slotIndex);
     *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESHING);
+    *slot.renderFlags = 0u;
     chunk->state = ChunkState::Meshing;
     m_worker.mesh(chunk->slotIndex);
   }

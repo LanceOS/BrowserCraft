@@ -33,28 +33,29 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
 
   gl::BindVertexArray(m_masterVao);
 
-  const uint32_t visibleCommands = m_indirectBatcher.commandCount();
+  const uint32_t opaqueCount = m_indirectBatcher.opaqueCommandCount();
+  const uint32_t transparentCount = m_indirectBatcher.transparentCommandCount();
 
-  // Pass 1: opaque only — no blending (alpha-test discards foliage texels).
-  if (visibleCommands > 0u) {
+  // Pass 1: opaque geometry first. Transparent texels are discarded in the shader.
+  if (opaqueCount > 0u) {
     gl::Disable(GL_BLEND);
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
     gl::DepthMask(GL_TRUE);
     gl::DepthFunc(GL_LESS);
-    m_indirectBatcher.drawIndirect(visibleCommands);
+    m_indirectBatcher.drawIndirect(opaqueCount, 0u);
   }
 
-  // Pass 2: transparent only — blending enabled for semi-transparent surfaces.
-  if (visibleCommands > 0u && m_indirectBatcher.hasVisibleTransparent()) {
+  // Pass 2: transparent geometry only, blended over the opaque pass.
+  if (transparentCount > 0u) {
     gl::Enable(GL_BLEND);
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
     gl::DepthMask(GL_FALSE);
     gl::DepthFunc(GL_LEQUAL);
-    m_indirectBatcher.drawIndirect(visibleCommands);
+    m_indirectBatcher.drawIndirect(transparentCount, m_indirectBatcher.transparentCommandBase());
   }
 
   gl::BindVertexArray(0);
-
+  gl::Disable(GL_BLEND);
   gl::DepthMask(GL_TRUE);
   gl::DepthFunc(GL_LESS);
 }

@@ -42,6 +42,7 @@ struct Chunk {
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;
   bool needsRemesh = false;
+  bool hasOpaque = false; // whether mesh contains opaque geometry
   bool hasTransparent = false; // whether mesh contains alpha-blended geometry
   int32_t genRetries = 0; // number of times generation has been attempted
 

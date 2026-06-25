@@ -324,7 +324,7 @@ void UIManager::renderPauseMenu() {
   ImGui::SetNextWindowPos(ImVec2(0, 0));
   ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
   ImGui::Begin("PauseMenu", nullptr,
-    ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground);
+    ImGuiWindowFlags_NoDecoration);
 
   float winW = ImGui::GetWindowWidth();
   float winH = ImGui::GetWindowHeight();
@@ -367,7 +367,7 @@ void UIManager::renderOptionsMenu() {
   ImGui::SetNextWindowPos(ImVec2(0, 0));
   ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
   ImGui::Begin("OptionsMenu", nullptr,
-    ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground);
+    ImGuiWindowFlags_NoDecoration);
 
   float winW = ImGui::GetWindowWidth();
   float winH = ImGui::GetWindowHeight();
@@ -381,7 +381,7 @@ void UIManager::renderOptionsMenu() {
   ImGui::SetCursorPosX(50);
   ImGui::Text("Render Distance: %d", m_renderDistance);
   ImGui::SetCursorPosX(50);
-  ImGui::SliderInt("##rd", &m_renderDistance, 2, 32);
+  ImGui::SliderInt("##rd", &m_renderDistance, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
 
   ImGui::Spacing();
   ImGui::SetCursorPosX(100);

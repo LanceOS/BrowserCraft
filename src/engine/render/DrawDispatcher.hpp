@@ -23,7 +23,7 @@ public:
   void renderSky();
 
   /// Render all chunks using indirect multidraw.
-  /// After this call the caller should restore depth state.
+  /// Restores GL state before returning.
   void renderChunks(const Frustum& frustum);
 
 private:

@@ -27,6 +27,8 @@ struct MesherConfig {
 /// (the mesh is truncated).  Returns true on success.
 /// If hasTransparentOut is non-null, it is set to true when any transparent
 /// (non-opaque) block face is included in the mesh.
+/// If hasOpaqueOut is non-null, it is set to true when any opaque block face
+/// is included in the mesh.
 bool greedyMesh(
     const uint8_t* voxels,
     const uint8_t* light,
@@ -36,7 +38,8 @@ bool greedyMesh(
     uint32_t* indexOut,
     uint32_t& vertexCountOut,
     uint32_t& indexCountOut,
-    bool* hasTransparentOut = nullptr);
+    bool* hasTransparentOut = nullptr,
+    bool* hasOpaqueOut = nullptr);
 
 } // namespace mesher
 } // namespace voxel

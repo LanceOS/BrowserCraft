@@ -5,6 +5,7 @@
 #include "content/flora/DefaultFlora.hpp"
 #include <algorithm>
 #include <cmath>
+#include <new>
 #include <thread>
 
 namespace voxel {
@@ -44,21 +45,39 @@ public:
       mcfg.maxIndices = m_config.maxIndicesPerChunk;
       mcfg.strideFloats = m_config.vertexStrideFloats;
 
+      // Compute output pointers into the persistently mapped GPU VBO/IBO.
+      // The mesher writes directly to GPU memory — no CPU staging copy needed.
+      intptr_t vboBase = reinterpret_cast<intptr_t>(m_vboPtr);
+      intptr_t iboBase = reinterpret_cast<intptr_t>(m_iboPtr);
+      size_t vboStride = static_cast<size_t>(m_config.maxVertsPerChunk)
+                       * m_config.vertexStrideFloats * sizeof(float);
+      size_t iboStride = static_cast<size_t>(m_config.maxIndicesPerChunk)
+                       * sizeof(uint32_t);
+
       uint32_t vc = 0, ic = 0;
       bool hasTransparent = false;
+      bool hasOpaque = false;
       bool ok = mesher::greedyMesh(
           slot.voxels, slot.light, m_blocks, mcfg,
-          slot.vertices, slot.indices, vc, ic,
-          &hasTransparent);
+          reinterpret_cast<float*>(vboBase + slotIndex * vboStride),
+          reinterpret_cast<uint32_t*>(iboBase + slotIndex * iboStride),
+          vc, ic, &hasTransparent, &hasOpaque);
       *slot.vertexCount = static_cast<uint32_t>(vc);
       *slot.indexCount = ic;
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-      if (hasTransparent) {
-        *slot.status |= 0x10000;
-      }
+      if (hasTransparent) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
+      if (hasOpaque) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
       m_controller.onMeshCompleted(slotIndex);
       (void)ok;
     });
+  }
+
+  void setGpuTargets(float* vboPtr, size_t vboMaxBytes,
+                     uint32_t* iboPtr, size_t iboMaxBytes) override {
+    m_vboPtr = vboPtr;
+    m_vboMaxBytes = vboMaxBytes;
+    m_iboPtr = iboPtr;
+    m_iboMaxBytes = iboMaxBytes;
   }
 
 private:
@@ -69,6 +88,10 @@ private:
   const GameConfig& m_config;
   WorldController& m_controller;
   BlockRegistry& m_blocks;
+  float* m_vboPtr = nullptr;
+  size_t m_vboMaxBytes = 0;
+  uint32_t* m_iboPtr = nullptr;
+  size_t m_iboMaxBytes = 0;
 };
 
 static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
@@ -109,7 +132,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   // Dedicated I/O pool for async chunk loading (1-2 threads; disk I/O is serial-bound)
   m_ioPool = std::make_unique<WorkerThreadPool>(std::max(1, threads / 4));
 
-  int32_t poolCap = (MAX_RENDER_DISTANCE * 2 + 1) * (MAX_RENDER_DISTANCE * 2 + 1) + 8;
+  int32_t poolCap = (m_config.renderDistance * 2 + 1) * (m_config.renderDistance * 2 + 1) + 8;
   m_pool = SharedPool::create(poolCap, makeDims(config));
 
   // Wire world worker and persistence
@@ -122,16 +145,24 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
 
   m_renderer = std::make_unique<Renderer>(window, m_blocks, config);
 
+  // Wire GPU VBO/IBO targets to the chunk worker so meshers write directly
+  // to persistently mapped GPU memory, bypassing CPU-side staging buffers.
+  m_chunkWorker->setGpuTargets(
+      m_renderer->vboPtr(), m_renderer->vboBytes(),
+      m_renderer->iboPtr(), m_renderer->iboBytes());
+
   m_saveDir = options.saveDir;
-  m_worldController->configureSaveWorld(m_saveDir, options.saveSlotId, false, m_ioPool.get());
+  m_currentSaveSlug = options.saveSlotId.empty() ? std::string("default") : options.saveSlotId;
+  m_worldController->configureSaveWorld(m_saveDir, m_currentSaveSlug, false, m_ioPool.get());
 
   // Initialize save system orchestrator
   m_saveOrchestrator = std::make_unique<SaveOrchestrator>(m_saveDir);
 
   // Load saved settings (apply to UI after it's constructed below)
   auto saved = m_saveOrchestrator->loadSettings();
-  m_config.renderDistance = saved.renderDistance;
-  m_session.setRenderDistance(saved.renderDistance);
+  int32_t savedRd = std::clamp(saved.renderDistance, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
+  m_config.renderDistance = savedRd;
+  m_session.setRenderDistance(savedRd);
 
   m_audioRegistry.seedBuiltinSounds();
   m_blockAudio = std::make_unique<BlockInteractionAudio>(m_audioEngine, m_audioRegistry, m_blocks);
@@ -149,9 +180,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     .onQuit = [this]{ m_running = false; },
     .onRenderDistanceChanged = [this]{
       int32_t rd = m_ui->renderDistance();
-      m_config.renderDistance = rd;
-      m_session.setRenderDistance(rd);
-      m_saveOrchestrator->settings().setInt("renderDistance", rd);
+      applyRenderDistance(rd);
     },
   });
 
@@ -181,6 +210,91 @@ Game::~Game() {
   // Persist runtime settings and flush chunk saves
   m_saveOrchestrator->saveSettings(m_config.renderDistance, m_ui->isFpsVisible());
   m_saveOrchestrator->onWorldClosed(m_worldController->saveManager());
+}
+
+void Game::applyRenderDistance(int32_t newRd) {
+  // Clamp to valid range
+  newRd = std::clamp(newRd, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
+  if (newRd == m_config.renderDistance) return;
+
+  // 1. Flush pending saves and detach persistence
+  if (m_worldController->saveManager()) {
+    m_saveOrchestrator->onWorldClosed(m_worldController->saveManager());
+  }
+
+  // 2. Clear systems (they hold references to World)
+  m_systems.clear();
+  m_playerController = nullptr;
+
+  // 3. Destroy render-dependent objects in reverse creation order
+  m_renderer.reset();
+  m_chunkWorker.reset();
+  m_worldController.reset();
+  m_pool.reset();
+
+  // 4. Compute pool capacity from the requested render distance.
+  int32_t poolCap = (newRd * 2 + 1) * (newRd * 2 + 1) + 8;
+
+  // 5. Update config and session (will revert if allocation fails).
+  int32_t oldRd = m_config.renderDistance;
+  m_config.renderDistance = newRd;
+  m_session.setRenderDistance(newRd);
+
+  // 6. Try to recreate pool, world, and renderer. If allocation fails,
+  //    revert to the previous working render distance.
+  try {
+    m_pool = SharedPool::create(poolCap, makeDims(m_config));
+
+    m_worldController = std::make_unique<WorldController>(*m_pool, m_blocks, m_config);
+    m_chunkWorker = std::make_unique<ChunkWorkerImpl>(
+      *m_genPool, *m_meshPool, *m_pool, m_worldGenPipeline, m_config,
+      *m_worldController, m_blocks);
+    m_worldController->createWorld(*m_chunkWorker, nullptr);
+
+    m_renderer = std::make_unique<Renderer>(m_window, m_blocks, m_config);
+
+    // Allocation succeeded — persist the new render distance.
+    m_saveOrchestrator->settings().setInt("renderDistance", newRd);
+    m_ui->setRenderDistance(newRd);
+  } catch (const std::bad_alloc&) {
+    // Allocation failed — revert to the old render distance and recreate.
+    m_renderer.reset();
+    m_worldController.reset();
+    m_pool.reset();
+
+    m_config.renderDistance = oldRd;
+    m_session.setRenderDistance(oldRd);
+
+    int32_t oldPoolCap = (oldRd * 2 + 1) * (oldRd * 2 + 1) + 8;
+    m_pool = SharedPool::create(oldPoolCap, makeDims(m_config));
+    m_worldController = std::make_unique<WorldController>(*m_pool, m_blocks, m_config);
+    m_chunkWorker = std::make_unique<ChunkWorkerImpl>(
+      *m_genPool, *m_meshPool, *m_pool, m_worldGenPipeline, m_config,
+      *m_worldController, m_blocks);
+    m_worldController->createWorld(*m_chunkWorker, nullptr);
+    m_renderer = std::make_unique<Renderer>(m_window, m_blocks, m_config);
+
+    // Restore UI to old value (setting didn't take effect).
+    m_ui->setRenderDistance(oldRd);
+    return;
+  }
+
+  // 7. Reconfigure save (re-attach persistence)
+  m_worldController->configureSaveWorld(m_saveDir, m_currentSaveSlug, false, m_ioPool.get());
+  if (auto* sm = m_worldController->saveManager()) {
+    m_saveOrchestrator->finalizeWorldStart(*sm, m_currentSaveSlug, m_currentSaveSlug,
+                                           m_config.worldSeed, m_session.gameMode());
+  }
+
+  // 8. Rebuild systems (they reference the new World)
+  initSystems();
+
+  // 10. Reset player state
+  m_spawnedToSurface = false;
+  m_cameraDirty = true;
+  syncPlayerWithCamera();
+  m_input.clearAll();
+  m_input.pointerLocked = false;
 }
 
 void Game::initECS() { createPlayer(); }
@@ -247,6 +361,8 @@ void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh)
     slug = std::move(result.slug);
     seed = m_config.worldSeed;
   }
+
+  m_currentSaveSlug = slug;
 
   // 2. Configure the world (creates SaveManager, sets up chunk persistence)
   m_worldController->configureSaveWorld(m_saveDir, slug, startFresh, m_ioPool.get());
