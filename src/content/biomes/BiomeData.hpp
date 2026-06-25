@@ -6,6 +6,15 @@
 
 namespace voxel::biome {
 
+/// A single temperature+humidity sample at a world position.
+/// Bundling both values avoids redundant noise evaluations when
+/// multiple consumers (sampleBiome, blendedHeightBias, mountainWeight)
+/// need the same climate data for the same coordinate.
+struct ClimateSample {
+  float temperature;
+  float humidity;
+};
+
 /// Numeric biome ID — replaces string-based biome name comparisons.
 /// Enables O(1) lookups and fully constexpr surface rule definitions.
 enum class BiomeId : uint8_t {

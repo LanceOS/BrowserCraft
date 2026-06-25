@@ -20,12 +20,6 @@ BiomeSampler::BiomeSampler(uint32_t seed)
     m_humidNoise(seed ^ 0xb1d07u)
 {}
 
-auto BiomeSampler::sampleBiome(float worldX, float worldZ) const -> const BiomeSurfaceRule& {
-  float t = sampleTemperature(worldX, worldZ);
-  float h = sampleHumidity(worldX, worldZ);
-  return pick(t, h);
-}
-
 auto BiomeSampler::sampleTemperature(float worldX, float worldZ) const -> float {
   return (m_tempNoise.noise3D(worldX * kClimateScale, 0.0f, worldZ * kClimateScale) + 1.0f) * 0.5f;
 }
@@ -34,9 +28,38 @@ auto BiomeSampler::sampleHumidity(float worldX, float worldZ) const -> float {
   return (m_humidNoise.noise3D(worldX * kClimateScale, 100.0f, worldZ * kClimateScale) + 1.0f) * 0.5f;
 }
 
+auto BiomeSampler::sampleClimate(float worldX, float worldZ) const -> ClimateSample {
+  return {sampleTemperature(worldX, worldZ), sampleHumidity(worldX, worldZ)};
+}
+
+// ---- World-coordinate versions (convenience — call sampleClimate internally) ----
+
+auto BiomeSampler::sampleBiome(float worldX, float worldZ) const -> const BiomeSurfaceRule& {
+  return sampleBiome(sampleClimate(worldX, worldZ));
+}
+
+auto BiomeSampler::mountainWeight(float worldX, float worldZ) const -> float {
+  return mountainWeight(sampleClimate(worldX, worldZ));
+}
+
 auto BiomeSampler::blendedHeightBias(float worldX, float worldZ) const -> float {
-  float t = sampleTemperature(worldX, worldZ);
-  float h = sampleHumidity(worldX, worldZ);
+  return blendedHeightBias(sampleClimate(worldX, worldZ));
+}
+
+// ---- ClimateSample-based overloads (pure functions, no noise) ----
+
+auto BiomeSampler::sampleBiome(const ClimateSample& c) -> const BiomeSurfaceRule& {
+  return pick(c.temperature, c.humidity);
+}
+
+auto BiomeSampler::mountainWeight(const ClimateSample& c) -> float {
+  float w = 1.0f - smoothEdge(c.temperature, kMountainTempThreshold, kMountainTransWidth);
+  return std::max(0.0f, w);
+}
+
+auto BiomeSampler::blendedHeightBias(const ClimateSample& c) -> float {
+  float t = c.temperature;
+  float h = c.humidity;
 
   // Weight each biome using smoothstep transitions aligned with pick().
   float wMountains = 1.0f - smoothEdge(t, kMountainTempThreshold, kMountainTransWidth);
@@ -60,11 +83,7 @@ auto BiomeSampler::blendedHeightBias(float worldX, float worldZ) const -> float 
     (wPlains    / total) * PlainsBiome.heightBias;
 }
 
-auto BiomeSampler::mountainWeight(float worldX, float worldZ) const -> float {
-  float t = sampleTemperature(worldX, worldZ);
-  float w = 1.0f - smoothEdge(t, kMountainTempThreshold, kMountainTransWidth);
-  return std::max(0.0f, w);
-}
+// ---- Static helpers ----
 
 auto BiomeSampler::pick(float temperature, float humidity) -> const BiomeSurfaceRule& {
   if (temperature > kDesertTempThreshold  && humidity < kDesertHumidThreshold) return DesertBiome;
