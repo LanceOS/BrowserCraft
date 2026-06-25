@@ -104,16 +104,35 @@ void Renderer::render(World& world, const CameraView& camera,
 
   // Upload time block
   {
-    float sunAngle = daynight::computeSunAngle(timeSeconds);
     float dayFac = daylightFactor;
-    float timeData[8] = {
+    glm::vec3 sunDir = daynight::computeSunDirection(timeSeconds);
+    glm::vec3 sunCol = daynight::computeSunColor(timeSeconds);
+    float ambientIntensity = daynight::computeAmbientIntensity(timeSeconds);
+    float sunIntensity = dayFac; // sun contribution scales with daylight
+    float timeOfDay = std::fmod(timeSeconds / daynight::kDefaultDayLengthSeconds, 1.0f);
+    if (timeOfDay < 0.0f) timeOfDay += 1.0f;
+
+    // std140 layout (48 bytes = 12 floats):
+    //   0: u_timeElapsed
+    //   4: u_daylight
+    //   8: u_sunIntensity
+    //  12: u_ambientIntensity
+    //  16: u_sunDir (vec3, aligned to 16-byte boundary)
+    //  28: u_timeOfDay
+    //  32: u_sunColor (vec3, aligned to 16-byte boundary)
+    //  44: u_pad
+    float timeData[12] = {
       timeSeconds,           // u_timeElapsed
-      sunAngle,              // u_sunAngle
-      dayFac,                // u_daylight
-      dayFac * 15.0f,        // u_lightLevel
-      std::sin(sunAngle),    // u_sunDir.x
-      std::cos(sunAngle),    // u_sunDir.y
-      0.3f,                  // u_sunDir.z
+      dayFac,                // u_daylight (0=night, 1=day)
+      sunIntensity,          // u_sunIntensity
+      ambientIntensity,      // u_ambientIntensity
+      sunDir.x,              // u_sunDir.x
+      sunDir.y,              // u_sunDir.y
+      sunDir.z,              // u_sunDir.z
+      timeOfDay,             // u_timeOfDay (0-1)
+      sunCol.r,              // u_sunColor.r
+      sunCol.g,              // u_sunColor.g
+      sunCol.b,              // u_sunColor.b
       0.0f                   // u_pad
     };
     m_timeUbo.upload(timeData, sizeof(timeData));
