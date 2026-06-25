@@ -190,6 +190,7 @@ void Game::createPlayer() {
 }
 
 void Game::initSystems() {
+  // --- Player controller ---
   auto controller = std::make_unique<PlayerControllerSystem>(
     m_window, m_input, m_transforms, m_bodies, m_players,
     *m_world, m_camera, m_config, *m_ui, m_session,
@@ -197,6 +198,11 @@ void Game::initSystems() {
   // Keep a non-owning pointer for direct access (e.g. pushPlayerOutOfBlocks).
   m_playerController = controller.get();
   m_systems.add(std::move(controller));
+
+  // --- Player spawn (runs once when terrain is ready) ---
+  m_systems.add(std::make_unique<PlayerSpawnSystem>(
+    m_transforms, m_bodies, *m_world, m_config,
+    m_spawnedToSurface, m_cameraDirty, m_playerController));
 }
 
 void Game::configureSaveWorld(const std::string& slotId, bool startFresh) {
@@ -312,57 +318,6 @@ void Game::update(float dt) {
     processGenJobs();
     if (m_saveManager) m_saveManager->processPending();
     m_world->update(m_camera.position);
-
-    if (!m_spawnedToSurface && m_world->hasTerrain()) {
-      int32_t idx = playerIndex();
-      if (idx >= 0 && m_transforms.has(idx) && m_bodies.has(idx)) {
-        auto& transform = m_transforms.get(idx);
-        auto& body = m_bodies.get(idx);
-
-        // Scan a 3x3 column area around the player's XZ position and use the
-        // highest ground found.  This avoids caves or overhangs at the player's
-        // exact coordinate causing them to spawn underground.
-        int32_t gx = static_cast<int32_t>(std::floor(transform.position.x));
-        int32_t gz = static_cast<int32_t>(std::floor(transform.position.z));
-        int32_t highestGroundY = -1;
-        for (int32_t dz = -1; dz <= 1; ++dz) {
-          for (int32_t dx = -1; dx <= 1; ++dx) {
-            int32_t sx = gx + dx;
-            int32_t sz = gz + dz;
-            for (int32_t y = m_config.worldHeight - 1; y >= 0; --y) {
-              if (m_world->isSolid(sx, y, sz)) {
-                if (y > highestGroundY) highestGroundY = y;
-                break;
-              }
-            }
-          }
-        }
-
-        if (highestGroundY >= 0) {
-          // Place the player a few blocks above the highest nearby solid block
-          // so they always spawn in clear space, even when the surface is
-          // uneven or there's a cave shaft at their exact coordinates.
-          constexpr float kSpawnHeightOffset = 3.0f;
-          transform.position.y = static_cast<float>(highestGroundY) + kSpawnHeightOffset;
-
-          // Verify the player is not colliding; push upward in small steps if
-          // they somehow ended up inside geometry (e.g. partial blocks,
-          // overhangs, or terrain that generates after the scan).
-          if (m_playerController) m_playerController->pushPlayerOutOfBlocks();
-
-          body.velocity.y = 0.0f;
-          body.onGround = 1;
-          m_spawnedToSurface = true;
-          m_cameraDirty = true;
-        } else {
-          // No terrain found at this XZ — clamp to a reasonable height and
-          // wait for neighbouring chunks to finish generating.
-          transform.position.y = std::min(transform.position.y, 64.0f);
-          body.velocity.y = 0.0f;
-          body.onGround = 0;
-        }
-      }
-    }
 
     m_systems.update(*this, dt);
 

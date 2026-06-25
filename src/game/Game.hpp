@@ -19,6 +19,7 @@
 #include "engine/ecs/components/Components.hpp"
 #include "engine/ecs/components/AudioEmitter.hpp"
 #include "engine/ecs/systems/PlayerControllerSystem.hpp"
+#include "engine/ecs/systems/PlayerSpawnSystem.hpp"
 #include "engine/audio/AudioEngine.hpp"
 #include "engine/threading/WorkerThreadPool.hpp"
 #include "engine/save/SaveManager.hpp"
