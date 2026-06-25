@@ -3,18 +3,17 @@
 #include "engine/ecs/SystemManager.hpp"
 #include "engine/ecs/ComponentStore.hpp"
 #include "engine/ecs/components/Components.hpp"
+#include "engine/core/TickContext.hpp"
 #include "engine/core/Config.hpp"
 #include "engine/collision/EntityCollisions.hpp"
 
 namespace voxel {
 
-class Game;
-
 /// Handles the one-time operation of placing the player on the surface when
 /// a new world starts.  Waits until the centre chunk has voxel data, scans a
 /// 3x3 column grid for the highest ground level, and positions the player a
 /// safe distance above it.
-class PlayerSpawnSystem final : public System<Game> {
+class PlayerSpawnSystem final : public System {
 public:
   PlayerSpawnSystem(
     ComponentStore<cmp::Transform>& transforms,
@@ -27,7 +26,7 @@ public:
 
   [[nodiscard]] auto name() const -> const std::string& override;
   [[nodiscard]] auto stage() const -> SystemStage override;
-  void update(Game& state, float dt) override;
+  void update(TickContext& ctx) override;
 
 private:
   ComponentStore<cmp::Transform>& m_transforms;

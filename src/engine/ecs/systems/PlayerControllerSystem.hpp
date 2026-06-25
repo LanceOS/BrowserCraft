@@ -3,6 +3,7 @@
 #include "engine/ecs/SystemManager.hpp"
 #include "engine/ecs/ComponentStore.hpp"
 #include "engine/ecs/components/Components.hpp"
+#include "engine/core/TickContext.hpp"
 #include "engine/core/InputState.hpp"
 #include "engine/core/Config.hpp"
 #include "engine/render/CameraView.hpp"
@@ -13,15 +14,13 @@
 
 namespace voxel {
 
-class Game;
-
 /// Handles first-person player controls: mouse look, WASD movement,
 /// gravity, collision, jumping, flying, and camera synchronisation.
 ///
 /// Reads from InputState and the player's ECS components each frame,
 /// writes position/velocity to the RigidBody and Transform, and
 /// updates the CameraView for rendering.
-class PlayerControllerSystem final : public System<Game> {
+class PlayerControllerSystem final : public System {
 public:
   PlayerControllerSystem(
     GLFWwindow* window,
@@ -38,7 +37,7 @@ public:
 
   [[nodiscard]] auto name() const -> const std::string& override;
   [[nodiscard]] auto stage() const -> SystemStage override;
-  void update(Game& state, float dt) override;
+  void update(TickContext& ctx) override;
 
   /// Collision engine shared with PlayerSpawnSystem.
   [[nodiscard]] auto collisions() -> EntityCollisions& { return m_collisions; }

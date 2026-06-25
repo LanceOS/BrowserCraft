@@ -10,6 +10,7 @@
 #include "engine/core/GameLoop.hpp"
 #include "engine/core/InputState.hpp"
 #include "engine/core/GameState.hpp"
+#include "engine/core/TickContext.hpp"
 #include "engine/alloc/SharedPool.hpp"
 #include "engine/ecs/EntityManager.hpp"
 #include "engine/ecs/ComponentStore.hpp"
@@ -114,7 +115,7 @@ private:
   TagStore m_hostileTags;
   TagStore m_friendlyTags;
 
-  SystemManager<Game> m_systems;
+  SystemManager m_systems;
   PlayerControllerSystem* m_playerController = nullptr;
   bool m_spawnedToSurface = false;
   bool m_cameraDirty = true;

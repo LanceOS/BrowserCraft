@@ -1,5 +1,5 @@
 #include "PlayerControllerSystem.hpp"
-#include "game/Game.hpp"
+#include "engine/core/TickContext.hpp"
 #include "engine/ecs/EntityManager.hpp"
 #include <algorithm>
 #include <cmath>
@@ -39,16 +39,15 @@ auto PlayerControllerSystem::stage() const -> SystemStage {
   return SystemStage::Physics;
 }
 
-void PlayerControllerSystem::update(Game& state, float dt) {
+void PlayerControllerSystem::update(TickContext& ctx) {
   // Only run controls while actively playing
   if (m_session.state() != GameState::InGame &&
       m_session.state() != GameState::GeneratingWorld) {
     return;
   }
 
-  // Resolve player entity index from the current Game state (always fresh,
-  // survives respawns and entity re-allocation).
-  int32_t playerId = state.playerEntityId();
+  // Resolve player entity index from the TickContext (always fresh).
+  int32_t playerId = ctx.playerEntityId;
   if (playerId < 0) return;
   int32_t idx = EntityManager::indexOf(playerId);
   if (idx < 0 ||
@@ -82,7 +81,7 @@ void PlayerControllerSystem::update(Game& state, float dt) {
   }
   m_input.pointerLocked = true;
 
-  applyMouseLook(dt);
+  applyMouseLook(ctx.dt);
 
   // Build movement direction from WASD
   glm::vec3 forwardFlat(std::sin(player.yaw), 0.0f, -std::cos(player.yaw));
@@ -103,13 +102,13 @@ void PlayerControllerSystem::update(Game& state, float dt) {
     // No terrain yet — allow mouse look and horizontal movement but no gravity
     float speed = m_input.isHeld(InputState::KEY_SHIFT) ? player.sprintSpeed
                                                         : player.walkSpeed;
-    transform.position += moveDir * speed * dt;
+    transform.position += moveDir * speed * ctx.dt;
     body.velocity = glm::vec3(0.0f);
     syncCameraFromPlayer();
     return;
   }
 
-  applyMovement(dt, transform, body, player, moveDir);
+  applyMovement(ctx.dt, transform, body, player, moveDir);
   syncCameraFromPlayer();
 }
 

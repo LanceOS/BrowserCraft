@@ -2,6 +2,7 @@
 
 #include <string>
 #include <cstdint>
+#include "world/BlockIds.hpp"
 
 namespace voxel::biome {
 
@@ -13,10 +14,10 @@ struct BiomeSurfaceRule {
   float heightBias;
 };
 
-inline constexpr BiomeSurfaceRule PlainsBiome    {"plains",    2, 3, 4,  0.0f};
-inline constexpr BiomeSurfaceRule DesertBiome    {"desert",    2, 2, 4, -1.5f};
-inline constexpr BiomeSurfaceRule ForestBiome    {"forest",    2, 3, 5,  1.5f};
-inline constexpr BiomeSurfaceRule MountainsBiome {"mountains", 1, 1, 2,  8.0f};
-inline constexpr BiomeSurfaceRule SwampBiome     {"swamp",     3, 3, 6, -2.0f};
+inline constexpr BiomeSurfaceRule PlainsBiome    {"plains",    BlockId::DIRT,  BlockId::STONE, 4,  0.0f};
+inline constexpr BiomeSurfaceRule DesertBiome    {"desert",    BlockId::SAND,  BlockId::SAND,  4, -1.5f};
+inline constexpr BiomeSurfaceRule ForestBiome    {"forest",    BlockId::DIRT,  BlockId::STONE, 5,  1.5f};
+inline constexpr BiomeSurfaceRule MountainsBiome {"mountains", BlockId::GRASS, BlockId::GRASS, 2,  8.0f};
+inline constexpr BiomeSurfaceRule SwampBiome     {"swamp",     BlockId::STONE, BlockId::STONE, 6, -2.0f};
 
 } // namespace voxel::biome

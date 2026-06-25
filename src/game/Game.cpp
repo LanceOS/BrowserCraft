@@ -272,7 +272,18 @@ void Game::update(float dt) {
     m_worldController->processSavePending();
     m_worldController->world().update(m_camera.position);
 
-    m_systems.update(*this, dt);
+    // Build tick context and run ECS systems
+    TickContext ctx{
+      .input = m_input,
+      .world = m_worldController->world(),
+      .camera = m_camera,
+      .ui = *m_ui,
+      .session = m_session,
+      .playerEntityId = m_playerEntityId,
+      .cameraDirty = m_cameraDirty,
+      .dt = dt,
+    };
+    m_systems.update(ctx);
 
     if (m_session.state() == GameState::GeneratingWorld && m_worldController->world().isReady()) {
       m_session.markWorldReady();

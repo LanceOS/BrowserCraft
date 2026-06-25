@@ -46,7 +46,7 @@ auto VoxelStore::getBlockId(int32_t worldX, int32_t worldY,
   if (!chunk) return 0;
   int32_t localX = mod(worldX);
   int32_t localZ = mod(worldZ);
-  auto slot = const_cast<SharedPool&>(m_pool).view(chunk->slotIndex);
+  auto slot = m_pool.view(chunk->slotIndex);
   return slot.voxels[(worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX];
 }
 
@@ -55,7 +55,7 @@ void VoxelStore::setBlockId(const Chunk& chunk, int32_t worldY,
                             uint8_t blockId) const
 {
   if (worldY < 0 || worldY >= m_config.worldHeight) return;
-  auto slot = const_cast<SharedPool&>(m_pool).view(chunk.slotIndex);
+  auto slot = m_pool.view(chunk.slotIndex);
   slot.voxels[(worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX] = blockId;
 }
 
@@ -65,7 +65,7 @@ auto VoxelStore::getRedstone(const Chunk& chunk, int32_t worldY,
                               int32_t localX, int32_t localZ) const -> uint8_t
 {
   if (worldY < 0 || worldY >= m_config.worldHeight) return 0;
-  auto slot = const_cast<SharedPool&>(m_pool).view(chunk.slotIndex);
+  auto slot = m_pool.view(chunk.slotIndex);
   return slot.redstone[(worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX];
 }
 
@@ -74,7 +74,7 @@ void VoxelStore::setRedstone(const Chunk& chunk, int32_t worldY,
                               uint8_t packed) const
 {
   if (worldY < 0 || worldY >= m_config.worldHeight) return;
-  auto slot = const_cast<SharedPool&>(m_pool).view(chunk.slotIndex);
+  auto slot = m_pool.view(chunk.slotIndex);
   slot.redstone[(worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX] = packed;
 }
 
@@ -94,7 +94,7 @@ auto VoxelStore::isSolidInChunk(int32_t worldX, int32_t worldY,
                                  const Chunk& chunk) const -> bool
 {
   if (worldY < 0 || worldY >= m_config.worldHeight) return false;
-  auto slot = const_cast<SharedPool&>(m_pool).view(chunk.slotIndex);
+  auto slot = m_pool.view(chunk.slotIndex);
   int32_t localX = mod(worldX);
   int32_t localZ = mod(worldZ);
   uint8_t blockId = slot.voxels[(worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX];

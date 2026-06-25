@@ -52,17 +52,46 @@ void SaveManager::requestLoad(int32_t chunkX, int32_t chunkZ) {
 }
 
 void SaveManager::markDirty(int32_t chunkX, int32_t chunkZ) {
-  std::lock_guard lock(m_mutex);
-  m_dirtyChunks.insert(chunkKey(chunkX, chunkZ));
+  {
+    std::lock_guard lock(m_mutex);
+    // If already dirty, skip duplicate submission
+    if (!m_dirtyChunks.insert(chunkKey(chunkX, chunkZ)).second) return;
+  }
+
+  // Submit async save to I/O thread pool — the chunk data is copied
+  // on the worker thread so the main thread is not blocked.
+  size_t ds = m_dataSize;
+  m_ioPool->submitAndForget([this, chunkX, chunkZ, ds]() {
+    auto* chunk = m_world.getChunk(chunkX, chunkZ);
+    if (!chunk) return;
+    auto slot = m_pool.view(chunk->slotIndex);
+
+    std::ofstream file(chunkFilePath(chunkX, chunkZ), std::ios::binary);
+    if (!file) return;
+
+    int32_t header[3] = {chunkX, chunkZ, static_cast<int32_t>(ds)};
+    file.write(reinterpret_cast<const char*>(header), sizeof(header));
+    file.write(reinterpret_cast<const char*>(slot.voxels), ds);
+    file.write(reinterpret_cast<const char*>(slot.light), ds);
+    file.write(reinterpret_cast<const char*>(slot.redstone), ds);
+
+    // Clear dirty flag on success
+    if (file.good()) {
+      std::lock_guard lock(m_mutex);
+      m_dirtyChunks.erase(chunkKey(chunkX, chunkZ));
+    }
+  });
 }
 
 void SaveManager::flushPending() {
-  std::unordered_set<int64_t> toSave;
+  // Drain any remaining dirty chunks that weren't picked up by async saves.
+  // This runs synchronously on the main thread (e.g. on quit).
+  std::unordered_set<int64_t> remaining;
   {
     std::lock_guard lock(m_mutex);
-    toSave.swap(m_dirtyChunks);
+    remaining.swap(m_dirtyChunks);
   }
-  for (int64_t key : toSave) {
+  for (int64_t key : remaining) {
     int32_t cx = static_cast<int32_t>(key >> 32);
     int32_t cz = static_cast<int32_t>(key & 0xFFFFFFFF);
     saveChunk(cx, cz);

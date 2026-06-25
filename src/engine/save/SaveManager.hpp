@@ -44,10 +44,11 @@ public:
   /// Request a chunk to be loaded from disk (async via thread pool).
   void requestLoad(int32_t chunkX, int32_t chunkZ) override;
 
-  /// Mark a chunk as needing to be saved.
+  /// Mark a chunk as needing to be saved. Saves are submitted asynchronously
+  /// to the I/O thread pool so the main thread is not blocked.
   void markDirty(int32_t chunkX, int32_t chunkZ) override;
 
-  /// Flush all pending saves to disk (call on quit).
+  /// Flush all pending saves to disk synchronously (call on quit).
   void flushPending();
 
   /// Save a single chunk immediately.

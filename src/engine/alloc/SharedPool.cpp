@@ -5,15 +5,13 @@
 
 namespace voxel {
 
-SharedPool::SharedPool(int32_t capacity, ChunkDimensions dims, bool owner)
-  : m_capacity(capacity), m_dims(dims), m_owner(owner) {
+SharedPool::SharedPool(int32_t capacity, ChunkDimensions dims)
+  : m_capacity(capacity), m_dims(dims) {
   computeLayout();
-  if (owner) {
-    m_ownedBuffer.resize(m_slotByteSize * capacity, 0);
-    m_freeList.resize(capacity);
-    for (int32_t i = 0; i < capacity; ++i) m_freeList[i] = i;
-    m_freeHead = capacity;
-  }
+  m_buffer.resize(m_slotByteSize * capacity, 0);
+  m_freeList.resize(capacity);
+  for (int32_t i = 0; i < capacity; ++i) m_freeList[i] = i;
+  m_freeHead = capacity;
 }
 
 void SharedPool::computeLayout() {
@@ -30,19 +28,10 @@ void SharedPool::computeLayout() {
 }
 
 auto SharedPool::create(int32_t capacity, ChunkDimensions dims) -> std::unique_ptr<SharedPool> {
-  return std::unique_ptr<SharedPool>(new SharedPool(capacity, dims, true));
-}
-
-auto SharedPool::attach(uint8_t* buffer, size_t bufferSize, int32_t capacity, ChunkDimensions dims)
-    -> std::unique_ptr<SharedPool> {
-  auto pool = std::unique_ptr<SharedPool>(new SharedPool(capacity, dims, false));
-  pool->m_externalBuffer = buffer;
-  pool->m_externalBufferSize = bufferSize;
-  return pool;
+  return std::unique_ptr<SharedPool>(new SharedPool(capacity, dims));
 }
 
 auto SharedPool::acquire() -> std::optional<ChunkSlot> {
-  if (!m_owner) throw std::runtime_error("Cannot acquire slots from a worker view");
   std::lock_guard<std::mutex> lock(m_mutex);
   if (m_freeHead == 0) return std::nullopt;
   int32_t slotIndex = m_freeList[--m_freeHead];
@@ -58,15 +47,14 @@ auto SharedPool::acquire() -> std::optional<ChunkSlot> {
 }
 
 void SharedPool::release(ChunkSlot slot) {
-  if (!m_owner) throw std::runtime_error("Cannot release slots from a worker view");
   std::lock_guard<std::mutex> lock(m_mutex);
   *slot.status = static_cast<int32_t>(ChunkSlotStatus::FREE);
   m_freeList[m_freeHead++] = slot.slotIndex;
 }
 
-auto SharedPool::view(int32_t slotIndex) -> ChunkSlot {
-  uint8_t* buf = m_owner ? m_ownedBuffer.data() : m_externalBuffer;
+auto SharedPool::view(int32_t slotIndex) const -> ChunkSlot {
   size_t base = static_cast<size_t>(slotIndex) * m_slotByteSize;
+  auto* buf = const_cast<uint8_t*>(m_buffer.data()); // non-const access to shared memory
 
   ChunkSlot slot{};
   slot.slotIndex = slotIndex;

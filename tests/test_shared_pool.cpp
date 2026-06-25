@@ -53,7 +53,7 @@ TEST_CASE("SharedPool acquire all then release", "[alloc]") {
   REQUIRE(s3->slotIndex == s0->slotIndex);
 }
 
-TEST_CASE("SharedPool worker attach and view", "[alloc]") {
+TEST_CASE("SharedPool multi-threaded view access", "[alloc]") {
   voxel::ChunkDimensions dims{};
   dims.sizeX = 16;
   dims.sizeY = 256;
@@ -64,16 +64,12 @@ TEST_CASE("SharedPool worker attach and view", "[alloc]") {
 
   auto pool = voxel::SharedPool::create(2, dims);
 
-  // Simulate worker attachment
-  auto worker = voxel::SharedPool::attach(
-    pool->buffer(), pool->bufferSize(), pool->capacity(), pool->dimensions());
-
-  // Worker can view slots
-  auto slot = worker->view(0);
+  // view() works from any context (single SharedPool, no attach needed)
+  auto slot = pool->view(0);
   slot.voxels[5] = 42;
   REQUIRE(slot.voxels[5] == 42);
 
-  // Main pool sees the same data
+  // Same data visible through another view
   auto mainSlot = pool->view(0);
   REQUIRE(mainSlot.voxels[5] == 42);
 }

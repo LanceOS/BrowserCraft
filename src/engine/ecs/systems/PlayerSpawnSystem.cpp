@@ -1,5 +1,6 @@
 #include "PlayerSpawnSystem.hpp"
-#include "game/Game.hpp"
+#include "engine/core/TickContext.hpp"
+#include "world/World.hpp"
 #include "engine/ecs/EntityManager.hpp"
 #include <algorithm>
 #include <cmath>
@@ -32,13 +33,13 @@ auto PlayerSpawnSystem::stage() const -> SystemStage {
   return SystemStage::PrePhysics;
 }
 
-void PlayerSpawnSystem::update(Game& state, float /*dt*/) {
+void PlayerSpawnSystem::update(TickContext& ctx) {
   // Only attempt spawn once, and only when the terrain is loaded.
   if (m_spawnedToSurface) return;
   if (!m_world.hasTerrain()) return;
 
-  // Resolve player entity
-  int32_t playerEntityId = state.playerEntityId();
+  // Resolve player entity from TickContext
+  int32_t playerEntityId = ctx.playerEntityId;
   int32_t idx = EntityManager::indexOf(playerEntityId);
   if (idx < 0 || !m_transforms.has(idx) || !m_bodies.has(idx)) return;
 
