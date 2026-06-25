@@ -15,12 +15,37 @@ SaveManager::SaveManager(const std::string& saveDir, const std::string& slotId,
   std::filesystem::create_directories(m_saveDir + "/" + m_slotId);
   auto dims = pool.dimensions();
   m_dataSize = static_cast<size_t>(dims.sizeX) * dims.sizeY * dims.sizeZ;
+
+  // Load existing metadata, or create default metadata for legacy worlds
+  auto metaPath = metadataFilePath();
+  auto existing = WorldMetadata::read(metaPath);
+  if (existing) {
+    m_metadata = std::move(*existing);
+  } else {
+    // Legacy world or first save — create default metadata from the slot ID
+    m_metadata = WorldMetadata::create(m_slotId, m_slotId, 0, 0);
+    m_metadata.write(metaPath);
+  }
 }
 
 SaveManager::~SaveManager() { flushPending(); }
 
 auto SaveManager::chunkFilePath(int32_t cx, int32_t cz) const -> std::string {
   return m_saveDir + "/" + m_slotId + "/" + std::to_string(cx) + "_" + std::to_string(cz) + ".chunk";
+}
+
+auto SaveManager::metadataFilePath() const -> std::string {
+  return m_saveDir + "/" + m_slotId + "/world.meta";
+}
+
+void SaveManager::writeMetadata(const WorldMetadata& meta) {
+  m_metadata = meta;
+  m_metadata.write(metadataFilePath());
+}
+
+void SaveManager::touchMetadata() {
+  m_metadata.touch();
+  m_metadata.write(metadataFilePath());
 }
 
 void SaveManager::requestLoad(int32_t chunkX, int32_t chunkZ) {

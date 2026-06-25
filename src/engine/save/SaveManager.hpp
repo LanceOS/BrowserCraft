@@ -1,6 +1,7 @@
 #pragma once
 
 #include "world/IChunkPersistence.hpp"
+#include "WorldMetadata.hpp"
 #include <string>
 #include <cstdint>
 #include <vector>
@@ -9,6 +10,7 @@
 #include <mutex>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace voxel {
 
@@ -62,8 +64,20 @@ public:
   /// Process pending loads (call each frame on main thread).
   void processPending();
 
+  // ---- Metadata management ----
+
+  /// Get the world metadata for this save slot.
+  [[nodiscard]] auto metadata() const -> const WorldMetadata& { return m_metadata; }
+
+  /// Update and persist the world metadata (e.g., timestamp on load).
+  void writeMetadata(const WorldMetadata& meta);
+
+  /// Touch the last-played timestamp to now and persist.
+  void touchMetadata();
+
 private:
   auto chunkFilePath(int32_t cx, int32_t cz) const -> std::string;
+  auto metadataFilePath() const -> std::string;
 
   std::string m_saveDir;
   std::string m_slotId;
@@ -75,6 +89,8 @@ private:
   mutable std::mutex m_mutex;
   mutable std::mutex m_loadMutex;
   size_t m_dataSize = 0;
+
+  WorldMetadata m_metadata;
 };
 
 } // namespace voxel

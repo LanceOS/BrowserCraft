@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <algorithm>
 #include <cctype>
+#include <ctime>
+#include <chrono>
 
 namespace {
 auto sanitizeSlotId(std::string slotId) -> std::string {
@@ -158,55 +160,164 @@ void UIManager::renderGameModeMenu() {
 
   float winW = ImGui::GetWindowWidth();
   float winH = ImGui::GetWindowHeight();
-  ImGui::SetCursorPos(ImVec2(winW * 0.5f - 200.0f, winH * 0.35f));
 
-  ImGui::BeginChild("ModePanel", ImVec2(420, 320), ImGuiChildFlags_Border);
-  ImGui::SetCursorPosX(155);
-  ImGui::Text("Select Mode");
+  // Split the menu into left panel (world list) and right panel (create/load)
+  float leftPanelW = winW * 0.35f;
+  float rightPanelW = winW * 0.35f;
+  float panelH = winH * 0.55f;
+  float startY = winH * 0.25f;
+  float leftX = winW * 0.15f;
+  float rightX = winW * 0.52f;
+
+  // ========== LEFT: World List ==========
+  ImGui::SetCursorPos(ImVec2(leftX, startY));
+  ImGui::BeginChild("WorldListPanel", ImVec2(leftPanelW, panelH), ImGuiChildFlags_Border);
+  ImGui::SetCursorPosX(leftPanelW * 0.5f - 40);
+  ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Saved Worlds");
+  ImGui::Separator();
+
+  if (m_worldEntries.empty()) {
+    ImGui::Spacing();
+    ImGui::SetCursorPosX(10);
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No saved worlds found.");
+    ImGui::SetCursorPosX(10);
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Create a new world to get started.");
+  } else {
+    ImGui::BeginChild("WorldListScroll", ImVec2(0, panelH - 60), ImGuiChildFlags_None);
+    for (size_t i = 0; i < m_worldEntries.size(); ++i) {
+      const auto& entry = m_worldEntries[i];
+
+      ImGui::PushID(static_cast<int>(i));
+      ImGui::Separator();
+
+      // World name
+      ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", entry.name.c_str());
+
+      // Game mode + date on second line
+      const char* modeStr = (entry.gameMode == 1) ? "Creative" : "Survival";
+      ImGui::SameLine(0, 4);
+      ImGui::TextDisabled("[%s]", modeStr);
+
+      std::string dateStr = formatTimestamp(entry.lastPlayedTimestamp);
+      ImGui::SameLine(ImGui::GetWindowWidth() - 120);
+      ImGui::TextDisabled("%s", dateStr.c_str());
+
+      // Load button
+      float btnW = leftPanelW - 30;
+      if (ImGui::Button("Load", ImVec2(btnW, 28))) {
+        if (m_callbacks.onStartWorld) {
+          GameMode gm = (entry.gameMode == 1) ? GameMode::Creative : GameMode::Survival;
+          m_callbacks.onStartWorld(gm, entry.slug, false);
+        }
+      }
+
+      ImGui::PopID();
+    }
+    ImGui::EndChild();
+  }
+
+  ImGui::EndChild();
+
+  // ========== RIGHT: Create/Load Panel ==========
+  ImGui::SetCursorPos(ImVec2(rightX, startY));
+  ImGui::BeginChild("CreatePanel", ImVec2(rightPanelW, panelH), ImGuiChildFlags_Border);
+  ImGui::SetCursorPosX(rightPanelW * 0.5f - 50);
+  ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Create World");
+  ImGui::Separator();
+
+  // Game mode selection
   ImGui::Spacing();
-
-  ImGui::SetCursorPosX(95);
-  ImGui::RadioButton("Survival##menu_mode", &m_gameModeIndex, 0);
+  ImGui::SetCursorPosX(20);
+  ImGui::Text("Game Mode");
+  ImGui::SetCursorPosX(20);
+  ImGui::RadioButton("Survival##create_mode", &m_gameModeIndex, 0);
   ImGui::SameLine();
-  ImGui::RadioButton("Creative##menu_mode", &m_gameModeIndex, 1);
+  ImGui::RadioButton("Creative##create_mode", &m_gameModeIndex, 1);
 
+  // World name input
   ImGui::Spacing();
-  ImGui::SetCursorPosX(90);
-  ImGui::Text("World Slot");
-  ImGui::SetCursorPosX(80);
-  ImGui::InputText("##world_slot", m_slotId.data(), m_slotId.size());
+  ImGui::SetCursorPosX(20);
+  ImGui::Text("World Name");
+  ImGui::SetCursorPosX(20);
+  ImGui::InputText("##world_name", m_slotId.data(), m_slotId.size());
 
   const std::string slotId = sanitizeSlotId(std::string(m_slotId.data()));
   const bool hasValidSlot = !slotId.empty();
   const GameMode mode = m_gameModeIndex == 1 ? GameMode::Creative : GameMode::Survival;
 
+  // Validation messages
   ImGui::Spacing();
   if (!hasValidSlot) {
-    ImGui::SetCursorPosX(50);
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "World slot cannot be blank");
+    ImGui::SetCursorPosX(20);
+    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "World name cannot be blank");
   } else if (slotId != std::string(m_slotId.data())) {
-    ImGui::SetCursorPosX(22);
-    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "Invalid characters were replaced with '_'");
+    ImGui::SetCursorPosX(20);
+    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "Invalid characters replaced with '_'");
   }
 
+  // Custom error message from outside (e.g., name collision)
+  if (!m_worldErrorMsg.empty()) {
+    ImGui::SetCursorPosX(20);
+    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_worldErrorMsg.c_str());
+  }
+
+  // Buttons
   ImGui::Spacing();
-  ImGui::SetCursorPosX(100);
+  ImGui::SetCursorPosX(20);
   if (!hasValidSlot) ImGui::BeginDisabled();
-  if (ImGui::Button("Load World", ImVec2(200, 40))) {
-    if (m_callbacks.onStartWorld) m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, false);
+
+  // "Start New World" button
+  if (ImGui::Button("Start New World", ImVec2(rightPanelW - 40, 40))) {
+    m_worldErrorMsg.clear();
+    if (m_callbacks.onStartWorld) {
+      m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, true);
+    }
   }
-  ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Start New World", ImVec2(200, 40))) {
-    if (m_callbacks.onStartWorld) m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, true);
+
+  // "Load World" button — loads by explicit name, reloads existing world data
+  if (ImGui::Button("Load World by Name", ImVec2(rightPanelW - 40, 40))) {
+    m_worldErrorMsg.clear();
+    if (m_callbacks.onStartWorld) {
+      m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, false);
+    }
   }
+
   if (!hasValidSlot) ImGui::EndDisabled();
-  ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Back", ImVec2(200, 40))) {
+
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::SetCursorPosX(rightPanelW * 0.5f - 30);
+  if (ImGui::Button("Back", ImVec2(80, 30))) {
     m_state = UIState::MainMenu;
   }
+
   ImGui::EndChild();
 
   ImGui::End();
+}
+
+void UIManager::setWorldList(std::vector<WorldEntry> worlds) {
+  m_worldEntries = std::move(worlds);
+}
+
+auto UIManager::formatTimestamp(int64_t timestamp) -> std::string {
+  if (timestamp <= 0) return "Never";
+
+  auto tp = std::chrono::system_clock::from_time_t(timestamp);
+  auto now = std::chrono::system_clock::now();
+  auto diff = std::chrono::duration_cast<std::chrono::hours>(now - tp).count();
+
+  if (diff < 24) return "Today";
+  if (diff < 48) return "Yesterday";
+  if (diff < 168) return std::to_string(diff / 24) + "d ago";
+
+  // Format as date
+  std::time_t t = static_cast<std::time_t>(timestamp);
+  std::tm tm{};
+  localtime_r(&t, &tm);
+  char buf[16];
+  std::strftime(buf, sizeof(buf), "%Y-%m-%d", &tm);
+  return buf;
 }
 
 void UIManager::renderPauseMenu() {

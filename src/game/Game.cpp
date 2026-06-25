@@ -126,14 +126,37 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   m_saveDir = options.saveDir;
   m_worldController->configureSaveWorld(m_saveDir, options.saveSlotId, false, m_ioPool.get());
 
+  // Initialize save system services
+  m_worldNaming = std::make_unique<WorldNamingService>(m_saveDir);
+  m_worldList = std::make_unique<WorldListService>(m_saveDir);
+  m_settings = std::make_unique<SettingsRepository>(m_saveDir + "/settings.db");
+
+  // Load saved settings
+  if (m_settings->has("renderDistance")) {
+    m_config.renderDistance = m_settings->getInt("renderDistance", m_config.renderDistance);
+    m_session.setRenderDistance(m_config.renderDistance);
+  }
+
   m_audioRegistry.seedBuiltinSounds();
   m_blockAudio = std::make_unique<BlockInteractionAudio>(m_audioEngine, m_audioRegistry, m_blocks);
 
   m_ui = std::make_unique<UIManager>(window, UIManager::Callbacks{
     .onStartWorld = [this](GameMode mode, const std::string& slotId, bool startFresh) {
+      // Name collision check for new worlds
+      if (startFresh && m_worldNaming->isNameTaken(slotId)) {
+        m_ui->setWorldError("A world with this name already exists. Choose a different name.");
+        return;
+      }
       startWorld(mode, slotId, startFresh);
     },
-    .onQuitToTitle = [this]{ m_session.returnToTitle(); },
+    .onQuitToTitle = [this]{
+      // Flush save data and refresh world list on return to title
+      if (auto* sm = m_worldController->saveManager()) {
+        sm->flushPending();
+      }
+      m_session.returnToTitle();
+      m_worldList->refresh();
+    },
     .onResume = [this]{ glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); },
     .onQuit = [this]{ m_running = false; },
   });

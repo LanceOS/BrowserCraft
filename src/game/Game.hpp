@@ -32,6 +32,9 @@
 #include "game/WorldController.hpp"
 #include "game/BlockInteractionAudio.hpp"
 #include "content/flora/FloraRegistry.hpp"
+#include "engine/save/WorldNamingService.hpp"
+#include "engine/save/WorldListService.hpp"
+#include "engine/save/SettingsRepository.hpp"
 
 namespace voxel {
 
@@ -105,6 +108,11 @@ private:
   std::mt19937 m_worldSeedRng;
   daynight::DayNightCycle m_dayNightCycle;
   std::string m_saveDir;
+
+  // Save system services
+  std::unique_ptr<WorldNamingService> m_worldNaming;
+  std::unique_ptr<WorldListService> m_worldList;
+  std::unique_ptr<SettingsRepository> m_settings;
 
   // ECS
   EntityManager m_entityManager{1 << 12};
