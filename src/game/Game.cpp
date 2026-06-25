@@ -56,17 +56,17 @@ public:
 
       uint32_t vc = 0, ic = 0;
       bool hasTransparent = false;
+      bool hasOpaque = false;
       bool ok = mesher::greedyMesh(
           slot.voxels, slot.light, m_blocks, mcfg,
           reinterpret_cast<float*>(vboBase + slotIndex * vboStride),
           reinterpret_cast<uint32_t*>(iboBase + slotIndex * iboStride),
-          vc, ic, &hasTransparent);
+          vc, ic, &hasTransparent, &hasOpaque);
       *slot.vertexCount = static_cast<uint32_t>(vc);
       *slot.indexCount = ic;
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-      if (hasTransparent) {
-        *slot.status |= 0x10000;
-      }
+      if (hasTransparent) *slot.status |= CHUNK_SLOT_FLAG_HAS_TRANSPARENT;
+      if (hasOpaque) *slot.status |= CHUNK_SLOT_FLAG_HAS_OPAQUE;
       m_controller.onMeshCompleted(slotIndex);
       (void)ok;
     });

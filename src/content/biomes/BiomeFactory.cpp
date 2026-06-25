@@ -2,6 +2,74 @@
 
 namespace voxel::biome {
 
+namespace {
+
+auto evaluateClimate(const ClimateSample& c) -> BiomeFactory::BiomeEvaluation {
+  const float t = c.temperature;
+  const float h = c.humidity;
+
+  BiomeFactory::BiomeEvaluation result;
+
+  const float mountainWeight = 1.0f - smoothEdge(t, kMountainTempThreshold, kMountainTransWidth);
+  const float desertTemp = smoothEdge(t, kDesertTempThreshold, kDesertTransWidth);
+  const float desertHumid = smoothEdge(h, kDesertHumidThreshold, kDesertTransWidth);
+  const float swampHumid = smoothEdge(h, kSwampHumidThreshold, kSwampHumidTransWidth);
+  const float swampTemp = smoothEdge(t, kSwampTempThreshold, kSwampTempTransWidth);
+  const float forestHumid = smoothEdge(h, kForestHumidThreshold, kForestTransWidth);
+  const float oceanTemp = smoothEdge(t, kOceanTempThreshold, kOceanTransWidth);
+  const float oceanHumid = smoothEdge(h, kOceanHumidThreshold, kOceanTransWidth);
+
+  result.weights.mountains = mountainWeight;
+  result.weights.desert = desertTemp * (1.0f - desertHumid);
+  result.weights.swamp = swampHumid * swampTemp;
+  // Forest suppressed where mountains or swamp would take priority (mirrors pick() ordering).
+  result.weights.forest = forestHumid * (1.0f - result.weights.mountains) * (1.0f - result.weights.swamp);
+  // Ocean: cool-ish and dry-ish, suppressed where mountains dominate.
+  result.weights.ocean = (1.0f - oceanTemp) * (1.0f - oceanHumid) * (1.0f - result.weights.mountains);
+  // Plains: remainder.
+  result.weights.plains = 1.0f - result.weights.mountains - result.weights.desert -
+                          result.weights.swamp - result.weights.forest - result.weights.ocean;
+  if (result.weights.plains < 0.0f) result.weights.plains = 0.0f;
+
+  float total = result.weights.mountains + result.weights.desert + result.weights.swamp +
+                result.weights.forest + result.weights.ocean + result.weights.plains;
+  if (total > 0.0f) {
+    result.weights.mountains /= total;
+    result.weights.desert    /= total;
+    result.weights.swamp     /= total;
+    result.weights.forest    /= total;
+    result.weights.ocean     /= total;
+    result.weights.plains    /= total;
+  }
+
+  result.mountainWeight = result.weights.mountains;
+
+  result.dominantBiome = &PlainsBiome::instance();
+  if (t > kDesertTempThreshold && h < kDesertHumidThreshold) {
+    result.dominantBiome = &DesertBiome::instance();
+  } else if (h > kSwampHumidThreshold && t > kSwampTempThreshold) {
+    result.dominantBiome = &SwampBiome::instance();
+  } else if (t < kMountainTempThreshold) {
+    result.dominantBiome = &MountainsBiome::instance();
+  } else if (h > kForestHumidThreshold) {
+    result.dominantBiome = &ForestBiome::instance();
+  } else if (t < kOceanTempThreshold && h < kOceanHumidThreshold) {
+    result.dominantBiome = &OceanBiome::instance();
+  }
+
+  result.blendedHeightBias =
+    result.weights.mountains * MountainsBiome::instance().heightBias() +
+    result.weights.desert    * DesertBiome::instance().heightBias() +
+    result.weights.swamp     * SwampBiome::instance().heightBias() +
+    result.weights.forest    * ForestBiome::instance().heightBias() +
+    result.weights.ocean     * OceanBiome::instance().heightBias() +
+    result.weights.plains    * PlainsBiome::instance().heightBias();
+
+  return result;
+}
+
+} // namespace
+
 const Biome& BiomeFactory::forId(BiomeId id) {
   switch (id) {
     case BiomeId::Plains:    return PlainsBiome::instance();
@@ -15,68 +83,27 @@ const Biome& BiomeFactory::forId(BiomeId id) {
 }
 
 const Biome& BiomeFactory::pick(float temperature, float humidity) {
-  if (temperature > kDesertTempThreshold  && humidity < kDesertHumidThreshold) return DesertBiome::instance();
-  if (humidity    > kSwampHumidThreshold  && temperature > kSwampTempThreshold) return SwampBiome::instance();
-  if (temperature < kMountainTempThreshold)                                      return MountainsBiome::instance();
-  if (humidity    > kForestHumidThreshold)                                       return ForestBiome::instance();
-  if (temperature < kOceanTempThreshold  && humidity < kOceanHumidThreshold)      return OceanBiome::instance();
-  return PlainsBiome::instance();
+  return *evaluateClimate({temperature, humidity}).dominantBiome;
 }
 
 const Biome& BiomeFactory::pick(const ClimateSample& c) {
-  return pick(c.temperature, c.humidity);
+  return *evaluateClimate(c).dominantBiome;
+}
+
+auto BiomeFactory::evaluate(const ClimateSample& c) -> BiomeEvaluation {
+  return evaluateClimate(c);
 }
 
 float BiomeFactory::mountainWeight(const ClimateSample& c) {
-  float w = 1.0f - smoothEdge(c.temperature, kMountainTempThreshold, kMountainTransWidth);
-  if (w < 0.0f) w = 0.0f;
-  return w;
+  return evaluateClimate(c).mountainWeight;
 }
 
 auto BiomeFactory::computeWeights(const ClimateSample& c) -> BiomeWeights {
-  float t = c.temperature;
-  float h = c.humidity;
-
-  BiomeWeights w;
-  w.mountains = 1.0f - smoothEdge(t, kMountainTempThreshold, kMountainTransWidth);
-  w.desert    = smoothEdge(t, kDesertTempThreshold,  kDesertTransWidth)
-              * (1.0f - smoothEdge(h, kDesertHumidThreshold, kDesertTransWidth));
-  w.swamp     = smoothEdge(h, kSwampHumidThreshold, kSwampHumidTransWidth)
-              * smoothEdge(t, kSwampTempThreshold,  kSwampTempTransWidth);
-  // Forest suppressed where mountains or swamp would take priority (mirrors pick() ordering).
-  w.forest    = smoothEdge(h, kForestHumidThreshold, kForestTransWidth)
-              * (1.0f - w.mountains) * (1.0f - w.swamp);
-  // Ocean: cool-ish and dry-ish, suppressed where mountains dominate.
-  w.ocean     = (1.0f - smoothEdge(t, kOceanTempThreshold,  kOceanTransWidth))
-              * (1.0f - smoothEdge(h, kOceanHumidThreshold, kOceanTransWidth))
-              * (1.0f - w.mountains);
-  // Plains: remainder.
-  w.plains    = 1.0f - w.mountains - w.desert - w.swamp - w.forest - w.ocean;
-  if (w.plains < 0.0f) w.plains = 0.0f;
-
-  // Normalise so weights sum to 1.
-  float total = w.mountains + w.desert + w.swamp + w.forest + w.ocean + w.plains;
-  if (total > 0.0f) {
-    w.mountains /= total;
-    w.desert    /= total;
-    w.swamp     /= total;
-    w.forest    /= total;
-    w.ocean     /= total;
-    w.plains    /= total;
-  }
-
-  return w;
+  return evaluateClimate(c).weights;
 }
 
 float BiomeFactory::blendedHeightBias(const ClimateSample& c) {
-  auto w = computeWeights(c);
-  return
-    w.mountains * MountainsBiome::instance().heightBias() +
-    w.desert    * DesertBiome::instance().heightBias() +
-    w.swamp     * SwampBiome::instance().heightBias() +
-    w.forest    * ForestBiome::instance().heightBias() +
-    w.ocean     * OceanBiome::instance().heightBias() +
-    w.plains    * PlainsBiome::instance().heightBias();
+  return evaluateClimate(c).blendedHeightBias;
 }
 
 } // namespace voxel::biome

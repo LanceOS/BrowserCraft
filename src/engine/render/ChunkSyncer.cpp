@@ -51,10 +51,12 @@ void ChunkSyncer::sync(World& world) {
       cullData.firstIndex = static_cast<uint32_t>(iboOffset / sizeof(uint32_t));
       cullData.baseVertex = static_cast<uint32_t>(baseVertex);
       cullData.slotIndex = static_cast<uint32_t>(slot.slotIndex);
+      cullData.hasOpaque = static_cast<uint32_t>(chunk->hasOpaque);
       cullData.hasTransparent = static_cast<uint32_t>(chunk->hasTransparent);
       m_indirectBatcher->updateChunkData(slot.slotIndex, cullData);
     } else {
       ChunkCullData emptyData{};
+      emptyData.hasOpaque = 0u;
       emptyData.hasTransparent = 0u;
       m_indirectBatcher->updateChunkData(slot.slotIndex, emptyData);
     }

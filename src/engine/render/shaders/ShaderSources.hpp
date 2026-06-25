@@ -41,10 +41,10 @@ struct ChunkCullData {
     uint firstIndex;
     uint baseVertex;
     uint slotIndex;
+    uint hasOpaque;
     uint hasTransparent;
     uint pad1;
     uint pad2;
-    uint pad3;
 };
 
 layout(std430, binding = 0) readonly buffer InputChunks {
@@ -60,7 +60,7 @@ out float v_ao;
 
 void main() {
   // @see notes/indirect-draw-base-instance.md
-  uint chunkIndex = uint(gl_InstanceID);
+  uint chunkIndex = gl_BaseInstance;
   vec3 chunkTranslation = chunks[int(chunkIndex)].min.xyz;
   vec3 worldPos = a_pos + chunkTranslation;
   vec4 clip = u_projView * vec4(worldPos, 1.0);

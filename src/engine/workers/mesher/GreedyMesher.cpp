@@ -49,7 +49,6 @@ static inline auto isSolidExcluding(const uint8_t* voxels,
 }
 
 static inline auto skyNibble(uint8_t packed) -> int32_t { return (packed >> 4) & 0x0F; }
-static inline auto blockNibble(uint8_t packed) -> int32_t { return packed & 0x0F; }
 
 static inline auto getPackedLight(const uint8_t* light,
                                   int32_t x, int32_t y, int32_t z,
@@ -60,12 +59,11 @@ static inline auto getPackedLight(const uint8_t* light,
   return light[voxelIndex(x, y, z, cfg)];
 }
 
-/// Pack sky light, block light, AO into a float.
+/// Pack sky light and AO into a float.
 /// The shader does `uint(a_lightData + 0.5)` to recover the integer.
-static inline auto packLight(int32_t sky, int32_t block, int32_t ao) -> float {
-  uint32_t p = ( static_cast<uint32_t>(sky)   & 0x0Fu)
-             | ((static_cast<uint32_t>(block) & 0x0Fu) << 4)
-             | ((static_cast<uint32_t>(ao)    & 0x03u) << 16);
+static inline auto packLight(int32_t sky, int32_t ao) -> float {
+  uint32_t p = ( static_cast<uint32_t>(sky) & 0x0Fu)
+             | ((static_cast<uint32_t>(ao)  & 0x03u) << 16);
   return static_cast<float>(p);
 }
 
@@ -158,23 +156,21 @@ static inline int32_t aoBack(const uint8_t* voxels,
 // Corner light — average of four surrounding blocks
 // ======================================================================
 
-struct AvgLight { int32_t sky; int32_t block; };
+struct AvgLight { int32_t sky; };
 
 static inline auto cornerLight(const uint8_t* light,
                                int32_t cx, int32_t cy, int32_t cz,
                                const MesherConfig& cfg) -> AvgLight {
-  int32_t sTot = 0, bTot = 0, cnt = 0;
+  int32_t sTot = 0, cnt = 0;
   int32_t ox[4] = {-1, 0, -1, 0};
   int32_t oz[4] = {-1, -1, 0, 0};
   for (int32_t i = 0; i < 4; ++i) {
     uint8_t p = getPackedLight(light, cx + ox[i], cy, cz + oz[i], cfg);
     sTot += skyNibble(p);
-    bTot += blockNibble(p);
     ++cnt;
   }
   AvgLight r;
   r.sky   = (cnt > 0) ? ((sTot + cnt/2) / cnt) : 0;
-  r.block = (cnt > 0) ? ((bTot + cnt/2) / cnt) : 0;
   return r;
 }
 
@@ -182,7 +178,7 @@ static inline auto cornerLight(const uint8_t* light,
 // Vertex writer
 // ======================================================================
 
-static inline void writeVtx(float* data, int32_t stride, uint32_t offset,
+static inline void writeVtx(float* data, uint32_t offset,
                             float x, float y, float z,
                             float nx, float ny, float nz,
                             float u, float v,
@@ -236,7 +232,8 @@ bool greedyMesh(
     uint32_t* indexOut,
     uint32_t& vertexCountOut,
     uint32_t& indexCountOut,
-    bool* hasTransparentOut)
+    bool* hasTransparentOut,
+    bool* hasOpaqueOut)
 {
   const int32_t SX = cfg.sizeX;
   const int32_t SY = cfg.sizeY;
@@ -308,9 +305,8 @@ bool greedyMesh(
 
           const auto* def = blocks.tryGet(bid);
           if (!def) { mask[v * uSz + u] = 0; continue; }
-          if (hasTransparentOut && !def->material.opaque) {
-            *hasTransparentOut = true;
-          }
+          if (hasTransparentOut && !def->material.opaque) *hasTransparentOut = true;
+          if (hasOpaqueOut && def->material.opaque) *hasOpaqueOut = true;
 
           // Texture layer for this face direction
           uint16_t tlayer;
@@ -380,7 +376,7 @@ bool greedyMesh(
           else              lY = c[0][1];
 
           // AO & light per corner
-          int32_t ao[4], sky[4], blk[4];
+          int32_t ao[4], sky[4];
           for (int32_t ci = 0; ci < 4; ++ci) {
             int32_t cx = c[ci][0], cy = c[ci][1], cz = c[ci][2];
             switch (di) {
@@ -392,12 +388,12 @@ bool greedyMesh(
               case 5: ao[ci]=aoBack( voxels,cx,cy,(int32_t)fc,bx,by,bz,cfg,blocks); break;
             }
             AvgLight al = cornerLight(light, cx, lY, cz, cfg);
-            sky[ci] = al.sky; blk[ci] = al.block;
+            sky[ci] = al.sky;
           }
 
           float ld[4];
           for (int32_t ci = 0; ci < 4; ++ci)
-            ld[ci] = packLight(sky[ci], 0, ao[ci]); // block light disabled — single sun source
+            ld[ci] = packLight(sky[ci], ao[ci]);
 
           bool flip = (ao[0] + ao[2]) > (ao[1] + ao[3]);
 
@@ -407,10 +403,10 @@ bool greedyMesh(
           }
 
           float tlF = static_cast<float>(tlayer);
-          writeVtx(vertexOut, S, vo, bl[0],bl[1],bl[2], nx,ny,nz, uv[0][0],uv[0][1], tlF, ld[0]); vo += S;
-          writeVtx(vertexOut, S, vo, br[0],br[1],br[2], nx,ny,nz, uv[1][0],uv[1][1], tlF, ld[1]); vo += S;
-          writeVtx(vertexOut, S, vo, tl[0],tl[1],tl[2], nx,ny,nz, uv[2][0],uv[2][1], tlF, ld[2]); vo += S;
-          writeVtx(vertexOut, S, vo, tr[0],tr[1],tr[2], nx,ny,nz, uv[3][0],uv[3][1], tlF, ld[3]); vo += S;
+          writeVtx(vertexOut, vo, bl[0],bl[1],bl[2], nx,ny,nz, uv[0][0],uv[0][1], tlF, ld[0]); vo += S;
+          writeVtx(vertexOut, vo, br[0],br[1],br[2], nx,ny,nz, uv[1][0],uv[1][1], tlF, ld[1]); vo += S;
+          writeVtx(vertexOut, vo, tl[0],tl[1],tl[2], nx,ny,nz, uv[2][0],uv[2][1], tlF, ld[2]); vo += S;
+          writeVtx(vertexOut, vo, tr[0],tr[1],tr[2], nx,ny,nz, uv[3][0],uv[3][1], tlF, ld[3]); vo += S;
 
           uint32_t base = (vo / S) - 4;
           if (!flip) {

@@ -59,7 +59,8 @@ void WorldController::processGenJobs() {
     if (chunk && chunk->state == ChunkState::Meshing) {
       auto slot = m_pool.view(i);
       int32_t rawStatus = *slot.status;
-      chunk->hasTransparent = (rawStatus & 0x10000) != 0;
+      chunk->hasOpaque = (rawStatus & CHUNK_SLOT_FLAG_HAS_OPAQUE) != 0;
+      chunk->hasTransparent = (rawStatus & CHUNK_SLOT_FLAG_HAS_TRANSPARENT) != 0;
       m_world->onMeshDone(i, *slot.vertexCount, *slot.indexCount, true);
     }
   }

@@ -17,6 +17,12 @@ enum class ChunkSlotStatus : int32_t {
   GPU_UPLOADED = 5,
 };
 
+/// Additional status flags packed into the shared slot status word.
+/// These are orthogonal to ChunkSlotStatus and are masked off by lifecycle
+/// code that only cares about the low bits.
+inline constexpr int32_t CHUNK_SLOT_FLAG_HAS_TRANSPARENT = 1 << 16;
+inline constexpr int32_t CHUNK_SLOT_FLAG_HAS_OPAQUE = 1 << 17;
+
 struct ChunkDimensions {
   int32_t sizeX;
   int32_t sizeY;

@@ -18,10 +18,10 @@ struct ChunkCullData {
     uint32_t firstIndex;
     uint32_t baseVertex;
     uint32_t slotIndex;
+    uint32_t hasOpaque;
     uint32_t hasTransparent;
     uint32_t pad1;
     uint32_t pad2;
-    uint32_t pad3;
 };
 
 struct DrawCommand {
@@ -39,7 +39,9 @@ class IndirectBatcher {
 public:
   IndirectBatcher(uint32_t maxChunks) : m_maxChunks(maxChunks) {
       m_chunkDataBuffer = std::make_unique<PersistentBuffer>(maxChunks * sizeof(ChunkCullData), GL_SHADER_STORAGE_BUFFER);
-      m_indirectBuffer = std::make_unique<PersistentBuffer>(maxChunks * sizeof(DrawCommand), GL_DRAW_INDIRECT_BUFFER);
+      // Two command streams are stored back-to-back: opaque first, then transparent.
+      // The buffer is sized for both streams because a chunk may contribute to both.
+      m_indirectBuffer = std::make_unique<PersistentBuffer>(maxChunks * 2u * sizeof(DrawCommand), GL_DRAW_INDIRECT_BUFFER);
 
       // Zero out.
       std::memset(m_chunkDataBuffer->mappedPtr(), 0, m_chunkDataBuffer->capacity());
@@ -63,18 +65,18 @@ public:
       const auto* chunks = static_cast<const ChunkCullData*>(m_chunkDataBuffer->mappedPtr());
       auto* commands = static_cast<DrawCommand*>(m_indirectBuffer->mappedPtr());
 
-      // First pass: collect opaque chunks starting at index 0.
+      // First pass: collect chunks that have any opaque geometry.
       uint32_t activeLimit = m_activeSlots.load(std::memory_order_relaxed);
       uint32_t opaqueCount = 0u;
       for (uint32_t i = 0; i < activeLimit; ++i) {
         const auto& c = chunks[i];
-        if (c.indexCount == 0 || c.hasTransparent != 0u) continue;
+        if (c.indexCount == 0 || c.hasOpaque == 0u) continue;
         if (!frustum.intersectsAABB(c.min[0], c.min[1], c.min[2],
                                    c.max[0], c.max[1], c.max[2])) continue;
         commands[opaqueCount++] = DrawCommand{c.indexCount, 1u, c.firstIndex, c.baseVertex, c.slotIndex};
       }
 
-      // Second pass: collect transparent chunks starting after the opaque range.
+      // Second pass: collect chunks that have any transparent geometry.
       uint32_t transparentCount = 0u;
       for (uint32_t i = 0; i < activeLimit; ++i) {
         const auto& c = chunks[i];

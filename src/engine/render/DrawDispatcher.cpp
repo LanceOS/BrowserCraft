@@ -36,7 +36,7 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
   const uint32_t opaqueCount = m_indirectBatcher.opaqueCommandCount();
   const uint32_t transparentCount = m_indirectBatcher.transparentCommandCount();
 
-  // Pass 1: opaque only — no blending (alpha-test discards foliage texels).
+  // Pass 1: opaque geometry first. Transparent texels are discarded in the shader.
   if (opaqueCount > 0u) {
     gl::Disable(GL_BLEND);
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
@@ -45,7 +45,7 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
     m_indirectBatcher.drawIndirect(opaqueCount, 0u);
   }
 
-  // Pass 2: transparent only — blending enabled for semi-transparent surfaces.
+  // Pass 2: transparent geometry only, blended over the opaque pass.
   if (transparentCount > 0u) {
     gl::Enable(GL_BLEND);
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
@@ -55,6 +55,9 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
   }
 
   gl::BindVertexArray(0);
+  gl::Disable(GL_BLEND);
+  gl::DepthMask(GL_TRUE);
+  gl::DepthFunc(GL_LESS);
 }
 
 } // namespace voxel

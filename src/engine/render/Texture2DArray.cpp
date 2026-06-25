@@ -75,11 +75,6 @@ void Texture2DArray::uploadAllLayers8(const uint8_t* rgba, int32_t w, int32_t h,
   gl::TexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, w, h, count, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 }
 
-void Texture2DArray::generateMipmaps() {
-  gl::BindTexture(GL_TEXTURE_2D_ARRAY, m_texture);
-  gl::GenerateMipmap(GL_TEXTURE_2D_ARRAY);
-}
-
 void Texture2DArray::bind(uint32_t unit) const {
   gl::ActiveTexture(GL_TEXTURE0 + unit);
   gl::BindTexture(GL_TEXTURE_2D_ARRAY, m_texture);
