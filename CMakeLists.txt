@@ -128,6 +128,7 @@ add_executable(voxel_tests
   tests/test_worldgen.cpp
   tests/test_save_manager.cpp
   tests/test_thread_pool.cpp
+  tests/test_player_controller.cpp
 )
 target_link_libraries(voxel_tests PRIVATE voxel_engine Catch2::Catch2WithMain)
 catch_discover_tests(voxel_tests)

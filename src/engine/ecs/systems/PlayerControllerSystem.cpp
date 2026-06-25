@@ -50,7 +50,7 @@ void PlayerControllerSystem::update(Game& state, float dt) {
   // Resolve player entity index from the current Game state (always fresh,
   // survives respawns and entity re-allocation).
   int32_t playerId = state.playerEntityId();
-  if (playerId == 0) return;
+  if (playerId < 0) return;
   int32_t idx = EntityManager::indexOf(playerId);
   if (idx < 0 ||
       !m_transforms.has(idx) || !m_bodies.has(idx) || !m_players.has(idx)) {
