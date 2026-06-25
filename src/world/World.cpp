@@ -167,6 +167,28 @@ void World::onWorldGenDone(int32_t slotIndex) {
   auto* chunk = getChunkBySlotIndex(slotIndex);
   if (!chunk) return;
   if (chunk->state != ChunkState::Generating) return;
+
+  // ---- Validate generated chunk data ----
+  // Check that bedrock was placed at y=0. If generation ran correctly
+  // bedrock will always be present; its absence indicates a silent failure.
+  {
+    auto slot = m_pool.view(chunk->slotIndex);
+    const int32_t sx = m_config.chunkSize;
+    const int32_t sz = m_config.chunkSize;
+    // Sample a few columns at the chunk corners.
+    bool hasBedrock = false;
+    const int32_t checkIndices[] = {0, sz - 1, (sz - 1) * sx, sz * sx - 1};
+    for (int32_t ci : checkIndices) {
+      if (slot.voxels[ci] != 0) { hasBedrock = true; break; }
+    }
+    if (!hasBedrock && chunk->genRetries < MAX_CHUNK_GEN_RETRIES) {
+      ++chunk->genRetries;
+      chunk->state = ChunkState::QueuedGen;
+      m_jobQueue.pushGen(chunk->slotIndex, chunk->chunkX, chunk->chunkZ);
+      return;
+    }
+  }
+
   chunk->state = ChunkState::VoxelsReady;
   chunk->needsRemesh = false;
   markChunkDirty(chunk->chunkX, chunk->chunkZ);

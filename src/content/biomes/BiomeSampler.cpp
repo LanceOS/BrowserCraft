@@ -3,24 +3,34 @@
 namespace voxel::biome {
 
 BiomeSampler::BiomeSampler(uint32_t seed)
-  : m_tempNoise(seed ^ 0xa10beu), m_humidNoise(seed ^ 0xb1d07u) {}
+  : m_tempNoise(seed ^ 0xa10beu),
+    m_humidNoise(seed ^ 0xb1d07u)
+{}
 
-auto BiomeSampler::noise2D(float worldX, float worldZ) const -> float {
-  return m_tempNoise.noise3D(worldX, 0.0f, worldZ);
+auto BiomeSampler::sampleTemperature(float worldX, float worldZ) const -> float {
+  float raw = m_tempNoise.noise3D(worldX * kClimateScale, 0.0f, worldZ * kClimateScale);
+  return (raw + 1.0f) * 0.5f;
 }
 
-auto BiomeSampler::sampleBiome(float worldX, float worldZ) const -> const BiomeSurfaceRule& {
-  float temperature = (m_tempNoise.noise3D(worldX * 0.008f, 0.0f, worldZ * 0.008f) + 1.0f) * 0.5f;
-  float humidity = (m_humidNoise.noise3D(worldX * 0.008f, 100.0f, worldZ * 0.008f) + 1.0f) * 0.5f;
-  return pick(temperature, humidity);
+auto BiomeSampler::sampleHumidity(float worldX, float worldZ) const -> float {
+  float raw = m_humidNoise.noise3D(worldX * kClimateScale, 100.0f, worldZ * kClimateScale);
+  return (raw + 1.0f) * 0.5f;
 }
 
-auto BiomeSampler::pick(float temperature, float humidity) -> const BiomeSurfaceRule& {
-  if (temperature > 0.65f && humidity < 0.35f) return DesertBiome;
-  if (humidity > 0.72f && temperature > 0.35f)  return SwampBiome;
-  if (temperature < 0.28f)                        return MountainsBiome;
-  if (humidity > 0.55f)                           return ForestBiome;
-  return PlainsBiome;
+auto BiomeSampler::sampleClimate(float worldX, float worldZ) const -> ClimateSample {
+  return {sampleTemperature(worldX, worldZ), sampleHumidity(worldX, worldZ)};
+}
+
+auto BiomeSampler::sampleBiome(float worldX, float worldZ) const -> const Biome& {
+  return BiomeFactory::pick(sampleClimate(worldX, worldZ));
+}
+
+auto BiomeSampler::mountainWeight(float worldX, float worldZ) const -> float {
+  return BiomeFactory::mountainWeight(sampleClimate(worldX, worldZ));
+}
+
+auto BiomeSampler::blendedHeightBias(float worldX, float worldZ) const -> float {
+  return BiomeFactory::blendedHeightBias(sampleClimate(worldX, worldZ));
 }
 
 } // namespace voxel::biome
