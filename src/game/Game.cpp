@@ -67,8 +67,7 @@ public:
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
       if (hasTransparent) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
       if (hasOpaque) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
-      m_controller.onMeshCompleted(slotIndex);
-      (void)ok;
+      m_controller.onMeshCompleted(slotIndex, ok);
     });
   }
 

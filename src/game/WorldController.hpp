@@ -43,9 +43,9 @@ public:
   }
 
   /// Called by worker thread callbacks when meshing is done.
-  void onMeshCompleted(int32_t slotIndex) {
+  void onMeshCompleted(int32_t slotIndex, bool success) {
     std::lock_guard lock(m_completionMutex);
-    m_completedMeshSlots.push(slotIndex);
+    m_completedMeshSlots.push(CompletedMeshJob{slotIndex, success});
   }
 
   [[nodiscard]] auto world() -> World& { return *m_world; }
@@ -56,6 +56,11 @@ public:
   void clearWorld() { if (m_world) m_world->clear(); }
 
 private:
+  struct CompletedMeshJob {
+    int32_t slotIndex;
+    bool success;
+  };
+
   SharedPool& m_pool;
   BlockRegistry& m_blocks;
   const GameConfig& m_config;
@@ -65,7 +70,7 @@ private:
 
   // Completion queues: workers push slot indices here.
   std::queue<int32_t> m_completedGenSlots;
-  std::queue<int32_t> m_completedMeshSlots;
+  std::queue<CompletedMeshJob> m_completedMeshSlots;
   std::mutex m_completionMutex;
 };
 

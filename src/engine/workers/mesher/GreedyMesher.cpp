@@ -1,12 +1,17 @@
 #include "GreedyMesher.hpp"
 #include "AmbientOcclusion.hpp"
-#include <cstring>
 #include <algorithm>
-#include <new>
+#include <cstring>
 #include <vector>
 
 namespace voxel {
 namespace mesher {
+
+namespace {
+
+constexpr uint32_t kPackedVertexFloats = 10u;
+
+} // namespace
 
 // ======================================================================
 // Internal helpers
@@ -223,6 +228,7 @@ thread_local GreedyMeshScratch g_scratch;
 // Public API
 // ======================================================================
 
+// @see notes/mesher-capacity-accounting.md
 bool greedyMesh(
     const uint8_t* voxels,
     const uint8_t* light,
@@ -235,12 +241,23 @@ bool greedyMesh(
     bool* hasTransparentOut,
     bool* hasOpaqueOut)
 {
+  vertexCountOut = 0;
+  indexCountOut = 0;
+  if (hasTransparentOut) *hasTransparentOut = false;
+  if (hasOpaqueOut) *hasOpaqueOut = false;
+
+  if (!voxels || !light || !vertexOut || !indexOut) return false;
+  if (cfg.sizeX <= 0 || cfg.sizeY <= 0 || cfg.sizeZ <= 0) return false;
+  if (cfg.maxVertices < 0 || cfg.maxIndices < 0) return false;
+  if (cfg.strideFloats < static_cast<int32_t>(kPackedVertexFloats)) return false;
+
   const int32_t SX = cfg.sizeX;
   const int32_t SY = cfg.sizeY;
   const int32_t SZ = cfg.sizeZ;
   const int32_t S  = cfg.strideFloats; // stride in floats (should be 10)
-  const uint32_t maxV  = static_cast<uint32_t>(cfg.maxVertices);
+  const uint32_t maxVertices = static_cast<uint32_t>(cfg.maxVertices);
   const uint32_t maxI  = static_cast<uint32_t>(cfg.maxIndices);
+  const uint32_t strideFloats = static_cast<uint32_t>(S);
 
   uint32_t vo = 0; // float offset into vertexOut
   uint32_t io = 0; // index count
@@ -270,7 +287,6 @@ bool greedyMesh(
     int32_t vSz      = sizes[vAxis];
 
     size_t needed = static_cast<size_t>(uSz) * vSz;
-    std::memset(mask, 0, needed);
 
     for (int32_t sl = 0; sl < sliceCnt; ++sl) {
       // ---- Build mask ----
@@ -398,8 +414,11 @@ bool greedyMesh(
           bool flip = (ao[0] + ao[2]) > (ao[1] + ao[3]);
 
           // Capacity
-          if (vo + 4u*static_cast<uint32_t>(S) > maxV || io + 6 > maxI) {
-            vertexCountOut = vo / S; indexCountOut = io; return false;
+          const uint32_t nextVertexCount = (vo / strideFloats) + 4u;
+          if (nextVertexCount > maxVertices || io + 6 > maxI) {
+            vertexCountOut = vo / strideFloats;
+            indexCountOut = io;
+            return false;
           }
 
           float tlF = static_cast<float>(tlayer);
@@ -408,20 +427,38 @@ bool greedyMesh(
           writeVtx(vertexOut, vo, tl[0],tl[1],tl[2], nx,ny,nz, uv[2][0],uv[2][1], tlF, ld[2]); vo += S;
           writeVtx(vertexOut, vo, tr[0],tr[1],tr[2], nx,ny,nz, uv[3][0],uv[3][1], tlF, ld[3]); vo += S;
 
-          uint32_t base = (vo / S) - 4;
+          uint32_t base = (vo / strideFloats) - 4;
+
+          // Faces X+ (di=0), Y+ (di=2), and Z- (di=5) produce a computed
+          // normal opposite to the face normal with the default winding.
+          // Reverse the winding for those three directions so that the
+          // geometric normal matches the per-vertex normal, giving correct
+          // diffuse lighting.
+          bool reverseWind = (di == 0 || di == 2 || di == 5);
+
           if (!flip) {
-            indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+2;
-            indexOut[io++] = base+1; indexOut[io++] = base+3; indexOut[io++] = base+2;
+            if (!reverseWind) {
+              indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+2;
+              indexOut[io++] = base+1; indexOut[io++] = base+3; indexOut[io++] = base+2;
+            } else {
+              indexOut[io++] = base;   indexOut[io++] = base+2; indexOut[io++] = base+3;
+              indexOut[io++] = base+1; indexOut[io++] = base;   indexOut[io++] = base+3;
+            }
           } else {
-            indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+3;
-            indexOut[io++] = base;   indexOut[io++] = base+3; indexOut[io++] = base+2;
+            if (!reverseWind) {
+              indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+3;
+              indexOut[io++] = base;   indexOut[io++] = base+3; indexOut[io++] = base+2;
+            } else {
+              indexOut[io++] = base;   indexOut[io++] = base+2; indexOut[io++] = base+1;
+              indexOut[io++] = base+2; indexOut[io++] = base+3; indexOut[io++] = base+1;
+            }
           }
         }
       }
     }
   }
 
-  vertexCountOut = vo / S;
+  vertexCountOut = vo / strideFloats;
   indexCountOut  = io;
   return true;
 }

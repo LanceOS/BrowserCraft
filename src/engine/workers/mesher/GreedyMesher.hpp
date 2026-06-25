@@ -20,8 +20,8 @@ struct MesherConfig {
 ///
 /// Reads block IDs from \a voxels and light data from \a light,
 /// then writes interleaved vertex and index data into \a vertexOut
-/// and \a indexOut.  \a vertexCountOut and \a indexCountOut receive
-/// the number of floats written and the number of indices written.
+/// and \a indexOut. \a vertexCountOut and \a indexCountOut receive
+/// the number of vertices and indices written.
 ///
 /// Returns false if the vertex or index buffer capacity was exceeded
 /// (the mesh is truncated).  Returns true on success.
@@ -29,6 +29,7 @@ struct MesherConfig {
 /// (non-opaque) block face is included in the mesh.
 /// If hasOpaqueOut is non-null, it is set to true when any opaque block face
 /// is included in the mesh.
+/// @see notes/mesher-capacity-accounting.md
 bool greedyMesh(
     const uint8_t* voxels,
     const uint8_t* light,
