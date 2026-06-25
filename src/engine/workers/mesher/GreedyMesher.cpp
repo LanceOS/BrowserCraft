@@ -227,7 +227,8 @@ bool greedyMesh(
     float* vertexOut,
     uint32_t* indexOut,
     uint32_t& vertexCountOut,
-    uint32_t& indexCountOut)
+    uint32_t& indexCountOut,
+    bool* hasTransparentOut)
 {
   const int32_t SX = cfg.sizeX;
   const int32_t SY = cfg.sizeY;
@@ -297,6 +298,9 @@ bool greedyMesh(
 
           const auto* def = blocks.tryGet(bid);
           if (!def) { mask[v * uSz + u] = 0; continue; }
+          if (hasTransparentOut && !def->material.opaque) {
+            *hasTransparentOut = true;
+          }
 
           // Texture layer for this face direction
           uint8_t tlayer;

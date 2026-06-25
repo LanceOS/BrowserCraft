@@ -31,6 +31,7 @@ struct Chunk {
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;
   bool needsRemesh = false;
+  bool hasTransparent = false; // whether mesh contains alpha-blended geometry
 
   [[nodiscard]] auto key() const -> int64_t {
     return chunkKey(chunkX, chunkZ);

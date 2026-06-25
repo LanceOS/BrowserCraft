@@ -59,6 +59,7 @@ private:
   Texture2DArray m_textures;
 
   Frustum m_frustum;
+  bool m_hasTransparentChunks = false;
   std::array<float, CAMERA_BLOCK_FLOATS> m_cameraBlock{};
 
   // Sky fullscreen triangle

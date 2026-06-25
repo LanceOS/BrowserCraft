@@ -131,11 +131,13 @@ void Renderer::render(World& world, const CameraView& camera,
   gl::DepthFunc(GL_LESS);
   m_indirectBatcher->drawIndirect();
 
-  // Pass 2: transparent only
-  gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
-  gl::DepthMask(GL_FALSE);
-  gl::DepthFunc(GL_LEQUAL);
-  m_indirectBatcher->drawIndirect();
+  // Pass 2: transparent only (skip if no transparent chunks are loaded)
+  if (m_hasTransparentChunks) {
+    gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
+    gl::DepthMask(GL_FALSE);
+    gl::DepthFunc(GL_LEQUAL);
+    m_indirectBatcher->drawIndirect();
+  }
 
   gl::BindVertexArray(0);
 
@@ -160,9 +162,13 @@ void Renderer::dispose() {
 
 void Renderer::syncChunks(World& world) {
   std::vector<bool> activeSlots(m_indirectBatcher->capacity(), false);
+  m_hasTransparentChunks = false;
 
   // Upload new/updated meshes
   world.forEachEntry([&](int64_t key, Chunk& chunk) {
+    if (chunk.hasTransparent) {
+      m_hasTransparentChunks = true;
+    }
     auto slot = world.getChunkSlot(chunk);
     // @see notes/renderer-slot-index-bounds.md
     if (slot.slotIndex < 0 || slot.slotIndex >= static_cast<int32_t>(m_indirectBatcher->capacity())) {

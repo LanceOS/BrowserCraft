@@ -99,12 +99,17 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
         mcfg.strideFloats = m_config.vertexStrideFloats;
 
         uint32_t vc = 0, ic = 0;
+        bool hasTransparent = false;
         bool ok = mesher::greedyMesh(
             slot.voxels, slot.light, m_blocks, mcfg,
-            slot.vertices, slot.indices, vc, ic);
+            slot.vertices, slot.indices, vc, ic,
+            &hasTransparent);
         *slot.vertexCount = static_cast<uint32_t>(vc);
         *slot.indexCount = ic;
         *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+        if (hasTransparent) {
+          *slot.status |= 0x10000;
+        }
         {
           std::lock_guard lock(m_completionMutex);
           m_completedMeshSlots.push(slotIndex);
@@ -499,6 +504,9 @@ void Game::processGenJobs() {
     auto* chunk = m_world->getChunkBySlotIndex(i);
     if (chunk && chunk->state == ChunkState::Meshing) {
       auto slot = m_pool->view(i);
+      // Extract transparent flag from the high bit of status
+      int32_t rawStatus = *slot.status;
+      chunk->hasTransparent = (rawStatus & 0x10000) != 0;
       m_world->onMeshDone(i, *slot.vertexCount, *slot.indexCount, true);
     }
   }
