@@ -112,6 +112,7 @@ add_library(voxel_engine STATIC
   src/engine/ecs/systems/PlayerSpawnSystem.cpp
   src/engine/assets/AssetManager.cpp
   src/world/BlockRegistry.cpp
+  src/world/blocks/VanillaBlockFactory.cpp
   src/world/VoxelStore.cpp
   src/world/ChunkJobQueue.cpp
   src/world/Chunk.cpp
