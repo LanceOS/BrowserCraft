@@ -84,14 +84,14 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
       // Sample temperature + humidity once and share across all consumers.
       // This eliminates 3× redundant noise evaluations per column.
       auto climate = m_biomeSampler.sampleClimate(worldX, worldZ);
-      const auto& rule = biome::BiomeSampler::sampleBiome(climate);
-      float heightBias = biome::BiomeSampler::blendedHeightBias(climate);
+      const auto& rule = biome::BiomeClassifier::sampleBiome(climate);
+      float heightBias = biome::BiomeClassifier::blendedHeightBias(climate);
 
       // ---- 4. Mountain amplification ----
       // Use smooth mountain weight (derived from temperature) instead of a
       // hard biome-ID check. This prevents height discontinuities at biome
       // boundaries while still concentrating amplification in cold regions.
-      float mountainWeight = biome::BiomeSampler::mountainWeight(climate);
+      float mountainWeight = biome::BiomeClassifier::mountainWeight(climate);
       float mountainExtra = mountainWeight * fractalNoise2D(
           m_continentalNoise,
           worldX * cfg.mountainScale,

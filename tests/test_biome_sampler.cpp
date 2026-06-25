@@ -1,15 +1,15 @@
 #include <catch2/catch_test_macros.hpp>
 #include "content/biomes/BiomeSampler.hpp"
 
-TEST_CASE("BiomeSampler pick returns valid biome", "[biome]") {
+TEST_CASE("BiomeClassifier pick returns valid biome", "[biome]") {
   using namespace voxel::biome;
 
   // All biomes should be reachable
-  REQUIRE(BiomeSampler::pick(0.8f, 0.2f).id == BiomeId::Desert);
-  REQUIRE(BiomeSampler::pick(0.5f, 0.8f).id == BiomeId::Swamp);
-  REQUIRE(BiomeSampler::pick(0.1f, 0.5f).id == BiomeId::Mountains);
-  REQUIRE(BiomeSampler::pick(0.5f, 0.7f).id == BiomeId::Forest);
-  REQUIRE(BiomeSampler::pick(0.5f, 0.3f).id == BiomeId::Plains);
+  REQUIRE(BiomeClassifier::pick(0.8f, 0.2f).id == BiomeId::Desert);
+  REQUIRE(BiomeClassifier::pick(0.5f, 0.8f).id == BiomeId::Swamp);
+  REQUIRE(BiomeClassifier::pick(0.1f, 0.5f).id == BiomeId::Mountains);
+  REQUIRE(BiomeClassifier::pick(0.5f, 0.7f).id == BiomeId::Forest);
+  REQUIRE(BiomeClassifier::pick(0.5f, 0.3f).id == BiomeId::Plains);
 }
 
 TEST_CASE("BiomeSampler sampleBiome returns valid rule", "[biome]") {

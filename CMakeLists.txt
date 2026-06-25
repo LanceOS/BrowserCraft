@@ -161,6 +161,7 @@ add_library(voxel_engine STATIC
   src/world/generation/WorldGenPipeline.cpp
   src/engine/workers/mesher/GreedyMesher.cpp
   src/content/biomes/BiomeSampler.cpp
+  src/content/biomes/BiomeClassifier.cpp
   src/content/flora/FloraRegistry.cpp
   src/content/flora/GrassFactory.cpp
   src/content/flora/DefaultFlora.cpp
