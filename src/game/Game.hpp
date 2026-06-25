@@ -32,6 +32,7 @@
 #include "game/WorldController.hpp"
 #include "game/BlockInteractionAudio.hpp"
 #include "content/flora/FloraRegistry.hpp"
+#include "engine/save/SaveOrchestrator.hpp"
 
 namespace voxel {
 
@@ -102,9 +103,11 @@ private:
   std::unique_ptr<WorkerThreadPool> m_ioPool;
 
   WorldGenPipeline m_worldGenPipeline;
-  std::mt19937 m_worldSeedRng;
   daynight::DayNightCycle m_dayNightCycle;
   std::string m_saveDir;
+
+  // Save system orchestrator
+  std::unique_ptr<SaveOrchestrator> m_saveOrchestrator;
 
   // ECS
   EntityManager m_entityManager{1 << 12};

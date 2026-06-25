@@ -83,7 +83,6 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
     m_session(config.renderDistance),
     m_blocks(4096),
     m_worldGenPipeline(config.worldSeed),
-    m_worldSeedRng(std::random_device{}()),
     m_transforms(m_entityManager.capacity()),
     m_bodies(m_entityManager.capacity()),
     m_players(m_entityManager.capacity()),
@@ -126,17 +125,39 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   m_saveDir = options.saveDir;
   m_worldController->configureSaveWorld(m_saveDir, options.saveSlotId, false, m_ioPool.get());
 
+  // Initialize save system orchestrator
+  m_saveOrchestrator = std::make_unique<SaveOrchestrator>(m_saveDir);
+
+  // Load saved settings (apply to UI after it's constructed below)
+  auto saved = m_saveOrchestrator->loadSettings();
+  m_config.renderDistance = saved.renderDistance;
+  m_session.setRenderDistance(saved.renderDistance);
+
   m_audioRegistry.seedBuiltinSounds();
   m_blockAudio = std::make_unique<BlockInteractionAudio>(m_audioEngine, m_audioRegistry, m_blocks);
 
   m_ui = std::make_unique<UIManager>(window, UIManager::Callbacks{
     .onStartWorld = [this](GameMode mode, const std::string& slotId, bool startFresh) {
+      m_ui->clearWorldError();
       startWorld(mode, slotId, startFresh);
     },
-    .onQuitToTitle = [this]{ m_session.returnToTitle(); },
+    .onQuitToTitle = [this]{
+      m_saveOrchestrator->onWorldClosed(m_worldController->saveManager());
+      m_session.returnToTitle();
+    },
     .onResume = [this]{ glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); },
     .onQuit = [this]{ m_running = false; },
+    .onRenderDistanceChanged = [this]{
+      int32_t rd = m_ui->renderDistance();
+      m_config.renderDistance = rd;
+      m_session.setRenderDistance(rd);
+      m_saveOrchestrator->settings().setInt("renderDistance", rd);
+    },
   });
+
+  // Apply saved settings to the now-constructed UI
+  m_ui->setRenderDistance(saved.renderDistance);
+  m_ui->setShowFps(saved.showFps);
 
   if (options.initialState == GameState::MainMenu) {
     m_ui->showMainMenu();
@@ -157,7 +178,9 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
 }
 
 Game::~Game() {
-  if (auto* sm = m_worldController->saveManager()) sm->flushPending();
+  // Persist runtime settings and flush chunk saves
+  m_saveOrchestrator->saveSettings(m_config.renderDistance, m_ui->isFpsVisible());
+  m_saveOrchestrator->onWorldClosed(m_worldController->saveManager());
 }
 
 void Game::initECS() { createPlayer(); }
@@ -201,15 +224,43 @@ void Game::initSystems() {
 }
 
 void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh) {
+  // 1. Resolve slug and prepare world parameters via the orchestrator
+  std::string displayName = slotId;
+  std::string slug;
+  uint32_t seed = m_config.worldSeed;
+
   if (startFresh) {
-    m_config.worldSeed = static_cast<uint32_t>(m_worldSeedRng());
-    m_worldGenPipeline = WorldGenPipeline(m_config.worldSeed);
+    auto result = m_saveOrchestrator->prepareNewWorld(slotId, mode, seed);
+    if (!result.error.empty()) {
+      m_ui->setWorldError(result.error);
+      return;
+    }
+    slug = std::move(result.slug);
+    m_config.worldSeed = seed;
+    m_worldGenPipeline = WorldGenPipeline(seed);
+  } else {
+    auto result = m_saveOrchestrator->prepareLoadWorld(slotId);
+    if (!result.error.empty()) {
+      m_ui->setWorldError(result.error);
+      return;
+    }
+    slug = std::move(result.slug);
+    seed = m_config.worldSeed;
   }
 
-  m_worldController->configureSaveWorld(m_saveDir, slotId, startFresh, m_ioPool.get());
+  // 2. Configure the world (creates SaveManager, sets up chunk persistence)
+  m_worldController->configureSaveWorld(m_saveDir, slug, startFresh, m_ioPool.get());
+
+  // 3. Finalize metadata via the orchestrator
+  if (auto* sm = m_worldController->saveManager()) {
+    m_saveOrchestrator->finalizeWorldStart(*sm, displayName, slug, seed, mode);
+  }
+
+  // 4. Transition session state
   m_session.startSingleplayer(mode);
   m_dayNightCycle.setTime(daynight::kMiddayTimeSeconds);
 
+  // 5. Reset player / camera
   m_spawnedToSurface = false;
   m_camera.position = glm::vec3(0.0f, 80.0f, 50.0f);
   m_cameraDirty = true;
@@ -229,9 +280,13 @@ void Game::startWorld(GameMode mode, const std::string& slotId, bool startFresh)
     player.selectedHotbarSlot = 0;
   }
 
+  // 6. Switch UI to in-game
   m_ui->clearUI();
   m_ui->setInventoryOpen(false);
   glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+  // 7. Refresh world list
+  m_saveOrchestrator->refreshWorldList();
 }
 
 auto Game::playerIndex() const -> int32_t {
@@ -275,6 +330,9 @@ void Game::update(float dt) {
     if (m_session.state() == GameState::GeneratingWorld && m_worldController->world().isReady()) {
       m_session.markWorldReady();
     }
+  } else if (m_session.state() == GameState::MainMenu) {
+    m_ui->setWorldList(
+      SaveOrchestrator::buildWorldEntries(m_saveOrchestrator->worldList()));
   }
 }
 

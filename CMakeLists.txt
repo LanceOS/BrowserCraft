@@ -80,6 +80,23 @@ endif()
 # System libraries
 find_package(OpenGL REQUIRED)
 
+# SQLite3 — try pkg-config first (system package), fall back to FindSQLite3
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(SQLITE3 sqlite3)
+endif()
+if(NOT SQLITE3_FOUND)
+  find_path(SQLITE3_INCLUDE_DIRS sqlite3.h)
+  find_library(SQLITE3_LIBRARIES sqlite3)
+  if(SQLITE3_INCLUDE_DIRS AND SQLITE3_LIBRARIES)
+    set(SQLITE3_FOUND TRUE)
+  endif()
+endif()
+if(NOT SQLITE3_FOUND)
+  message(FATAL_ERROR "SQLite3 development library not found. Install libsqlite3-dev.")
+endif()
+message(STATUS "SQLite3 found: ${SQLITE3_INCLUDE_DIRS}")
+
 # ---- ImGui library (stable third-party, separate target to avoid recompilation) ----
 add_library(imgui STATIC
   ${imgui_SOURCE_DIR}/imgui.cpp
@@ -134,6 +151,10 @@ add_library(voxel_engine STATIC
   src/engine/audio/AudioEngine.cpp
   src/engine/threading/WorkerThreadPool.cpp
   src/engine/save/SaveManager.cpp
+  src/engine/save/WorldNamingService.cpp
+  src/engine/save/WorldListService.cpp
+  src/engine/save/SettingsRepository.cpp
+  src/engine/save/SaveOrchestrator.cpp
   src/world/generation/SimplexNoise.cpp
   src/world/generation/CaveCarver.cpp
   src/world/generation/OreDistributor.cpp
@@ -149,13 +170,14 @@ add_library(voxel_engine STATIC
   src/ui/UIManager.cpp
 )
 
-target_include_directories(voxel_engine PUBLIC src)
+target_include_directories(voxel_engine PUBLIC src ${SQLITE3_INCLUDE_DIRS})
 
 target_link_libraries(voxel_engine PUBLIC
   glm::glm
   ${GLFW_TARGET}
   OpenGL::GL
   imgui
+  ${SQLITE3_LIBRARIES}
 )
 
 # Precompiled headers (per-target to avoid -Winvalid-pch due to differing flags)
@@ -194,6 +216,7 @@ add_executable(voxel_tests
   tests/test_biome_sampler.cpp
   tests/test_worldgen.cpp
   tests/test_save_manager.cpp
+  tests/test_save_services.cpp
   tests/test_thread_pool.cpp
   tests/test_player_controller.cpp
   tests/test_mesher.cpp

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <string>
+#include <vector>
 #include <functional>
 #include <GLFW/glfw3.h>
 #include "game/GameSession.hpp"
@@ -15,6 +16,15 @@ enum class UIState {
   InGame,
   Paused,
   Inventory,
+};
+
+/// A lightweight representation of a saved world for UI rendering.
+struct WorldEntry {
+  std::string name;
+  std::string slug;
+  uint32_t seed = 0;
+  int32_t gameMode = 0; // 0 = Survival, 1 = Creative
+  int64_t lastPlayedTimestamp = 0;
 };
 
 /// ImGui-based UI manager for menus, HUD, and inventory.
@@ -78,12 +88,33 @@ public:
     return m_state == UIState::InGame && !m_inventoryOpen;
   }
 
+  // ---- World list integration ----
+
+  /// Supply the current list of saved worlds (called from Game each frame).
+  void setWorldList(std::vector<WorldEntry> worlds);
+
+  /// Get the current world list.
+  [[nodiscard]] auto worldList() const -> const std::vector<WorldEntry>& { return m_worldEntries; }
+
+  /// Get/set the render distance from UI.
+  [[nodiscard]] auto renderDistance() const -> int32_t { return m_renderDistance; }
+  void setRenderDistance(int32_t rd) { m_renderDistance = rd; }
+
+  /// Set an error/status message to display in the game mode menu.
+  void setWorldError(std::string msg) { m_worldErrorMsg = std::move(msg); }
+
+  /// Clear the error message.
+  void clearWorldError() { m_worldErrorMsg.clear(); }
+
 private:
   void renderMainMenu();
   void renderGameModeMenu();
   void renderPauseMenu();
   void renderFpsOverlay();
   void renderOptionsMenu();
+
+  /// Format a timestamp into a human-readable date string.
+  static auto formatTimestamp(int64_t timestamp) -> std::string;
 
   GLFWwindow* m_window;
   Callbacks m_callbacks;
@@ -100,6 +131,10 @@ private:
   std::array<char, 64> m_slotId{};
   bool m_showDemoWindow = false;
   bool m_initialized = false;
+
+  // World list state
+  std::vector<WorldEntry> m_worldEntries;
+  std::string m_worldErrorMsg;
 };
 
 } // namespace voxel
