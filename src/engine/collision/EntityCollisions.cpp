@@ -8,6 +8,13 @@
 
 namespace voxel {
 
+namespace {
+inline auto floorToChunk(int32_t coord, int32_t chunkSize) -> int32_t {
+  if (coord >= 0) return coord / chunkSize;
+  return -1 - ((-coord - 1) / chunkSize);
+}
+}
+
 EntityCollisions::EntityCollisions(World& world, const GameConfig& config)
   : m_world(world)
   , m_config(config)
@@ -41,9 +48,9 @@ auto EntityCollisions::collidesAt(
   for (int32_t y = minY; y <= maxY; ++y) {
     if (y < 0 || y >= worldHeight) continue;
     for (int32_t z = minZ; z <= maxZ; ++z) {
-      int32_t cz = worldToChunk(static_cast<float>(z), chunkSize);
+      int32_t cz = floorToChunk(z, chunkSize);
       for (int32_t x = minX; x <= maxX; ++x) {
-        int32_t cx = worldToChunk(static_cast<float>(x), chunkSize);
+        int32_t cx = floorToChunk(x, chunkSize);
 
         if (cx != cachedCX || cz != cachedCZ) {
           cachedChunk = m_world.getChunk(cx, cz);
@@ -66,12 +73,16 @@ auto EntityCollisions::collidesAt(
 auto EntityCollisions::groundHeightAt(
     float worldX, float worldZ, int32_t startY) const -> int32_t
 {
-  int32_t x = static_cast<int32_t>(std::floor(worldX));
-  int32_t z = static_cast<int32_t>(std::floor(worldZ));
+  const int32_t x = static_cast<int32_t>(std::floor(worldX));
+  const int32_t z = static_cast<int32_t>(std::floor(worldZ));
   int32_t y = std::clamp(startY, 0, m_config.worldHeight - 1);
+  const int32_t cx = floorToChunk(x, m_config.chunkSize);
+  const int32_t cz = floorToChunk(z, m_config.chunkSize);
+  const Chunk* chunk = m_world.getChunk(cx, cz);
+  if (!chunk) return -1;
 
   for (; y >= 0; --y) {
-    if (m_world.isSolid(x, y, z)) return y;
+    if (m_world.isSolidInChunk(x, y, z, *chunk)) return y;
   }
   return -1;
 }
@@ -121,6 +132,69 @@ void EntityCollisions::resolveMovement(
   float invSteps = 1.0f / static_cast<float>(steps);
 
   static constexpr float kStepHeight = 0.52f;
+  constexpr int32_t kSentinel = int32_t(0x7FFFFFFF);
+  constexpr int32_t kGroundCacheCapacity = 16;
+
+  struct GroundSample {
+    int32_t x;
+    int32_t z;
+    int32_t startY;
+    int32_t height;
+    bool valid;
+  };
+
+  GroundSample groundCache[kGroundCacheCapacity]{};
+  int32_t groundCacheCursor = 0;
+  int32_t chunkSize = m_config.chunkSize;
+  const Chunk* supportChunk = nullptr;
+  int32_t supportCX = kSentinel;
+  int32_t supportCZ = kSentinel;
+
+  const auto getGroundHeightCached =
+      [&](float worldX, float worldZ, int32_t startY) -> int32_t {
+    const int32_t x = static_cast<int32_t>(std::floor(worldX));
+    const int32_t z = static_cast<int32_t>(std::floor(worldZ));
+    const int32_t worldHeight = m_config.worldHeight;
+    const int32_t clampedStartY = std::clamp(startY, 0, worldHeight - 1);
+
+    for (int32_t i = 0; i < kGroundCacheCapacity; ++i) {
+      const GroundSample& sample = groundCache[i];
+      if (sample.valid && sample.x == x && sample.z == z &&
+          sample.startY == clampedStartY) {
+        return sample.height;
+      }
+    }
+
+    int32_t y = clampedStartY;
+    int32_t height = -1;
+    const int32_t cx = floorToChunk(x, chunkSize);
+    const int32_t cz = floorToChunk(z, chunkSize);
+    const Chunk* chunk = m_world.getChunk(cx, cz);
+    if (chunk) {
+      for (; y >= 0; --y) {
+        if (m_world.isSolidInChunk(x, y, z, *chunk)) {
+          height = y;
+          break;
+        }
+      }
+    }
+
+    const int32_t idx = groundCacheCursor++ % kGroundCacheCapacity;
+    groundCache[idx] = {x, z, clampedStartY, height, true};
+    return height;
+  };
+
+  const auto isSolidAtY = [&](int32_t worldX, int32_t worldZ, int32_t y) -> bool {
+    int32_t cx = floorToChunk(worldX, chunkSize);
+    int32_t cz = floorToChunk(worldZ, chunkSize);
+    if (cx != supportCX || cz != supportCZ) {
+      supportChunk = m_world.getChunk(cx, cz);
+      supportCX = cx;
+      supportCZ = cz;
+    }
+    if (!supportChunk) return false;
+    return m_world.isSolidInChunk(worldX, y, worldZ, *supportChunk);
+  };
 
   for (int32_t s = 0; s < steps; ++s) {
     float subDx = dx * invSteps;
@@ -136,10 +210,10 @@ void EntityCollisions::resolveMovement(
       body.onGround = 0;
     } else if (subDy <= 0.0f) {
       // Potential landing — scan downward from feet
-      int32_t groundY = groundHeightAt(
-          stepPos.x, stepPos.z,
-          std::max(0, static_cast<int32_t>(
-              std::floor(stepPos.y + body.aabbMin.y))));
+      int32_t groundY = getGroundHeightCached(
+          stepPos.x,
+          stepPos.z,
+          std::max(0, static_cast<int32_t>(std::floor(stepPos.y + body.aabbMin.y))));
       if (groundY >= 0) {
         float feetY   = stepPos.y + body.aabbMin.y;
         float surfaceY = static_cast<float>(groundY + 1);
@@ -171,7 +245,7 @@ void EntityCollisions::resolveMovement(
         for (int32_t gz = minGZ; gz <= maxGZ; ++gz) {
           for (int32_t gx = minGX; gx <= maxGX; ++gx) {
             ++totalCols;
-            if (m_world.isSolid(gx, checkY, gz)) ++solidCols;
+            if (isSolidAtY(gx, gz, checkY)) ++solidCols;
           }
         }
         if (totalCols > 0 && solidCols == 0) {

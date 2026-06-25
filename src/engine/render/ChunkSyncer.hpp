@@ -18,9 +18,8 @@ public:
   ChunkSyncer(PersistentBuffer* masterVbo, PersistentBuffer* masterIbo,
               IndirectBatcher* indirectBatcher, const GameConfig& config);
 
-  /// Sync all chunks that have new meshes. Returns true if any transparent
-  /// chunks are present (caller should use this to decide multi-pass rendering).
-  bool sync(World& world);
+  /// Sync all chunks that have new meshes and upload them into mapped GPU buffers.
+  void sync(World& world);
 
 private:
   PersistentBuffer* m_masterVbo;

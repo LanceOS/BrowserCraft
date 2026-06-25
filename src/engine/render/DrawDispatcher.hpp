@@ -3,6 +3,7 @@
 #include "ShaderProgram.hpp"
 #include "Texture2DArray.hpp"
 #include "CameraView.hpp"
+#include "../math/Frustum.hpp"
 #include "gl_core.hpp"
 #include <cstdint>
 
@@ -23,8 +24,7 @@ public:
 
   /// Render all chunks using indirect multidraw.
   /// After this call the caller should restore depth state.
-  void renderChunks(bool hasTransparentChunks,
-                    const float* viewProjectionMatrix);
+  void renderChunks(const Frustum& frustum);
 
 private:
   ShaderProgram& m_chunkShader;

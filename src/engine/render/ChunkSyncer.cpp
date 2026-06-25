@@ -12,9 +12,9 @@ ChunkSyncer::ChunkSyncer(PersistentBuffer* masterVbo, PersistentBuffer* masterIb
     m_indirectBatcher(indirectBatcher), m_config(config)
 {}
 
-bool ChunkSyncer::sync(World& world) {
+void ChunkSyncer::sync(World& world) {
   const uint32_t capacity = m_indirectBatcher->capacity();
-  bool hasTransparentChunks = false;
+  bool uploadedAny = false;
 
   // Upload newly-meshed chunks from the pending queue (avoids full chunk scan).
   std::vector<int32_t> pendingSlots = world.drainPendingUploadSlots();
@@ -22,10 +22,6 @@ bool ChunkSyncer::sync(World& world) {
     auto* chunk = world.getChunkBySlotIndex(slotIndex);
     if (!chunk) continue;
     if (chunk->state != ChunkState::MeshReady) continue;
-    if (chunk->hasTransparent) {
-      hasTransparentChunks = true;
-    }
-
     auto slot = world.getChunkSlot(*chunk);
     if (slot.slotIndex < 0 || slot.slotIndex >= static_cast<int32_t>(capacity)) {
       continue;
@@ -60,15 +56,22 @@ bool ChunkSyncer::sync(World& world) {
       cullData.firstIndex = static_cast<uint32_t>(iboOffset / sizeof(uint32_t));
       cullData.baseVertex = static_cast<uint32_t>(baseVertex);
       cullData.slotIndex = static_cast<uint32_t>(slot.slotIndex);
+      cullData.hasTransparent = static_cast<uint32_t>(chunk->hasTransparent);
       m_indirectBatcher->updateChunkData(slot.slotIndex, cullData);
     } else {
       ChunkCullData emptyData{};
+      emptyData.hasTransparent = 0u;
       m_indirectBatcher->updateChunkData(slot.slotIndex, emptyData);
     }
     world.markUploaded(*chunk);
+    uploadedAny = true;
   }
 
-  return hasTransparentChunks;
+  if (uploadedAny) {
+    gl::MemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+  }
+
+  return;
 }
 
 } // namespace voxel

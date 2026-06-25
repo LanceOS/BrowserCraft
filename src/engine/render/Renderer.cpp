@@ -88,7 +88,8 @@ auto Renderer::updateFramebufferSize() -> float {
 
 void Renderer::render(World& world, const CameraView& camera,
                        float timeSeconds, float daylightFactor) {
-  bool hasTransparentChunks = m_chunkSyncer.sync(world);
+  m_chunkSyncer.sync(world);
+  m_frustum.extractFrom(camera.viewProjectionMatrix);
 
   gl::Viewport(0, 0, m_fbWidth, m_fbHeight);
 
@@ -118,7 +119,7 @@ void Renderer::render(World& world, const CameraView& camera,
   }
 
   m_drawDispatcher.renderSky();
-  m_drawDispatcher.renderChunks(hasTransparentChunks, &camera.viewProjectionMatrix[0][0]);
+  m_drawDispatcher.renderChunks(m_frustum);
 }
 
 void Renderer::dispose() {

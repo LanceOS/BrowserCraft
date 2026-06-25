@@ -3,6 +3,7 @@
 #include <cstring>
 #include <algorithm>
 #include <new>
+#include <vector>
 
 namespace voxel {
 namespace mesher {
@@ -215,6 +216,13 @@ static constexpr DirInfo kDirs[6] = {
   {{ 0, 0,-1}, 2, 0, 1, -1},  // Z- (back)
 };
 
+namespace {
+struct GreedyMeshScratch {
+  std::vector<uint8_t> mask;
+};
+thread_local GreedyMeshScratch g_scratch;
+}
+
 // ======================================================================
 // Public API
 // ======================================================================
@@ -241,7 +249,12 @@ bool greedyMesh(
   uint32_t io = 0; // index count
 
   // Scratch mask sized to the largest face for this chunk configuration.
-  std::vector<uint8_t> mask;
+  const auto neededScratch =
+    static_cast<size_t>(std::max({SX * SY, SX * SZ, SY * SZ}));
+  if (g_scratch.mask.size() < neededScratch) {
+    g_scratch.mask.resize(neededScratch);
+  }
+  uint8_t* mask = g_scratch.mask.data();
 
   for (int32_t di = 0; di < 6; ++di) {
     const auto& info = kDirs[di];
@@ -259,15 +272,12 @@ bool greedyMesh(
     int32_t uSz      = sizes[uAxis];
     int32_t vSz      = sizes[vAxis];
 
-    // Grow mask if needed for this face orientation
     size_t needed = static_cast<size_t>(uSz) * vSz;
-    if (mask.size() < needed) {
-      mask.resize(needed);
-    }
+    std::memset(mask, 0, needed);
 
     for (int32_t sl = 0; sl < sliceCnt; ++sl) {
       // ---- Build mask ----
-      std::memset(mask.data(), 0, static_cast<size_t>(uSz) * vSz);
+      std::memset(mask, 0, needed);
 
       for (int32_t v = 0; v < vSz; ++v) {
         for (int32_t u = 0; u < uSz; ++u) {

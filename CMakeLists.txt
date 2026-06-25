@@ -159,10 +159,8 @@ target_precompile_headers(voxel_engine PRIVATE src/pch.hpp)
 
 # Release-specific optimizations (global — keeps PCH flags consistent across all targets)
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-  # Use -mtune=native for CPU scheduling optimizations without enabling ISA
-  # extensions (-march=native can trigger -Winvalid-pch on GCC 15 as the
-  # PCH and individual source compilations may disagree on -mabm etc.)
-  add_compile_options(-mtune=native)
+  # Use release-grade optimization flags while keeping PCH behavior stable.
+  add_compile_options(-O3 -mtune=native)
 endif()
 
 # ---- Main executable ----

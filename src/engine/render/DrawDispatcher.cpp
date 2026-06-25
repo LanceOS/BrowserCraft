@@ -24,28 +24,31 @@ void DrawDispatcher::renderSky() {
   gl::DepthMask(GL_TRUE);
 }
 
-void DrawDispatcher::renderChunks(bool hasTransparentChunks,
-                                   const float* viewProjectionMatrix) {
+void DrawDispatcher::renderChunks(const Frustum& frustum) {
   m_chunkShader.use();
   m_textures.bind(0);
   gl::Uniform1i(m_chunkShader.uniform("u_blockTextures"), 0);
 
-  m_indirectBatcher.buildIndirectCommands(viewProjectionMatrix);
+  m_indirectBatcher.buildIndirectCommands(frustum);
 
   gl::BindVertexArray(m_masterVao);
 
-  // Pass 1: opaque only
-  gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
-  gl::DepthMask(GL_TRUE);
-  gl::DepthFunc(GL_LESS);
-  m_indirectBatcher.drawIndirect();
+  // Pass 1: opaque only.
+  const uint32_t opaqueCommands = m_indirectBatcher.opaqueCommandCount();
+  if (opaqueCommands > 0u) {
+    gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
+    gl::DepthMask(GL_TRUE);
+    gl::DepthFunc(GL_LESS);
+    m_indirectBatcher.drawIndirect(opaqueCommands);
+  }
 
-  // Pass 2: transparent only (skip if no transparent chunks are loaded)
-  if (hasTransparentChunks) {
+  // Pass 2: transparent only.
+  const uint32_t transparentCommands = m_indirectBatcher.transparentCommandCount();
+  if (transparentCommands > 0u) {
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
     gl::DepthMask(GL_FALSE);
     gl::DepthFunc(GL_LEQUAL);
-    m_indirectBatcher.drawIndirect();
+    m_indirectBatcher.drawIndirect(transparentCommands, opaqueCommands);
   }
 
   gl::BindVertexArray(0);
