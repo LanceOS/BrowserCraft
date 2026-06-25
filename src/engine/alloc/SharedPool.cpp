@@ -5,6 +5,18 @@
 
 namespace voxel {
 
+namespace {
+
+constexpr size_t kStatusOffset = 0;
+constexpr size_t kVertexCountOffset = 4;
+constexpr size_t kIndexCountOffset = 8;
+constexpr size_t kChunkXOffset = 12;
+constexpr size_t kChunkZOffset = 16;
+constexpr size_t kGenSeedOffset = 20;
+constexpr size_t kRenderFlagsOffset = 24;
+
+} // namespace
+
 SharedPool::SharedPool(int32_t capacity, ChunkDimensions dims)
   : m_capacity(capacity), m_dims(dims) {
   computeLayout();
@@ -39,6 +51,7 @@ auto SharedPool::acquire() -> std::optional<ChunkSlot> {
   auto slot = view(slotIndex);
   // Initialize slot
   *slot.status = static_cast<int32_t>(ChunkSlotStatus::FREE);
+  *slot.renderFlags = 0u;
   *slot.vertexCount = 0;
   *slot.indexCount = 0;
   std::memset(slot.voxels, 0, m_voxelsBytes);
@@ -50,6 +63,7 @@ auto SharedPool::acquire() -> std::optional<ChunkSlot> {
 void SharedPool::release(ChunkSlot slot) {
   std::lock_guard<std::mutex> lock(m_mutex);
   *slot.status = static_cast<int32_t>(ChunkSlotStatus::FREE);
+  *slot.renderFlags = 0u;
   m_freeList[m_freeHead++] = slot.slotIndex;
 }
 
@@ -81,12 +95,13 @@ auto SharedPool::view(int32_t slotIndex) const -> ChunkSlot {
   slot.slotIndex = slotIndex;
   slot.buffer = buf;
   slot.baseByteOffset = base;
-  slot.status = reinterpret_cast<int32_t*>(buf + base + 0);
-  slot.vertexCount = reinterpret_cast<uint32_t*>(buf + base + 4);
-  slot.indexCount = reinterpret_cast<uint32_t*>(buf + base + 8);
-  slot.chunkX = reinterpret_cast<int32_t*>(buf + base + 12);
-  slot.chunkZ = reinterpret_cast<int32_t*>(buf + base + 16);
-  slot.genSeed = reinterpret_cast<uint32_t*>(buf + base + 20);
+  slot.status = reinterpret_cast<int32_t*>(buf + base + kStatusOffset);
+  slot.renderFlags = reinterpret_cast<uint32_t*>(buf + base + kRenderFlagsOffset);
+  slot.vertexCount = reinterpret_cast<uint32_t*>(buf + base + kVertexCountOffset);
+  slot.indexCount = reinterpret_cast<uint32_t*>(buf + base + kIndexCountOffset);
+  slot.chunkX = reinterpret_cast<int32_t*>(buf + base + kChunkXOffset);
+  slot.chunkZ = reinterpret_cast<int32_t*>(buf + base + kChunkZOffset);
+  slot.genSeed = reinterpret_cast<uint32_t*>(buf + base + kGenSeedOffset);
   slot.voxels = buf + base + m_headerBytes;
   slot.light = buf + base + m_headerBytes + m_voxelsBytes;
   slot.redstone = buf + base + m_headerBytes + m_voxelsBytes + m_lightBytes;

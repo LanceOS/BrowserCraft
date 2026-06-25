@@ -41,7 +41,7 @@ enum class BiomeId : uint8_t {
 
 // ---------------------------------------------------------------------------
 // Named threshold constants — single source of truth.
-// Used by BiomeFactory::pick(), computeWeights(), blendedHeightBias(), etc.
+// Used by BiomeClassifier and BiomeFactory wrappers.
 // ---------------------------------------------------------------------------
 
 inline constexpr float kClimateScale           = 0.008f;
@@ -64,6 +64,13 @@ inline constexpr float kForestTransWidth       = 0.08f;
 inline constexpr float kOceanTempThreshold     = 0.42f;
 inline constexpr float kOceanHumidThreshold    = 0.40f;
 inline constexpr float kOceanTransWidth        = 0.08f;
+
+inline constexpr float kPlainsHeightBias       = 0.0f;
+inline constexpr float kDesertHeightBias       = -3.0f;
+inline constexpr float kForestHeightBias       = 3.0f;
+inline constexpr float kMountainsHeightBias    = 22.0f;
+inline constexpr float kSwampHeightBias        = -3.0f;
+inline constexpr float kOceanHeightBias        = -14.0f;
 
 /// Hermite smoothstep: maps [threshold - width/2, threshold + width/2]
 /// to [0, 1] with smooth ease-in-out. Values outside the transition

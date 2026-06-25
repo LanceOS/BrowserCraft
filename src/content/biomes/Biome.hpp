@@ -51,7 +51,7 @@ public:
   uint8_t topBlock() const noexcept override { return BlockId::GRASS; }
   uint8_t fillerBlock() const noexcept override { return BlockId::DIRT; }
   int32_t surfaceDepth() const noexcept override { return 4; }
-  float heightBias() const noexcept override { return 0.0f; }
+  float heightBias() const noexcept override { return kPlainsHeightBias; }
 private:
   PlainsBiome() = default;
 };
@@ -63,7 +63,7 @@ public:
   uint8_t topBlock() const noexcept override { return BlockId::SAND; }
   uint8_t fillerBlock() const noexcept override { return BlockId::SAND; }
   int32_t surfaceDepth() const noexcept override { return 3; }
-  float heightBias() const noexcept override { return -3.0f; }
+  float heightBias() const noexcept override { return kDesertHeightBias; }
 private:
   DesertBiome() = default;
 };
@@ -75,7 +75,7 @@ public:
   uint8_t topBlock() const noexcept override { return BlockId::GRASS; }
   uint8_t fillerBlock() const noexcept override { return BlockId::DIRT; }
   int32_t surfaceDepth() const noexcept override { return 5; }
-  float heightBias() const noexcept override { return 3.0f; }
+  float heightBias() const noexcept override { return kForestHeightBias; }
 private:
   ForestBiome() = default;
 };
@@ -87,7 +87,7 @@ public:
   uint8_t topBlock() const noexcept override { return BlockId::GRASS; }
   uint8_t fillerBlock() const noexcept override { return BlockId::STONE; }
   int32_t surfaceDepth() const noexcept override { return 3; }
-  float heightBias() const noexcept override { return 22.0f; }
+  float heightBias() const noexcept override { return kMountainsHeightBias; }
 private:
   MountainsBiome() = default;
 };
@@ -99,7 +99,7 @@ public:
   uint8_t topBlock() const noexcept override { return BlockId::STONE; }
   uint8_t fillerBlock() const noexcept override { return BlockId::STONE; }
   int32_t surfaceDepth() const noexcept override { return 5; }
-  float heightBias() const noexcept override { return -3.0f; }
+  float heightBias() const noexcept override { return kSwampHeightBias; }
 private:
   SwampBiome() = default;
 };
@@ -111,7 +111,7 @@ public:
   uint8_t topBlock() const noexcept override { return BlockId::SAND; }
   uint8_t fillerBlock() const noexcept override { return BlockId::SAND; }
   int32_t surfaceDepth() const noexcept override { return 3; }
-  float heightBias() const noexcept override { return -14.0f; }
+  float heightBias() const noexcept override { return kOceanHeightBias; }
 private:
   OceanBiome() = default;
 };

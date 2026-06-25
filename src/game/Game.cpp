@@ -65,8 +65,8 @@ public:
       *slot.vertexCount = static_cast<uint32_t>(vc);
       *slot.indexCount = ic;
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-      if (hasTransparent) *slot.status |= CHUNK_SLOT_FLAG_HAS_TRANSPARENT;
-      if (hasOpaque) *slot.status |= CHUNK_SLOT_FLAG_HAS_OPAQUE;
+      if (hasTransparent) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
+      if (hasOpaque) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
       m_controller.onMeshCompleted(slotIndex);
       (void)ok;
     });

@@ -5,12 +5,14 @@
 
 namespace voxel::biome {
 
-/// Routes climate samples to concrete Biome instances and computes
-/// blended weights / height bias across all biomes.
+/// Routes biome IDs to concrete Biome instances and provides thin wrappers
+/// over the climate classifier for legacy call sites.
 ///
 /// This is the only place that knows about all concrete biome types.
+/// Climate classification itself lives in BiomeClassifier so the registry
+/// layer stays focused on lookup / indirection rather than rule evaluation.
 /// Adding a new biome requires: (1) adding the class in Biome.hpp,
-/// (2) registering it in pick(), computeWeights(), and evaluate() here.
+/// (2) updating BiomeClassifier and forId() here.
 class BiomeFactory {
 public:
   /// Full climate evaluation for callers that need multiple derived values.

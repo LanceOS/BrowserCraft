@@ -1,5 +1,6 @@
 #include "WorldGenPipeline.hpp"
 #include "world/BlockIds.hpp"
+#include "content/biomes/BiomeClassifier.hpp"
 #include "content/biomes/BiomeFactory.hpp"
 #include <cmath>
 #include <algorithm>
@@ -95,8 +96,8 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
       // Sample temperature + humidity once and share across all consumers.
       // This eliminates 3× redundant noise evaluations per column.
       auto climate = m_climateSource->sampleClimate(worldX, worldZ);
-      auto climateEval = biome::BiomeFactory::evaluate(climate);
-      const auto& activeBiome = *climateEval.dominantBiome;
+      auto climateEval = biome::BiomeClassifier::evaluate(climate);
+      const auto& activeBiome = biome::BiomeFactory::forId(climateEval.dominantBiomeId);
       float heightBias = climateEval.blendedHeightBias;
 
       // ---- 4. Mountain amplification ----

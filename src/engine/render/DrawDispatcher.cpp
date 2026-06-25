@@ -51,7 +51,7 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
     gl::DepthMask(GL_FALSE);
     gl::DepthFunc(GL_LEQUAL);
-    m_indirectBatcher.drawIndirect(transparentCount, opaqueCount);
+    m_indirectBatcher.drawIndirect(transparentCount, m_indirectBatcher.transparentCommandBase());
   }
 
   gl::BindVertexArray(0);

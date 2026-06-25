@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <cstddef>
 #include <mutex>
 #include <optional>
 #include <memory>
@@ -17,11 +18,11 @@ enum class ChunkSlotStatus : int32_t {
   GPU_UPLOADED = 5,
 };
 
-/// Additional status flags packed into the shared slot status word.
-/// These are orthogonal to ChunkSlotStatus and are masked off by lifecycle
-/// code that only cares about the low bits.
-inline constexpr int32_t CHUNK_SLOT_FLAG_HAS_TRANSPARENT = 1 << 16;
-inline constexpr int32_t CHUNK_SLOT_FLAG_HAS_OPAQUE = 1 << 17;
+/// Render metadata written by the mesher and consumed by the render path.
+/// Stored separately from the lifecycle status word so lifecycle code can
+/// remain unaware of render-specific state.
+inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_TRANSPARENT = 1u << 0;
+inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_OPAQUE = 1u << 1;
 
 struct ChunkDimensions {
   int32_t sizeX;
@@ -38,7 +39,8 @@ struct ChunkSlot {
   int32_t slotIndex;
   uint8_t* buffer;       // base of the entire pool buffer
   size_t baseByteOffset; // offset to this slot
-  int32_t* status;       // ChunkSlotStatus
+  int32_t* status;       // ChunkSlotStatus lifecycle state
+  uint32_t* renderFlags; // ChunkRenderFlags metadata
   uint32_t* vertexCount;
   uint32_t* indexCount;
   int32_t* chunkX;

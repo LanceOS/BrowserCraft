@@ -33,8 +33,8 @@ struct DrawCommand {
 };
 
 /// Builds indirect draw commands on the CPU from per-chunk cull data.
-/// Builds two separate command streams: opaque then transparent, so each
-/// draw pass only issues commands for the geometry it needs — no discard.
+/// Emits opaque and transparent command streams into disjoint regions of the
+/// indirect buffer so each draw pass only issues the geometry it needs.
 class IndirectBatcher {
 public:
   IndirectBatcher(uint32_t maxChunks) : m_maxChunks(maxChunks) {
@@ -49,6 +49,7 @@ public:
   }
 
   uint32_t capacity() const { return m_maxChunks; }
+  uint32_t transparentCommandBase() const { return m_maxChunks; }
 
   void updateChunkData(uint32_t slotIndex, const ChunkCullData& data) {
       if (slotIndex >= m_maxChunks) return;
@@ -59,31 +60,33 @@ public:
   }
 
   /// Rebuild indirect draw commands on the CPU from chunk metadata.
-  /// Chunks are frustum-culled and split into opaque-then-transparent ranges
-  /// so each draw pass only issues the commands it actually renders.
+  /// Chunks are frustum-culled once and fanned out into opaque / transparent
+  /// ranges so each draw pass only issues the commands it actually renders.
   void buildIndirectCommands(const Frustum& frustum) {
       const auto* chunks = static_cast<const ChunkCullData*>(m_chunkDataBuffer->mappedPtr());
       auto* commands = static_cast<DrawCommand*>(m_indirectBuffer->mappedPtr());
 
-      // First pass: collect chunks that have any opaque geometry.
+      // Single pass: collect visible chunks and fan out into the opaque and
+      // transparent command regions.
       uint32_t activeLimit = m_activeSlots.load(std::memory_order_relaxed);
       uint32_t opaqueCount = 0u;
-      for (uint32_t i = 0; i < activeLimit; ++i) {
-        const auto& c = chunks[i];
-        if (c.indexCount == 0 || c.hasOpaque == 0u) continue;
-        if (!frustum.intersectsAABB(c.min[0], c.min[1], c.min[2],
-                                   c.max[0], c.max[1], c.max[2])) continue;
-        commands[opaqueCount++] = DrawCommand{c.indexCount, 1u, c.firstIndex, c.baseVertex, c.slotIndex};
-      }
-
-      // Second pass: collect chunks that have any transparent geometry.
       uint32_t transparentCount = 0u;
       for (uint32_t i = 0; i < activeLimit; ++i) {
         const auto& c = chunks[i];
-        if (c.indexCount == 0 || c.hasTransparent == 0u) continue;
+        if (c.indexCount == 0u) continue;
         if (!frustum.intersectsAABB(c.min[0], c.min[1], c.min[2],
                                    c.max[0], c.max[1], c.max[2])) continue;
-        commands[opaqueCount + transparentCount++] = DrawCommand{c.indexCount, 1u, c.firstIndex, c.baseVertex, c.slotIndex};
+        const bool hasOpaque = c.hasOpaque != 0u;
+        const bool hasTransparent = c.hasTransparent != 0u;
+        if (!hasOpaque && !hasTransparent) continue;
+
+        const DrawCommand cmd{c.indexCount, 1u, c.firstIndex, c.baseVertex, c.slotIndex};
+        if (hasOpaque) {
+          commands[opaqueCount++] = cmd;
+        }
+        if (hasTransparent) {
+          commands[m_maxChunks + transparentCount++] = cmd;
+        }
       }
 
       m_opaqueCount = opaqueCount;
