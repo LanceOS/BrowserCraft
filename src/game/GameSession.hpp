@@ -7,7 +7,7 @@
 namespace voxel {
 
 constexpr int32_t MIN_RENDER_DISTANCE = 2;
-constexpr int32_t MAX_RENDER_DISTANCE = 256;
+constexpr int32_t MAX_RENDER_DISTANCE = 128;
 
 enum class GameMode {
   Survival,

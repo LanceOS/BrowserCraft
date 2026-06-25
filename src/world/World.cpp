@@ -246,8 +246,14 @@ void World::onSaveLoadFailed(int32_t chunkX, int32_t chunkZ) {
 // ---- Private ----
 
 void World::ensureVisibleRadius(int32_t centerCX, int32_t centerCZ) {
-  for (int32_t dz = -m_config.renderDistance; dz <= m_config.renderDistance; ++dz) {
-    for (int32_t dx = -m_config.renderDistance; dx <= m_config.renderDistance; ++dx) {
+  int32_t r = m_config.renderDistance;
+  int32_t r2 = r * r;
+  // Iterate square bounding box, skip chunks outside the Euclidean circle.
+  // This reduces loaded chunks by ~21.5% vs a full square (cylindrical loading).
+  for (int32_t dz = -r; dz <= r; ++dz) {
+    for (int32_t dx = -r; dx <= r; ++dx) {
+      if (dx * dx + dz * dz > r2) continue;
+
       int32_t cx = centerCX + dx;
       int32_t cz = centerCZ + dz;
       if (m_chunks.has(cx, cz)) continue;
@@ -279,6 +285,7 @@ void World::ensureVisibleRadius(int32_t centerCX, int32_t centerCZ) {
 
 void World::unloadFarChunks(int32_t centerCX, int32_t centerCZ) {
   int32_t maxDist = m_config.renderDistance + 1;
+  int32_t maxDist2 = maxDist * maxDist;
   std::vector<Chunk*> toUnload;
 
   m_chunks.forEach([&](const Chunk& chunk) {
@@ -288,7 +295,7 @@ void World::unloadFarChunks(int32_t centerCX, int32_t centerCZ) {
       chunk.state == ChunkState::MeshReady ||
       chunk.state == ChunkState::Uploaded ||
       chunk.state == ChunkState::MeshFailed;
-    if ((dx > maxDist || dz > maxDist) && canRelease) {
+    if (dx * dx + dz * dz > maxDist2 && canRelease) {
       toUnload.push_back(const_cast<Chunk*>(&chunk));
     }
   });

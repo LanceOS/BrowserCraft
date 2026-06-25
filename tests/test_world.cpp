@@ -69,9 +69,14 @@ TEST_CASE("World basic chunk lifecycle", "[world]") {
   world.update(glm::vec3(0.0f, 64.0f, 0.0f));
   REQUIRE(genCount > 0);
 
-  // Signal gen complete — should queue mesh
+  // Signal gen complete — should queue mesh.
+  // Use a valid slot index: the pool allocates LIFO, so the last acquired slot
+  // is the lowest index. Find the center chunk (0,0) and use its slot.
   int meshBefore = meshCount;
-  world.onWorldGenDone(0); // slot index 0
+  const auto* centerChunk = world.getChunk(0, 0);
+  REQUIRE(centerChunk != nullptr);
+  int32_t centerSlot = centerChunk->slotIndex;
+  world.onWorldGenDone(centerSlot);
   world.update(glm::vec3(0.0f, 64.0f, 0.0f));
   REQUIRE(meshCount > meshBefore);
 }
