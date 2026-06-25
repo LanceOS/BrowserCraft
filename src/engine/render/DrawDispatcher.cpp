@@ -33,22 +33,22 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
 
   gl::BindVertexArray(m_masterVao);
 
+  const uint32_t visibleCommands = m_indirectBatcher.commandCount();
+
   // Pass 1: opaque only.
-  const uint32_t opaqueCommands = m_indirectBatcher.opaqueCommandCount();
-  if (opaqueCommands > 0u) {
+  if (visibleCommands > 0u) {
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
     gl::DepthMask(GL_TRUE);
     gl::DepthFunc(GL_LESS);
-    m_indirectBatcher.drawIndirect(opaqueCommands);
+    m_indirectBatcher.drawIndirect(visibleCommands);
   }
 
   // Pass 2: transparent only.
-  const uint32_t transparentCommands = m_indirectBatcher.transparentCommandCount();
-  if (transparentCommands > 0u) {
+  if (visibleCommands > 0u && m_indirectBatcher.hasVisibleTransparent()) {
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
     gl::DepthMask(GL_FALSE);
     gl::DepthFunc(GL_LEQUAL);
-    m_indirectBatcher.drawIndirect(transparentCommands, opaqueCommands);
+    m_indirectBatcher.drawIndirect(visibleCommands);
   }
 
   gl::BindVertexArray(0);

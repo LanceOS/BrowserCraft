@@ -21,7 +21,6 @@ struct ChunkCullData {
     uint32_t pad1;
     uint32_t pad2;
     uint32_t pad3;
-    uint32_t pad4;
 };
 
 struct DrawCommand {
@@ -53,13 +52,14 @@ public:
   }
 
   /// Rebuild indirect draw commands on the CPU from chunk metadata.
-  /// Chunks are frustum-culled and partitioned into opaque/transparent groups.
+  /// Chunks are frustum-culled into one visible command stream; the transparent
+  /// pass is skipped only when no visible chunk contains transparent geometry.
   void buildIndirectCommands(const Frustum& frustum) {
       const auto* chunks = static_cast<const ChunkCullData*>(m_chunkDataBuffer->mappedPtr());
       auto* commands = static_cast<DrawCommand*>(m_indirectBuffer->mappedPtr());
 
-      uint32_t visibleOpaque = 0u;
-      uint32_t visibleTransparent = 0u;
+      uint32_t visibleCount = 0u;
+      bool hasVisibleTransparent = false;
 
       for (uint32_t i = 0; i < m_maxChunks; ++i) {
         const auto& c = chunks[i];
@@ -70,58 +70,23 @@ public:
           continue;
         }
 
-        const DrawCommand cmd{
+        commands[visibleCount++] = DrawCommand{
           c.indexCount,
           1u,
           c.firstIndex,
           c.baseVertex,
           c.slotIndex
         };
-
-        if (c.hasTransparent) {
-          ++visibleTransparent;
-        } else {
-          ++visibleOpaque;
-        }
+        hasVisibleTransparent = hasVisibleTransparent || (c.hasTransparent != 0u);
       }
 
-      const uint32_t opaqueCommandCount = visibleOpaque;
-      const uint32_t transparentCommandCount = visibleTransparent;
-
-      uint32_t opaqueWriteIndex = 0u;
-      uint32_t transparentWriteIndex = opaqueCommandCount;
-      for (uint32_t i = 0; i < m_maxChunks; ++i) {
-        const auto& c = chunks[i];
-        if (c.indexCount == 0) continue;
-        if (!frustum.intersectsAABB(c.min[0], c.min[1], c.min[2],
-                                   c.max[0], c.max[1], c.max[2])) {
-          continue;
-        }
-
-        const DrawCommand cmd{
-          c.indexCount,
-          1u,
-          c.firstIndex,
-          c.baseVertex,
-          c.slotIndex
-        };
-
-        if (c.hasTransparent) {
-          commands[transparentWriteIndex++] = cmd;
-        } else {
-          commands[opaqueWriteIndex++] = cmd;
-        }
-      }
-
-      m_commandCount = opaqueCommandCount + transparentCommandCount;
-      m_opaqueCommandCount = opaqueCommandCount;
-      m_transparentCommandCount = transparentCommandCount;
+      m_commandCount = visibleCount;
+      m_hasVisibleTransparent = hasVisibleTransparent;
       gl::MemoryBarrier(GL_COMMAND_BARRIER_BIT);
   }
 
-  auto opaqueCommandCount() const -> uint32_t { return m_opaqueCommandCount; }
-  auto transparentCommandCount() const -> uint32_t { return m_transparentCommandCount; }
   auto commandCount() const -> uint32_t { return m_commandCount; }
+  auto hasVisibleTransparent() const -> bool { return m_hasVisibleTransparent; }
 
   void drawIndirect(uint32_t commandCount, uint32_t firstCommand = 0u) const {
       if (commandCount == 0u) return;
@@ -138,8 +103,7 @@ public:
 private:
   uint32_t m_maxChunks = 0;
   uint32_t m_commandCount = 0u;
-  uint32_t m_opaqueCommandCount = 0u;
-  uint32_t m_transparentCommandCount = 0u;
+  bool m_hasVisibleTransparent = false;
   std::unique_ptr<PersistentBuffer> m_chunkDataBuffer;
   std::unique_ptr<PersistentBuffer> m_indirectBuffer;
 };
