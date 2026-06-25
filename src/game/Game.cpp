@@ -5,6 +5,7 @@
 #include "content/flora/DefaultFlora.hpp"
 #include <algorithm>
 #include <cmath>
+#include <new>
 #include <thread>
 
 namespace voxel {
@@ -203,44 +204,61 @@ void Game::applyRenderDistance(int32_t newRd) {
   m_worldController.reset();
   m_pool.reset();
 
-  // 4. Compute pool capacity, capping at a safe maximum to avoid OOM.
-  //    Each slot is ~0.87 MB at current vertex/index limits.
-  constexpr int32_t MAX_POOL_SLOTS = 2048; // ~1.8 GB total (pool + VBO + IBO)
-  int32_t desiredPoolCap = (newRd * 2 + 1) * (newRd * 2 + 1) + 8;
-  int32_t poolCap = std::min(desiredPoolCap, MAX_POOL_SLOTS);
+  // 4. Compute pool capacity from the requested render distance.
+  int32_t poolCap = (newRd * 2 + 1) * (newRd * 2 + 1) + 8;
 
-  // Recompute effective render distance from the capped pool capacity.
-  int32_t effectiveRd = static_cast<int32_t>(
-    (std::sqrt(static_cast<double>(poolCap - 8)) - 1.0) / 2.0);
-  effectiveRd = std::clamp(effectiveRd, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
+  // 5. Update config and session (will revert if allocation fails).
+  int32_t oldRd = m_config.renderDistance;
+  m_config.renderDistance = newRd;
+  m_session.setRenderDistance(newRd);
 
-  // 5. Update config and session with the effective (capped) render distance.
-  m_config.renderDistance = effectiveRd;
-  m_session.setRenderDistance(effectiveRd);
-  m_saveOrchestrator->settings().setInt("renderDistance", effectiveRd);
-  m_ui->setRenderDistance(effectiveRd);
+  // 6. Try to recreate pool, world, and renderer. If allocation fails,
+  //    revert to the previous working render distance.
+  try {
+    m_pool = SharedPool::create(poolCap, makeDims(m_config));
 
-  // 6. Recreate pool with capped capacity.
-  m_pool = SharedPool::create(poolCap, makeDims(m_config));
+    m_worldController = std::make_unique<WorldController>(*m_pool, m_blocks, m_config);
+    m_chunkWorker = std::make_unique<ChunkWorkerImpl>(
+      *m_genPool, *m_meshPool, *m_pool, m_worldGenPipeline, m_config,
+      *m_worldController, m_blocks);
+    m_worldController->createWorld(*m_chunkWorker, nullptr);
 
-  // 6. Recreate world controller and chunk worker
-  m_worldController = std::make_unique<WorldController>(*m_pool, m_blocks, m_config);
-  m_chunkWorker = std::make_unique<ChunkWorkerImpl>(
-    *m_genPool, *m_meshPool, *m_pool, m_worldGenPipeline, m_config,
-    *m_worldController, m_blocks);
-  m_worldController->createWorld(*m_chunkWorker, nullptr);
+    m_renderer = std::make_unique<Renderer>(m_window, m_blocks, m_config);
 
-  // 7. Recreate renderer with new buffer sizes
-  m_renderer = std::make_unique<Renderer>(m_window, m_blocks, m_config);
+    // Allocation succeeded — persist the new render distance.
+    m_saveOrchestrator->settings().setInt("renderDistance", newRd);
+    m_ui->setRenderDistance(newRd);
+  } catch (const std::bad_alloc&) {
+    // Allocation failed — revert to the old render distance and recreate.
+    m_renderer.reset();
+    m_worldController.reset();
+    m_pool.reset();
 
-  // 8. Reconfigure save (re-attach persistence)
+    m_config.renderDistance = oldRd;
+    m_session.setRenderDistance(oldRd);
+
+    int32_t oldPoolCap = (oldRd * 2 + 1) * (oldRd * 2 + 1) + 8;
+    m_pool = SharedPool::create(oldPoolCap, makeDims(m_config));
+    m_worldController = std::make_unique<WorldController>(*m_pool, m_blocks, m_config);
+    m_chunkWorker = std::make_unique<ChunkWorkerImpl>(
+      *m_genPool, *m_meshPool, *m_pool, m_worldGenPipeline, m_config,
+      *m_worldController, m_blocks);
+    m_worldController->createWorld(*m_chunkWorker, nullptr);
+    m_renderer = std::make_unique<Renderer>(m_window, m_blocks, m_config);
+
+    // Restore UI to old value (setting didn't take effect).
+    m_ui->setRenderDistance(oldRd);
+    return;
+  }
+
+  // 7. Reconfigure save (re-attach persistence)
   m_worldController->configureSaveWorld(m_saveDir, m_currentSaveSlug, false, m_ioPool.get());
   if (auto* sm = m_worldController->saveManager()) {
     m_saveOrchestrator->finalizeWorldStart(*sm, m_currentSaveSlug, m_currentSaveSlug,
                                            m_config.worldSeed, m_session.gameMode());
   }
 
-  // 9. Rebuild systems (they reference the new World)
+  // 8. Rebuild systems (they reference the new World)
   initSystems();
 
   // 10. Reset player state
