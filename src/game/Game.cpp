@@ -109,7 +109,7 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   // Dedicated I/O pool for async chunk loading (1-2 threads; disk I/O is serial-bound)
   m_ioPool = std::make_unique<WorkerThreadPool>(std::max(1, threads / 4));
 
-  int32_t poolCap = (MAX_RENDER_DISTANCE * 2 + 1) * (MAX_RENDER_DISTANCE * 2 + 1) + 8;
+  int32_t poolCap = (m_config.renderDistance * 2 + 1) * (m_config.renderDistance * 2 + 1) + 8;
   m_pool = SharedPool::create(poolCap, makeDims(config));
 
   // Wire world worker and persistence
