@@ -7,6 +7,8 @@
 #include <vector>
 #include <cstdint>
 #include <cstring>
+#include <stdexcept>
+#include <string>
 #include <memory>
 
 namespace voxel {
@@ -50,6 +52,13 @@ public:
       m_computeProgram = gl::CreateProgram();
       gl::AttachShader(m_computeProgram, cs);
       gl::LinkProgram(m_computeProgram);
+      int programOK;
+      gl::GetProgramiv(m_computeProgram, GL_LINK_STATUS, &programOK);
+      if (!programOK) {
+        char info[1024];
+        gl::GetProgramInfoLog(m_computeProgram, sizeof(info), nullptr, info);
+        throw std::runtime_error("Compute shader link failed: " + std::string(info));
+      }
       gl::DeleteShader(cs);
 
       // Create SSBOs
@@ -76,13 +85,17 @@ public:
   }
 
   void dispatchCulling(const float* projViewMatrix) {
-      gl::UseProgram(m_computeProgram);
+    gl::UseProgram(m_computeProgram);
 
-      int projViewLoc = gl::GetUniformLocation(m_computeProgram, "u_projView");
+    int projViewLoc = gl::GetUniformLocation(m_computeProgram, "u_projView");
+    if (projViewLoc >= 0) {
       gl::UniformMatrix4fv(projViewLoc, 1, GL_FALSE, projViewMatrix);
+    }
 
-      int maxChunksLoc = gl::GetUniformLocation(m_computeProgram, "u_maxChunks");
+    int maxChunksLoc = gl::GetUniformLocation(m_computeProgram, "u_maxChunks");
+    if (maxChunksLoc >= 0) {
       gl::Uniform1i(maxChunksLoc, m_maxChunks);
+    }
 
       gl::BindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_chunkDataBuffer->buffer());
       gl::BindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_indirectBuffer->buffer());
@@ -93,6 +106,30 @@ public:
 
       // Ensure compute writes are visible to indirect drawing and SSBO reads in vertex shader
       gl::MemoryBarrier(GL_COMMAND_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+
+    // Fallback: if compute dispatch produces no visible commands (common on some drivers),
+    // build indirect commands directly on the CPU from chunk metadata.
+    // @see notes/renderer-cpu-command-fallback.md
+    {
+      auto* chunks = static_cast<ChunkCullData*>(m_chunkDataBuffer->mappedPtr());
+      auto* commands = static_cast<DrawCommand*>(m_indirectBuffer->mappedPtr());
+      std::memset(commands, 0, m_indirectBuffer->capacity());
+
+      for (uint32_t i = 0; i < m_maxChunks; ++i) {
+        const auto& c = chunks[i];
+        if (c.indexCount == 0) continue;
+
+        commands[i] = DrawCommand{
+          c.indexCount,
+          1u,
+          c.firstIndex,
+          c.baseVertex,
+          c.slotIndex
+        };
+      }
+
+      gl::MemoryBarrier(GL_COMMAND_BARRIER_BIT);
+    }
   }
 
   void drawIndirect() const {
