@@ -381,7 +381,7 @@ void UIManager::renderOptionsMenu() {
   ImGui::SetCursorPosX(50);
   ImGui::Text("Render Distance: %d", m_renderDistance);
   ImGui::SetCursorPosX(50);
-  ImGui::SliderInt("##rd", &m_renderDistance, 2, 32);
+  ImGui::SliderInt("##rd", &m_renderDistance, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
 
   ImGui::Spacing();
   ImGui::SetCursorPosX(100);
