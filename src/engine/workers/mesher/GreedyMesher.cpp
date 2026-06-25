@@ -239,9 +239,8 @@ bool greedyMesh(
   uint32_t vo = 0; // float offset into vertexOut
   uint32_t io = 0; // index count
 
-  // Scratch mask — largest case is SY * max(SX,SZ) = 256*16 = 4096.
-  static constexpr int32_t MASK_SZ = 256 * 16;
-  uint8_t mask[MASK_SZ];
+  // Scratch mask sized to the largest face for this chunk configuration.
+  std::vector<uint8_t> mask;
 
   for (int32_t di = 0; di < 6; ++di) {
     const auto& info = kDirs[di];
@@ -259,11 +258,15 @@ bool greedyMesh(
     int32_t uSz      = sizes[uAxis];
     int32_t vSz      = sizes[vAxis];
 
-    if (uSz * vSz > MASK_SZ) return false;
+    // Grow mask if needed for this face orientation
+    size_t needed = static_cast<size_t>(uSz) * vSz;
+    if (mask.size() < needed) {
+      mask.resize(needed);
+    }
 
     for (int32_t sl = 0; sl < sliceCnt; ++sl) {
       // ---- Build mask ----
-      std::memset(mask, 0, static_cast<size_t>(uSz) * vSz);
+      std::memset(mask.data(), 0, static_cast<size_t>(uSz) * vSz);
 
       for (int32_t v = 0; v < vSz; ++v) {
         for (int32_t u = 0; u < uSz; ++u) {
