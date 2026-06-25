@@ -1,6 +1,5 @@
 #pragma once
 
-#include <string>
 #include <cstdint>
 
 namespace voxel {
@@ -18,6 +17,11 @@ enum class ChunkState {
   MeshFailed,
 };
 
+/// Pack chunk coordinates into a single 64-bit key.
+inline auto chunkKey(int32_t cx, int32_t cz) -> int64_t {
+  return (static_cast<int64_t>(cx) << 32) | (static_cast<uint32_t>(cz));
+}
+
 /// Represents one chunk in the world.
 struct Chunk {
   int32_t chunkX;
@@ -28,12 +32,12 @@ struct Chunk {
   uint32_t indexCount = 0;
   bool needsRemesh = false;
 
-  [[nodiscard]] auto key() const -> std::string {
-    return std::to_string(chunkX) + ":" + std::to_string(chunkZ);
+  [[nodiscard]] auto key() const -> int64_t {
+    return chunkKey(chunkX, chunkZ);
   }
 
-  static auto makeKey(int32_t cx, int32_t cz) -> std::string {
-    return std::to_string(cx) + ":" + std::to_string(cz);
+  static auto makeKey(int32_t cx, int32_t cz) -> int64_t {
+    return chunkKey(cx, cz);
   }
 };
 

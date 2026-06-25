@@ -133,7 +133,7 @@ public:
   template <typename F>
   void forEachEntry(F&& cb) { m_chunks.forEachEntry(std::forward<F>(cb)); }
 
-  [[nodiscard]] auto hasChunkKey(const std::string& key) const -> bool { return m_chunks.hasKey(key); }
+  [[nodiscard]] auto hasChunkKey(int64_t key) const -> bool { return m_chunks.hasKey(key); }
   [[nodiscard]] auto chunkCount() const -> size_t { return m_chunks.size(); }
 
 private:

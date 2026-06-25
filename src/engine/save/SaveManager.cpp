@@ -1,15 +1,12 @@
 #include "SaveManager.hpp"
 #include "../alloc/SharedPool.hpp"
+#include "../../world/Chunk.hpp"
 #include "../../world/World.hpp"
 #include <fstream>
 #include <filesystem>
 #include <cstring>
 
 namespace voxel {
-
-static auto makeKey(int32_t cx, int32_t cz) -> std::string {
-  return std::to_string(cx) + "_" + std::to_string(cz);
-}
 
 SaveManager::SaveManager(const std::string& saveDir, const std::string& slotId,
                          SharedPool& pool, World& world)
@@ -22,7 +19,7 @@ SaveManager::SaveManager(const std::string& saveDir, const std::string& slotId,
 SaveManager::~SaveManager() { flushPending(); }
 
 auto SaveManager::chunkFilePath(int32_t cx, int32_t cz) const -> std::string {
-  return m_saveDir + "/" + m_slotId + "/" + makeKey(cx, cz) + ".chunk";
+  return m_saveDir + "/" + m_slotId + "/" + std::to_string(cx) + "_" + std::to_string(cz) + ".chunk";
 }
 
 void SaveManager::requestLoad(int32_t chunkX, int32_t chunkZ) {
@@ -39,21 +36,18 @@ void SaveManager::requestLoad(int32_t chunkX, int32_t chunkZ) {
 
 void SaveManager::markDirty(int32_t chunkX, int32_t chunkZ) {
   std::lock_guard lock(m_mutex);
-  m_dirtyChunks.insert(makeKey(chunkX, chunkZ));
+  m_dirtyChunks.insert(chunkKey(chunkX, chunkZ));
 }
 
 void SaveManager::flushPending() {
-  std::unordered_set<std::string> toSave;
+  std::unordered_set<int64_t> toSave;
   {
     std::lock_guard lock(m_mutex);
     toSave.swap(m_dirtyChunks);
   }
-  for (const auto& key : toSave) {
-    // Parse key "cx_cz"
-    auto pos = key.find('_');
-    if (pos == std::string::npos) continue;
-    int32_t cx = std::stoi(key.substr(0, pos));
-    int32_t cz = std::stoi(key.substr(pos + 1));
+  for (int64_t key : toSave) {
+    int32_t cx = static_cast<int32_t>(key >> 32);
+    int32_t cz = static_cast<int32_t>(key & 0xFFFFFFFF);
     saveChunk(cx, cz);
   }
 }

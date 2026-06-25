@@ -162,7 +162,7 @@ void Renderer::syncChunks(World& world) {
   std::vector<bool> activeSlots(m_indirectBatcher->capacity(), false);
 
   // Upload new/updated meshes
-  world.forEachEntry([&](const std::string& key, Chunk& chunk) {
+  world.forEachEntry([&](int64_t key, Chunk& chunk) {
     auto slot = world.getChunkSlot(chunk);
     // @see notes/renderer-slot-index-bounds.md
     if (slot.slotIndex < 0 || slot.slotIndex >= static_cast<int32_t>(m_indirectBatcher->capacity())) {

@@ -53,7 +53,7 @@ private:
   std::string m_slotId;
   SharedPool& m_pool;
   World& m_world;
-  std::unordered_set<std::string> m_dirtyChunks;
+  std::unordered_set<int64_t> m_dirtyChunks;
   std::mutex m_mutex;
   size_t m_dataSize = 0;
 };

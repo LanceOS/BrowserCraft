@@ -123,6 +123,6 @@ TEST_CASE("ChunkState transitions", "[world]") {
   REQUIRE(c.state == voxel::ChunkState::QueuedGen);
 
   auto key = c.key();
-  REQUIRE(key == "0:0");
-  REQUIRE(voxel::Chunk::makeKey(5, -3) == "5:-3");
+  REQUIRE(key == voxel::chunkKey(0, 0));
+  REQUIRE(voxel::Chunk::makeKey(5, -3) == voxel::chunkKey(5, -3));
 }
