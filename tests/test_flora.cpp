@@ -72,6 +72,7 @@ TEST_CASE("GrassFactory.getProperties returns correct metadata", "[flora]") {
       .blockId = 17,
       .textureLayer = 0,
       .acceptableSoil = {voxel::flora::SoilType::GRASS},
+      .biomeAffinity = {"plains", "forest"},
       .spawnChance = 0.1f,
       .isTall = false,
       .dropsSeeds = true,
@@ -85,6 +86,9 @@ TEST_CASE("GrassFactory.getProperties returns correct metadata", "[flora]") {
   CHECK(props.renderType == voxel::flora::FloraRenderType::CROSS_QUAD);
   CHECK(props.acceptableSoil.size() == 1);
   CHECK(props.acceptableSoil[0] == voxel::flora::SoilType::GRASS);
+  CHECK(props.biomeAffinity.size() == 2);
+  CHECK(props.biomeAffinity[0] == "plains");
+  CHECK(props.biomeAffinity[1] == "forest");
   CHECK(props.dropsSelf == true);
   CHECK(props.dropItemId == 17);
   CHECK(props.boneMealable == false);

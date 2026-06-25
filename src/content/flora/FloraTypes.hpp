@@ -30,6 +30,15 @@ enum class SoilType : uint8_t {
   ANY_SOLID,
 };
 
+/// Growth stages for a flora that matures over time.
+enum class GrowthStage : uint8_t {
+  STAGE_0,  /// Just planted / initial state.
+  STAGE_1,
+  STAGE_2,
+  STAGE_3,
+  MATURE,   /// Fully grown, ready for harvest.
+};
+
 /// Light level requirements for growth and survival.
 struct LightRequirements {
   uint8_t minSkyLight = 0;    /// Minimum sky light (0-15). 0 = no minimum.
@@ -44,6 +53,7 @@ struct FloraProperties {
   FloraRenderType renderType = FloraRenderType::FOLIAGE_CUBE;
   std::vector<uint8_t> textureLayers;  /// Texture layer index for each growth stage.
   std::vector<SoilType> acceptableSoil;
+  std::vector<std::string> biomeAffinity;  /// Biome names where this flora naturally spawns.
   LightRequirements lightRequirements;
   BlockAABB collision = EMPTY_BLOCK_AABB;  /// Empty for cross-quad plants.
   bool dropsSelf = true;

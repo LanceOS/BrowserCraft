@@ -47,6 +47,7 @@ FloraProperties GrassFactory::getProperties(uint16_t speciesId) const {
     .renderType = def.isTall ? FloraRenderType::TALL_CROSS_QUAD : FloraRenderType::CROSS_QUAD,
     .textureLayers = {static_cast<uint8_t>(def.textureLayer)},
     .acceptableSoil = def.acceptableSoil,
+    .biomeAffinity = def.biomeAffinity,
     .lightRequirements = {8, 0, 15},
     .collision = EMPTY_BLOCK_AABB,
     .dropsSelf = true,
