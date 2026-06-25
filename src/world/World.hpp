@@ -148,6 +148,7 @@ private:
   void requestNeighborRemeshes(const Chunk& chunk);
   void requestBoundaryNeighborRemeshes(const Chunk& chunk, int32_t localX, int32_t localZ);
   void requestNeighborRemesh(const Chunk& chunk, int32_t dx, int32_t dz);
+  void flushDeferredRemeshes();
 
   [[nodiscard]] auto chunkHasVoxelData(const Chunk& chunk) const -> bool;
   [[nodiscard]] auto chunkHasMeshes(const Chunk& chunk) const -> bool;
@@ -166,6 +167,8 @@ private:
 
   IChunkPersistence* m_persistence = nullptr;
   std::vector<int32_t> m_pendingUploadSlots;
+  // Boundary edits collected during a frame — flushed at end of update()
+  std::vector<std::pair<int32_t, int32_t>> m_deferredBoundaryEdits;
 
   int32_t m_centerChunkX = 0;
   int32_t m_centerChunkZ = 0;
