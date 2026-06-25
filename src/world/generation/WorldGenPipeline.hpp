@@ -8,15 +8,36 @@
 
 namespace voxel {
 
+/// Configuration for world generation noise layering.
+/// Terrain height is computed as:
+///   height = baseHeight
+///          + continental(worldX, worldZ) * continentalAmplitude
+///          + detail(worldX, worldZ) * detailAmplitude
+///          + blendedHeightBias(worldX, worldZ)
 struct WorldGenerationConfig {
+  /// Base sea-level reference.
   float baseHeight = 64.0f;
-  float baseHeightScale = 0.01f;
-  float baseHeightAmplitude = 16.0f;
-  float detailHeightScale = 0.03f;
-  float detailHeightAmplitude = 4.0f;
+
+  /// Continental (large-scale) noise — controls basic land/sea shape.
+  float continentalScale = 0.005f;
+  float continentalAmplitude = 40.0f;
+
+  /// Regional / detail noise — adds hills, valleys, small bumps.
+  float detailScale = 0.025f;
+  float detailAmplitude = 10.0f;
+
+  /// Mountain amplification — extra high-frequency noise in cold regions.
+  float mountainScale = 0.015f;
+  float mountainAmplitude = 28.0f;
+
+  /// Sea level (for filling water).
   int32_t seaLevel = 64;
-  float densityNoiseScale = 0.03f;
-  float densityDepthScale = 0.05f;
+
+  /// 3D density noise — creates underground cavities / overhangs.
+  float densityNoiseScale = 0.04f;
+  /// How quickly the density threshold increases with depth.
+  /// Higher values = fewer surface cavities, more underground only.
+  float densityDepthScale = 0.12f;
 };
 
 /// Full world generation pipeline for a single chunk.
@@ -35,6 +56,16 @@ public:
                  uint32_t* genSeed, int32_t sizeX, int32_t sizeY, int32_t sizeZ);
 
 private:
+  /// Multi-octave fractal noise summation (2D convenience).
+  /// Evaluates noise3D(x, 0, z * frequency) for each octave.
+  [[nodiscard]] static auto fractalNoise2D(const SimplexNoise& noise,
+                                            float x, float z,
+                                            int octaves,
+                                            float lacunarity,
+                                            float persistence) -> float;
+
+  SimplexNoise m_continentalNoise;
+  SimplexNoise m_detailNoise;
   SimplexNoise m_densityNoise;
   biome::BiomeSampler m_biomeSampler;
   CaveCarver m_caveCarver;

@@ -30,6 +30,9 @@ inline auto chunkSeed(int32_t chunkX, int32_t chunkZ, uint32_t seed) -> uint32_t
   return h;
 }
 
+/// Maximum number of times to retry chunk generation before giving up.
+inline constexpr int32_t MAX_CHUNK_GEN_RETRIES = 3;
+
 /// Represents one chunk in the world.
 struct Chunk {
   int32_t chunkX;
@@ -40,6 +43,7 @@ struct Chunk {
   uint32_t indexCount = 0;
   bool needsRemesh = false;
   bool hasTransparent = false; // whether mesh contains alpha-blended geometry
+  int32_t genRetries = 0; // number of times generation has been attempted
 
   [[nodiscard]] auto key() const -> int64_t {
     return chunkKey(chunkX, chunkZ);

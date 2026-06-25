@@ -41,8 +41,22 @@ TEST_CASE("World basic chunk lifecycle", "[world]") {
   int genCount = 0;
   int meshCount = 0;
 
+  // Capture pool by raw pointer so the mock worker can fill in voxel data
+  // to satisfy the chunk validation in World::onWorldGenDone().
+  voxel::SharedPool* poolPtr = pool.get();
   voxel::TestChunkWorker worker(
-    [&](int32_t, int32_t, int32_t, uint32_t) { ++genCount; },
+    [&, poolPtr](int32_t slotIndex, int32_t, int32_t, uint32_t) {
+      ++genCount;
+      // Write bedrock at y=0 and some stone so the chunk passes validation.
+      auto slot = poolPtr->view(slotIndex);
+      constexpr int32_t sx = 16, sz = 16;
+      for (int32_t z = 0; z < sz; ++z) {
+        for (int32_t x = 0; x < sx; ++x) {
+          slot.voxels[(0 * sz + z) * sx + x] = 7; // bedrock
+          slot.voxels[(1 * sz + z) * sx + x] = 1; // some stone
+        }
+      }
+    },
     [&](int32_t) { ++meshCount; }
   );
   // Null persistence — chunks go through generation path
