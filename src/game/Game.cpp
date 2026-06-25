@@ -78,6 +78,10 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
           m_config.chunkSize, m_config.worldHeight, m_config.chunkSize,
           chunkSeed(chunkX, chunkZ, m_config.worldSeed));
         *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
+        {
+          std::lock_guard lock(m_completionMutex);
+          m_completedGenSlots.push(slotIndex);
+        }
       });
     },
     [this](int32_t slotIndex) {
@@ -98,6 +102,10 @@ Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
         *slot.vertexCount = static_cast<uint32_t>(vc);
         *slot.indexCount = ic;
         *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+        {
+          std::lock_guard lock(m_completionMutex);
+          m_completedMeshSlots.push(slotIndex);
+        }
         (void)ok;
       });
     },
@@ -460,20 +468,32 @@ void Game::applyPlayerControls(float dt) {
 }
 
 void Game::processGenJobs() {
-  // Check completed gen jobs and notify world
-  for (int32_t i = 0; i < m_pool->capacity(); ++i) {
-    auto slot = m_pool->view(i);
-    if (*slot.status == static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY)) {
-      auto* chunk = m_world->getChunkBySlotIndex(i);
-      if (chunk && chunk->state == ChunkState::Generating) {
-        m_world->onWorldGenDone(i);
-      }
+  // Drain completed gen jobs from the lock-free completion queue.
+  // Workers push slot indices after setting VOXELS_READY status.
+  std::queue<int32_t> genSlots;
+  std::queue<int32_t> meshSlots;
+  {
+    std::lock_guard lock(m_completionMutex);
+    genSlots.swap(m_completedGenSlots);
+    meshSlots.swap(m_completedMeshSlots);
+  }
+
+  while (!genSlots.empty()) {
+    int32_t i = genSlots.front();
+    genSlots.pop();
+    auto* chunk = m_world->getChunkBySlotIndex(i);
+    if (chunk && chunk->state == ChunkState::Generating) {
+      m_world->onWorldGenDone(i);
     }
-    if (*slot.status == static_cast<int32_t>(ChunkSlotStatus::MESH_READY)) {
-      auto* chunk = m_world->getChunkBySlotIndex(i);
-      if (chunk && chunk->state == ChunkState::Meshing) {
-        m_world->onMeshDone(i, *slot.vertexCount, *slot.indexCount, true);
-      }
+  }
+
+  while (!meshSlots.empty()) {
+    int32_t i = meshSlots.front();
+    meshSlots.pop();
+    auto* chunk = m_world->getChunkBySlotIndex(i);
+    if (chunk && chunk->state == ChunkState::Meshing) {
+      auto slot = m_pool->view(i);
+      m_world->onMeshDone(i, *slot.vertexCount, *slot.indexCount, true);
     }
   }
 }

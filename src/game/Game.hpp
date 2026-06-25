@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <queue>
+#include <mutex>
 
 #include "engine/core/Config.hpp"
 #include "engine/core/GameLoop.hpp"
@@ -100,6 +102,11 @@ private:
   // Threading
   std::unique_ptr<WorkerThreadPool> m_genPool;
   std::unique_ptr<WorkerThreadPool> m_meshPool;
+
+  // Completion queues: workers push slot indices here instead of main thread polling all slots.
+  std::queue<int32_t> m_completedGenSlots;
+  std::queue<int32_t> m_completedMeshSlots;
+  mutable std::mutex m_completionMutex;
   WorldGenPipeline m_worldGenPipeline;
   std::mt19937 m_worldSeedRng;
   daynight::DayNightCycle m_dayNightCycle;
