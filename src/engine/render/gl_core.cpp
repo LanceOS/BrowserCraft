@@ -35,6 +35,7 @@ PFN_BindVertexArray BindVertexArray;
 PFN_DeleteVertexArrays DeleteVertexArrays;
 PFN_EnableVertexAttribArray EnableVertexAttribArray;
 PFN_VertexAttribPointer VertexAttribPointer;
+PFN_VertexAttribIPointer VertexAttribIPointer;
 
 PFN_GenBuffers GenBuffers;
 PFN_BindBuffer BindBuffer;
@@ -100,6 +101,7 @@ void loadGLFunctions() {
   LOAD(DeleteVertexArrays);
   LOAD(EnableVertexAttribArray);
   LOAD(VertexAttribPointer);
+  LOAD(VertexAttribIPointer);
 
   LOAD(GenBuffers);
   LOAD(BindBuffer);

@@ -52,17 +52,11 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
   gl::BindBuffer(GL_ARRAY_BUFFER, m_masterVbo->buffer());
   gl::BindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_masterIbo->buffer());
 
-  size_t strideBytes = m_config.vertexStrideFloats * sizeof(float);
+  size_t strideBytes = m_config.vertexStrideFloats * sizeof(uint32_t);
   gl::EnableVertexAttribArray(0);
-  gl::VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(0));
+  gl::VertexAttribIPointer(0, 1, GL_UNSIGNED_INT, strideBytes, reinterpret_cast<void*>(0));
   gl::EnableVertexAttribArray(1);
-  gl::VertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(12));
-  gl::EnableVertexAttribArray(2);
-  gl::VertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(24));
-  gl::EnableVertexAttribArray(3);
-  gl::VertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(32));
-  gl::EnableVertexAttribArray(4);
-  gl::VertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, strideBytes, reinterpret_cast<void*>(36));
+  gl::VertexAttribIPointer(1, 1, GL_UNSIGNED_INT, strideBytes, reinterpret_cast<void*>(4));
   gl::BindVertexArray(0);
 
   seedTextureArray();

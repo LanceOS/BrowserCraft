@@ -33,6 +33,12 @@ void World::update(glm::vec3 cameraPos) {
 auto World::isReady() const -> bool {
   if (!m_hasCenter) return false;
   auto* center = m_chunks.get(m_centerChunkX, m_centerChunkZ);
+  return center && chunkHasMeshes(*center);
+}
+
+auto World::hasTerrain() const -> bool {
+  if (!m_hasCenter) return false;
+  auto* center = m_chunks.get(m_centerChunkX, m_centerChunkZ);
   return center && chunkHasVoxelData(*center);
 }
 
@@ -328,6 +334,11 @@ auto World::chunkHasVoxelData(const Chunk& chunk) const -> bool {
          chunk.state == ChunkState::MeshReady ||
          chunk.state == ChunkState::Uploaded ||
          chunk.state == ChunkState::MeshFailed;
+}
+
+auto World::chunkHasMeshes(const Chunk& chunk) const -> bool {
+  return chunk.state == ChunkState::MeshReady ||
+         chunk.state == ChunkState::Uploaded;
 }
 
 void World::requestNeighborRemeshes(const Chunk& chunk) {

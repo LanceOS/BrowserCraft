@@ -324,7 +324,8 @@ void Game::applyPlayerControls(float dt) {
   const bool canControl = (m_session.state() == GameState::InGame ||
                           m_session.state() == GameState::GeneratingWorld) &&
     (m_ui->state() == UIState::InGame) &&
-    !m_ui->isInventoryOpen();
+    !m_ui->isInventoryOpen() &&
+    m_world && m_world->hasTerrain();
 
   if (!canControl) {
     body.velocity.x = 0.0f;
@@ -421,7 +422,7 @@ void Game::applyPlayerControls(float dt) {
     }
   }
 
-  if (m_world->isReady()) {
+  if (m_world && m_world->hasTerrain()) {
     body.isFluid = m_world->isFluid(
       static_cast<int32_t>(std::floor(transform.position.x)),
       std::max(0, static_cast<int32_t>(std::floor(transform.position.y + body.aabbMin.y))),
@@ -455,14 +456,10 @@ void Game::update(float dt) {
       m_session.state() == GameState::GeneratingWorld) {
     m_dayNightCycle.advance(dt);
 
-    if (m_session.state() == GameState::InGame) {
-      applyPlayerControls(dt);
-      syncCameraFromPlayer();
-    }
-
     processGenJobs();
+    m_world->update(m_camera.position);
 
-    if (!m_spawnedToSurface && m_world->isReady()) {
+    if (!m_spawnedToSurface && m_world->hasTerrain()) {
       int32_t idx = playerIndex();
       if (idx >= 0 && m_transforms.has(idx) && m_bodies.has(idx)) {
         auto& transform = m_transforms.get(idx);
@@ -486,7 +483,11 @@ void Game::update(float dt) {
       }
     }
 
-    m_world->update(m_camera.position);
+    if (m_session.state() == GameState::InGame ||
+        m_session.state() == GameState::GeneratingWorld) {
+      applyPlayerControls(dt);
+    }
+
     m_systems.update(*this, dt);
 
     if (m_session.state() == GameState::GeneratingWorld && m_world->isReady()) {

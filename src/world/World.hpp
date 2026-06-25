@@ -80,8 +80,11 @@ public:
   /// Check if a world position has a liquid block.
   [[nodiscard]] auto isFluid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool;
 
-  /// Check if the world is ready (center chunk has voxel data available for gameplay logic).
+  /// Check if the world is fully render-ready (center chunk mesh has been uploaded).
   [[nodiscard]] auto isReady() const -> bool;
+
+  /// Check if the world has terrain data for the center chunk for gameplay/spawn logic.
+  [[nodiscard]] auto hasTerrain() const -> bool;
 
   /// Attach a save manager for loading/saving chunks.
   void attachSaveManager(void* saveManager) { m_saveManager = saveManager; }
@@ -142,6 +145,7 @@ private:
   void requestNeighborRemesh(const Chunk& chunk, int32_t dx, int32_t dz);
 
   [[nodiscard]] auto chunkHasVoxelData(const Chunk& chunk) const -> bool;
+  [[nodiscard]] auto chunkHasMeshes(const Chunk& chunk) const -> bool;
   [[nodiscard]] auto getBlockId(int32_t worldX, int32_t worldY, int32_t worldZ) const -> uint8_t;
 
   SharedPool& m_pool;
