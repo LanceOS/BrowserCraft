@@ -24,8 +24,16 @@ auto SaveManager::chunkFilePath(int32_t cx, int32_t cz) const -> std::string {
 }
 
 void SaveManager::requestLoad(int32_t chunkX, int32_t chunkZ) {
-  // Submit file I/O to the thread pool; the main thread processes the result
-  // via processPending().
+  // Fast path: if the chunk file doesn't exist on disk, fail immediately
+  // instead of submitting an async I/O task that would just return false.
+  // This avoids a multi-frame delay for every chunk on a fresh world.
+  if (!std::filesystem::exists(chunkFilePath(chunkX, chunkZ))) {
+    m_world.onSaveLoadFailed(chunkX, chunkZ);
+    return;
+  }
+
+  // File exists — submit async I/O to the thread pool; the main thread
+  // processes the result via processPending().
   size_t ds = m_dataSize;
   m_ioPool->submitAndForget([this, chunkX, chunkZ, ds]() {
     PendingChunkLoad result{chunkX, chunkZ, {}, {}, {}, false};
