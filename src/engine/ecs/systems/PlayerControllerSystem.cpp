@@ -67,13 +67,11 @@ void PlayerControllerSystem::update(Game& /*state*/, float dt) {
   const bool canControl = (m_session.state() == GameState::InGame ||
                           m_session.state() == GameState::GeneratingWorld) &&
     (m_ui.state() == UIState::InGame) &&
-    !m_ui.isInventoryOpen() &&
-    m_world.hasTerrain();
+    !m_ui.isInventoryOpen();
 
   if (!canControl) {
     body.velocity.x = 0.0f;
     body.velocity.z = 0.0f;
-    // Still sync camera so mouse look appears responsive during short pauses
     syncCameraFromPlayer();
     return;
   }
@@ -99,6 +97,16 @@ void PlayerControllerSystem::update(Game& /*state*/, float dt) {
 
   if (glm::dot(moveDir, moveDir) > 0.0f) {
     moveDir = glm::normalize(moveDir);
+  }
+
+  if (!m_world.hasTerrain()) {
+    // No terrain yet — allow mouse look and horizontal movement but no gravity
+    float speed = m_input.isHeld(InputState::KEY_SHIFT) ? player.sprintSpeed
+                                                        : player.walkSpeed;
+    transform.position += moveDir * speed * dt;
+    body.velocity = glm::vec3(0.0f);
+    syncCameraFromPlayer();
+    return;
   }
 
   applyMovement(dt, transform, body, player, moveDir);
