@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BiomeData.hpp"
-#include "BiomeClassifier.hpp"
+#include "BiomeFactory.hpp"
 #include "IClimateSource.hpp"
 #include "world/generation/SimplexNoise.hpp"
 #include <array>
@@ -10,9 +10,8 @@ namespace voxel::biome {
 
 /// Samples temperature and humidity noise, then classifies into biomes.
 /// Owns the noise instances but delegates classification logic to the
-/// stateless BiomeClassifier (which can be tested with synthetic values).
-/// Implements IClimateSource so it can be passed to WorldGenPipeline
-/// or replaced with a different climate strategy.
+/// stateless BiomeFactory.  Implements IClimateSource so it can be passed
+/// to WorldGenPipeline or replaced with a different climate strategy.
 class BiomeSampler : public IClimateSource {
 public:
   explicit BiomeSampler(uint32_t seed);
@@ -28,8 +27,8 @@ public:
   /// for the same coordinate).
   [[nodiscard]] auto sampleClimate(float worldX, float worldZ) const -> ClimateSample;
 
-  /// Pick the biome surface rule at world coordinates (convenience).
-  [[nodiscard]] auto sampleBiome(float worldX, float worldZ) const -> const BiomeSurfaceRule&;
+  /// Pick the biome at world coordinates (convenience).
+  [[nodiscard]] auto sampleBiome(float worldX, float worldZ) const -> const Biome&;
 
   /// Smooth [0,1] mountain weight at world coordinates (convenience).
   [[nodiscard]] auto mountainWeight(float worldX, float worldZ) const -> float;

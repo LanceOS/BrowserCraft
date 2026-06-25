@@ -21,16 +21,16 @@ auto BiomeSampler::sampleClimate(float worldX, float worldZ) const -> ClimateSam
   return {sampleTemperature(worldX, worldZ), sampleHumidity(worldX, worldZ)};
 }
 
-auto BiomeSampler::sampleBiome(float worldX, float worldZ) const -> const BiomeSurfaceRule& {
-  return BiomeClassifier::sampleBiome(sampleClimate(worldX, worldZ));
+auto BiomeSampler::sampleBiome(float worldX, float worldZ) const -> const Biome& {
+  return BiomeFactory::pick(sampleClimate(worldX, worldZ));
 }
 
 auto BiomeSampler::mountainWeight(float worldX, float worldZ) const -> float {
-  return BiomeClassifier::mountainWeight(sampleClimate(worldX, worldZ));
+  return BiomeFactory::mountainWeight(sampleClimate(worldX, worldZ));
 }
 
 auto BiomeSampler::blendedHeightBias(float worldX, float worldZ) const -> float {
-  return BiomeClassifier::blendedHeightBias(sampleClimate(worldX, worldZ));
+  return BiomeFactory::blendedHeightBias(sampleClimate(worldX, worldZ));
 }
 
 } // namespace voxel::biome

@@ -39,19 +39,9 @@ enum class BiomeId : uint8_t {
   Ocean,
 };
 
-/// Surface blocks and height bias for a single biome.
-struct BiomeSurfaceRule {
-  BiomeId id;
-  uint8_t topBlock;
-  uint8_t fillerBlock;
-  int32_t depth;
-  float heightBias;
-};
-
 // ---------------------------------------------------------------------------
 // Named threshold constants — single source of truth.
-// Used by BiomeSampler::pick(), blendedHeightBias(), and mountainWeight().
-// These are exposed here so all consumers reference the same values.
+// Used by BiomeFactory::pick(), computeWeights(), blendedHeightBias(), etc.
 // ---------------------------------------------------------------------------
 
 inline constexpr float kClimateScale           = 0.008f;
@@ -75,24 +65,6 @@ inline constexpr float kOceanTempThreshold     = 0.42f;
 inline constexpr float kOceanHumidThreshold    = 0.40f;
 inline constexpr float kOceanTransWidth        = 0.08f;
 
-// ---------------------------------------------------------------------------
-// Biome surface rule definitions
-// ---------------------------------------------------------------------------
-
-// Plains: grass top, dirt filler, moderate depth, neutral height bias.
-inline constexpr BiomeSurfaceRule PlainsBiome    {BiomeId::Plains,    BlockId::GRASS, BlockId::DIRT,  4,  0.0f};
-// Desert: sand top, sand filler, shallow depth, slightly depressed.
-inline constexpr BiomeSurfaceRule DesertBiome    {BiomeId::Desert,    BlockId::SAND,  BlockId::SAND,  3, -3.0f};
-// Forest: grass top, dirt filler, deep soil, mild height boost.
-inline constexpr BiomeSurfaceRule ForestBiome    {BiomeId::Forest,    BlockId::GRASS, BlockId::DIRT,  5,  3.0f};
-// Mountains: grass/stone top, stone core, thin soil, large height bias.
-// The large heightBias combined with steep noise in WorldGenPipeline creates proper slopes.
-inline constexpr BiomeSurfaceRule MountainsBiome {BiomeId::Mountains, BlockId::GRASS, BlockId::STONE, 3,  22.0f};
-// Swamp: wet stone/mud, depressed and wet.
-inline constexpr BiomeSurfaceRule SwampBiome     {BiomeId::Swamp,     BlockId::STONE, BlockId::STONE, 5, -3.0f};
-// Ocean: cold-ish and dry-ish, deep depression to stay below sea level, sand floor.
-inline constexpr BiomeSurfaceRule OceanBiome     {BiomeId::Ocean,     BlockId::SAND,  BlockId::SAND,  3, -14.0f};
-
 /// Hermite smoothstep: maps [threshold - width/2, threshold + width/2]
 /// to [0, 1] with smooth ease-in-out. Values outside the transition
 /// range clamp to 0 or 1 at compile time.
@@ -103,14 +75,15 @@ inline constexpr float smoothEdge(float value, float threshold, float width) {
   return edge * edge * (3.0f - 2.0f * edge);
 }
 
-/// Compile-time registry of all biomes for iteration / lookup.
-inline constexpr std::array ALL_BIOMES = {
-  PlainsBiome,
-  DesertBiome,
-  ForestBiome,
-  MountainsBiome,
-  SwampBiome,
-  OceanBiome,
+/// Enum-to-enum array for O(1) BiomeId → Biome lookup via BiomeFactory::forId().
+/// Contents must match BiomeId enum order — enforced by test.
+inline constexpr std::array ALL_BIOME_IDS = {
+  BiomeId::Plains,
+  BiomeId::Desert,
+  BiomeId::Forest,
+  BiomeId::Mountains,
+  BiomeId::Swamp,
+  BiomeId::Ocean,
 };
 
 } // namespace voxel::biome

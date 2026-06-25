@@ -1,5 +1,6 @@
 #include "WorldGenPipeline.hpp"
 #include "world/BlockIds.hpp"
+#include "content/biomes/BiomeFactory.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
@@ -94,14 +95,14 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
       // Sample temperature + humidity once and share across all consumers.
       // This eliminates 3× redundant noise evaluations per column.
       auto climate = m_climateSource->sampleClimate(worldX, worldZ);
-      const auto& rule = biome::BiomeClassifier::sampleBiome(climate);
-      float heightBias = biome::BiomeClassifier::blendedHeightBias(climate);
+      const auto& activeBiome = biome::BiomeFactory::pick(climate);
+      float heightBias = biome::BiomeFactory::blendedHeightBias(climate);
 
       // ---- 4. Mountain amplification ----
       // Use smooth mountain weight (derived from temperature) instead of a
       // hard biome-ID check. This prevents height discontinuities at biome
       // boundaries while still concentrating amplification in cold regions.
-      float mountainWeight = biome::BiomeClassifier::mountainWeight(climate);
+      float mountainWeight = biome::BiomeFactory::mountainWeight(climate);
       float mountainExtra = mountainWeight * fractalNoise2D(
           m_continentalNoise,
           worldX * cfg.mountainScale,
@@ -122,7 +123,7 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
           + mountainExtra);
       surfaceY = std::clamp(surfaceY, 1, terrainMaxY);
 
-      const bool noWater = (rule.id == biome::BiomeId::Desert || rule.id == biome::BiomeId::Ocean);
+      const bool noWater = (activeBiome.id() == biome::BiomeId::Desert || activeBiome.id() == biome::BiomeId::Ocean);
 
       // ---- 6. Fill the column ----
       for (int32_t y = 0; y < sizeY; ++y) {
@@ -156,9 +157,9 @@ void WorldGenPipeline::generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
 
         // ---- Surface layering ----
         if (y == surfaceY) {
-          voxels[index] = rule.topBlock;
-        } else if (y > surfaceY - rule.depth) {
-          voxels[index] = rule.fillerBlock;
+          voxels[index] = activeBiome.topBlock();
+        } else if (y > surfaceY - activeBiome.surfaceDepth()) {
+          voxels[index] = activeBiome.fillerBlock();
         } else {
           voxels[index] = BlockId::STONE;
         }
