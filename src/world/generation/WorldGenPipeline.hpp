@@ -4,7 +4,7 @@
 #include <memory>
 #include "SimplexNoise.hpp"
 #include "content/biomes/IClimateSource.hpp"
-#include "content/biomes/BiomeClassifier.hpp"
+#include "content/biomes/BiomeFactory.hpp"
 #include "content/biomes/BiomeSampler.hpp"
 #include "CaveCarver.hpp"
 #include "OreDistributor.hpp"

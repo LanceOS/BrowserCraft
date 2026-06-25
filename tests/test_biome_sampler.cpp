@@ -1,24 +1,26 @@
 #include <catch2/catch_test_macros.hpp>
+#include "content/biomes/BiomeFactory.hpp"
 #include "content/biomes/BiomeSampler.hpp"
+#include "world/BlockIds.hpp"
 
-TEST_CASE("BiomeClassifier pick returns valid biome", "[biome]") {
+TEST_CASE("BiomeFactory pick returns valid biome", "[biome]") {
   using namespace voxel::biome;
 
   // All biomes should be reachable
-  REQUIRE(BiomeClassifier::pick(0.8f, 0.2f).id == BiomeId::Desert);
-  REQUIRE(BiomeClassifier::pick(0.5f, 0.8f).id == BiomeId::Swamp);
-  REQUIRE(BiomeClassifier::pick(0.1f, 0.5f).id == BiomeId::Mountains);
-  REQUIRE(BiomeClassifier::pick(0.5f, 0.7f).id == BiomeId::Forest);
-  REQUIRE(BiomeClassifier::pick(0.5f, 0.3f).id == BiomeId::Plains);
-  REQUIRE(BiomeClassifier::pick(0.35f, 0.25f).id == BiomeId::Ocean);
+  REQUIRE(BiomeFactory::pick(0.8f, 0.2f).id() == BiomeId::Desert);
+  REQUIRE(BiomeFactory::pick(0.5f, 0.8f).id() == BiomeId::Swamp);
+  REQUIRE(BiomeFactory::pick(0.1f, 0.5f).id() == BiomeId::Mountains);
+  REQUIRE(BiomeFactory::pick(0.5f, 0.7f).id() == BiomeId::Forest);
+  REQUIRE(BiomeFactory::pick(0.5f, 0.3f).id() == BiomeId::Plains);
+  REQUIRE(BiomeFactory::pick(0.35f, 0.25f).id() == BiomeId::Ocean);
 }
 
-TEST_CASE("BiomeSampler sampleBiome returns valid rule", "[biome]") {
+TEST_CASE("BiomeSampler sampleBiome returns valid biome", "[biome]") {
   voxel::biome::BiomeSampler sampler(42);
 
-  auto& rule = sampler.sampleBiome(100.0f, 100.0f);
-  REQUIRE(rule.topBlock > 0);
-  REQUIRE(rule.depth > 0);
+  auto& b = sampler.sampleBiome(100.0f, 100.0f);
+  REQUIRE(b.topBlock() > 0);
+  REQUIRE(b.surfaceDepth() > 0);
 }
 
 TEST_CASE("BiomeSampler blendedHeightBias is smooth", "[biome]") {
@@ -45,44 +47,44 @@ TEST_CASE("BiomeSampler blendedHeightBias is smooth", "[biome]") {
   REQUIRE(differs);
 }
 
-TEST_CASE("BiomeClassifer blendedHeightBias with known climate", "[biome]") {
+TEST_CASE("BiomeFactory blendedHeightBias with known climate", "[biome]") {
   using namespace voxel::biome;
 
-  // Pure mountain region: very cold (t=0) → bias ≈ MountainsBiome.heightBias (22)
-  float bias = BiomeClassifier::blendedHeightBias({0.0f, 0.5f});
+  // Pure mountain region: very cold (t=0) → bias ≈ MountainsBiome heightBias (22)
+  float bias = BiomeFactory::blendedHeightBias({0.0f, 0.5f});
   REQUIRE(bias > 15.0f);
   REQUIRE(bias <= 22.0f);
 
-  // Pure desert: hot + dry → bias ≈ DesertBiome.heightBias (-3)
-  bias = BiomeClassifier::blendedHeightBias({1.0f, 0.0f});
+  // Pure desert: hot + dry → bias ≈ DesertBiome heightBias (-3)
+  bias = BiomeFactory::blendedHeightBias({1.0f, 0.0f});
   REQUIRE(bias < 0.0f);
   REQUIRE(bias >= -3.0f);
 
-  // Pure plains: moderate temp, moderate humidity → bias ≈ PlainsBiome.heightBias (0)
-  bias = BiomeClassifier::blendedHeightBias({0.5f, 0.45f});
+  // Pure plains: moderate temp, moderate humidity → bias ≈ PlainsBiome heightBias (0)
+  bias = BiomeFactory::blendedHeightBias({0.5f, 0.45f});
   REQUIRE(bias > -2.0f);
   REQUIRE(bias < 2.0f);
 }
 
-TEST_CASE("BiomeClassifier mountainWeight with known temperature", "[biome]") {
+TEST_CASE("BiomeFactory mountainWeight with known temperature", "[biome]") {
   using namespace voxel::biome;
 
   // Very cold → full mountain weight
-  REQUIRE(BiomeClassifier::mountainWeight({0.0f, 0.5f}) > 0.95f);
+  REQUIRE(BiomeFactory::mountainWeight({0.0f, 0.5f}) > 0.95f);
 
   // Very hot → no mountain weight
-  REQUIRE(BiomeClassifier::mountainWeight({1.0f, 0.5f}) < 0.05f);
+  REQUIRE(BiomeFactory::mountainWeight({1.0f, 0.5f}) < 0.05f);
 
   // At the threshold center (t=0.28), weight should be ~0.5 (mid-transition)
-  float w = BiomeClassifier::mountainWeight({0.28f, 0.5f});
+  float w = BiomeFactory::mountainWeight({0.28f, 0.5f});
   REQUIRE(w > 0.3f);
   REQUIRE(w < 0.7f);
 
   // Transition band: t=0.10 (well below threshold) → weight ≈ 1
-  REQUIRE(BiomeClassifier::mountainWeight({0.10f, 0.5f}) > 0.85f);
+  REQUIRE(BiomeFactory::mountainWeight({0.10f, 0.5f}) > 0.85f);
 
   // Transition band: t=0.40 (well above threshold) → weight ≈ 0
-  REQUIRE(BiomeClassifier::mountainWeight({0.40f, 0.5f}) < 0.15f);
+  REQUIRE(BiomeFactory::mountainWeight({0.40f, 0.5f}) < 0.15f);
 }
 
 TEST_CASE("BiomeSampler blended bias stays within biome extremes", "[biome]") {
@@ -138,7 +140,7 @@ TEST_CASE("BiomeClassifier computeWeights sums to ~1", "[biome]") {
   };
 
   for (const auto& pt : testPoints) {
-    auto w = BiomeClassifier::computeWeights(pt);
+    auto w = BiomeFactory::computeWeights(pt);
     float sum = w.plains + w.desert + w.forest + w.mountains + w.swamp + w.ocean;
     // Allow small epsilon for FP rounding.
     REQUIRE(sum > 0.99f);
@@ -158,35 +160,23 @@ TEST_CASE("BiomeClassifier computeWeights sums to ~1", "[biome]") {
   }
 }
 
-TEST_CASE("BiomeData ALL_BIOMES array is complete", "[biome]") {
+TEST_CASE("BiomeFactory forId covers all biomes", "[biome]") {
   using namespace voxel::biome;
 
-  // ALL_BIOMES should contain exactly 6 biomes, each with a unique BiomeId.
-  REQUIRE(ALL_BIOMES.size() == 6);
+  // ALL_BIOME_IDS should contain exactly 6 entries.
+  REQUIRE(ALL_BIOME_IDS.size() == 6);
 
-  // Check that all BiomeId values are represented.
-  bool hasPlains    = false;
-  bool hasDesert    = false;
-  bool hasForest    = false;
-  bool hasMountains = false;
-  bool hasSwamp     = false;
-  bool hasOcean     = false;
-
-  for (const auto& b : ALL_BIOMES) {
-    switch (b.id) {
-      case BiomeId::Plains:    hasPlains    = true; break;
-      case BiomeId::Desert:    hasDesert    = true; break;
-      case BiomeId::Forest:    hasForest    = true; break;
-      case BiomeId::Mountains: hasMountains = true; break;
-      case BiomeId::Swamp:     hasSwamp     = true; break;
-      case BiomeId::Ocean:     hasOcean     = true; break;
-    }
+  // Each BIomeId should be reachable via forId() and return the correct id.
+  for (const auto& id : ALL_BIOME_IDS) {
+    const Biome& b = BiomeFactory::forId(id);
+    REQUIRE(b.id() == id);
+    REQUIRE(b.topBlock() > 0);
+    REQUIRE(b.surfaceDepth() > 0);
+    REQUIRE(b.fillerBlock() > 0);
   }
 
-  REQUIRE(hasPlains);
-  REQUIRE(hasDesert);
-  REQUIRE(hasForest);
-  REQUIRE(hasMountains);
-  REQUIRE(hasSwamp);
-  REQUIRE(hasOcean);
+  // Verify specific known mappings.
+  REQUIRE(BiomeFactory::forId(BiomeId::Plains).heightBias() == 0.0f);
+  REQUIRE(BiomeFactory::forId(BiomeId::Desert).topBlock() == voxel::BlockId::SAND);
+  REQUIRE(BiomeFactory::forId(BiomeId::Ocean).heightBias() < -10.0f);
 }
