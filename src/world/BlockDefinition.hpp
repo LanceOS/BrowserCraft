@@ -29,10 +29,11 @@ struct BlockMaterial {
 };
 
 /// Texture indices per face.
+/// Stored as 16-bit to support up to 65536 texture layers.
 struct BlockTextures {
-  uint8_t top = 0;
-  uint8_t bottom = 0;
-  uint8_t side = 0;
+  uint16_t top = 0;
+  uint16_t bottom = 0;
+  uint16_t side = 0;
 };
 
 /// Full block definition registered in the BlockRegistry.

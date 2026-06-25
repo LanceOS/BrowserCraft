@@ -10,7 +10,7 @@ struct GrassSpeciesDefinition {
   uint16_t speciesId = 0;
   std::string name;
   uint16_t blockId = 0;
-  uint8_t textureLayer = 0;
+  uint16_t textureLayer = 0;
   std::vector<SoilType> acceptableSoil;
   std::vector<std::string> biomeAffinity;  /// Biome names where this grass spawns.
   float spawnChance = 0.1f;  /// 0.0 - 1.0 probability per eligible surface block

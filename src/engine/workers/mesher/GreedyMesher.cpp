@@ -313,7 +313,7 @@ bool greedyMesh(
           }
 
           // Texture layer for this face direction
-          uint8_t tlayer;
+          uint16_t tlayer;
           switch (di) {
             case 0: case 1: tlayer = def->textures.side;   break;
             case 2:         tlayer = def->textures.top;    break;

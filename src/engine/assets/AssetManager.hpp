@@ -36,10 +36,13 @@ public:
     const std::unordered_map<uint8_t, BlockDef>& getBlockDefs() const { return m_blockDefs; }
 
     // Get the raw texture data for the GL_TEXTURE_2D_ARRAY
-    // The textures are always loaded as 16x16 RGBA
-    const std::vector<uint8_t>& getTextureData() const;
+    // The textures are always loaded as 16x16 RGBA, 16-bit per channel.
+    const std::vector<uint16_t>& getTextureData() const;
     int getTextureSize() const { return 16; } // Hardcoded 16x16 for now
     int getTextureLayerCount() const;
+
+    /// Returns the number of bytes per pixel (8 for 16-bit RGBA, 4 for 8-bit RGBA).
+    int getBytesPerPixel() const { return 8; }
 
 private:
     AssetManager() = default;
@@ -48,7 +51,7 @@ private:
     std::unordered_map<uint8_t, BlockDef> m_blockDefs;
     BlockDef m_airDef;
 
-    std::vector<uint8_t> m_textureData;
+    std::vector<uint16_t> m_textureData;
     int m_textureLayerCount = 0;
 };
 

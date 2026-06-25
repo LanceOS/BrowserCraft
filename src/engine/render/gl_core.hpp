@@ -176,4 +176,12 @@ void loadGLFunctions();
 #define GL_SHADER_STORAGE_BARRIER_BIT 0x00002000
 #endif
 
+// Texture format constants (GL 3.0+)
+#ifndef GL_RGBA16
+#define GL_RGBA16 0x805B
+#endif
+#ifndef GL_RGBA16F
+#define GL_RGBA16F 0x881A
+#endif
+
 } // namespace voxel::gl
