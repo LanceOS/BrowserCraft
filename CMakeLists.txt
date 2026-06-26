@@ -137,6 +137,8 @@ add_library(voxel_engine STATIC
   src/world/ChunkManager.cpp
   src/world/World.cpp
   src/world/terrain/TerrainBrush.cpp
+  src/world/terrain/TerrainCollision.cpp
+  src/world/terrain/TerrainRaycast.cpp
   src/world/daynight/DayNightCycle.cpp
   src/engine/render/gl_core.cpp
   src/engine/render/ShaderProgram.cpp
@@ -222,6 +224,7 @@ add_executable(voxel_tests
   tests/test_vanilla_block_factory.cpp
   tests/test_flora.cpp
   tests/test_world.cpp
+  tests/test_terrain_physics.cpp
   tests/test_simplex_noise.cpp
   tests/test_biome_sampler.cpp
   tests/test_worldgen.cpp

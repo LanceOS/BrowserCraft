@@ -9,6 +9,7 @@
 #include "world/BlockRegistry.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
 #include "world/mesh/SurfaceNetsMesher.hpp"
+#include "world/terrain/TerrainCollision.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -321,6 +322,50 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     std::memcpy(allocation->iboPtr, g_meshScratch.indices.data(),
                 static_cast<size_t>(ic) * sizeof(uint32_t));
 
+    std::shared_ptr<TerrainChunkCollision> terrainCollision = nullptr;
+    if (ok && (*slot.renderFlags & CHUNK_RENDER_FLAG_TERRAIN) != 0u) {
+      std::vector<TerrainTriangle> triangles;
+      triangles.reserve(ic / 3);
+      float originX = static_cast<float>(chunkX * m_config.chunkSize);
+      float originY = 0.0f;
+      float originZ = static_cast<float>(chunkZ * m_config.chunkSize);
+      size_t stride = static_cast<size_t>(m_config.vertexStrideFloats);
+
+      for (size_t i = 0; i < ic; i += 3) {
+        uint32_t i0 = g_meshScratch.indices[i];
+        uint32_t i1 = g_meshScratch.indices[i + 1];
+        uint32_t i2 = g_meshScratch.indices[i + 2];
+
+        glm::vec3 v0(
+          originX + g_meshScratch.vertices[i0 * stride + 0],
+          originY + g_meshScratch.vertices[i0 * stride + 1],
+          originZ + g_meshScratch.vertices[i0 * stride + 2]
+        );
+        glm::vec3 v1(
+          originX + g_meshScratch.vertices[i1 * stride + 0],
+          originY + g_meshScratch.vertices[i1 * stride + 1],
+          originZ + g_meshScratch.vertices[i1 * stride + 2]
+        );
+        glm::vec3 v2(
+          originX + g_meshScratch.vertices[i2 * stride + 0],
+          originY + g_meshScratch.vertices[i2 * stride + 1],
+          originZ + g_meshScratch.vertices[i2 * stride + 2]
+        );
+
+        glm::vec3 edge1 = v1 - v0;
+        glm::vec3 edge2 = v2 - v0;
+        glm::vec3 normal = glm::cross(edge1, edge2);
+        float len = glm::length(normal);
+        if (len > 1e-6f) {
+          normal /= len;
+          triangles.push_back({v0, v1, v2, normal});
+        }
+      }
+
+      terrainCollision = std::make_shared<TerrainChunkCollision>();
+      terrainCollision->build(std::move(triangles));
+    }
+
     *slot.vertexCount = static_cast<uint32_t>(vc);
     *slot.indexCount = ic;
     *slot.opaqueIndexCount = opaqueIc;
@@ -331,7 +376,7 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     }
     if (transparentIc > 0u) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
     if (opaqueIc > 0u) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
-    m_controller.onMeshCompleted(slotIndex, true);
+    m_controller.onMeshCompleted(slotIndex, true, std::move(terrainCollision));
   });
 }
 
