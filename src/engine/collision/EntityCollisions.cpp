@@ -214,12 +214,33 @@ void EntityCollisions::resolveMovement(
     return {solidCols, totalCols};
   };
 
+  const auto highestGroundInFootprint =
+      [&](const glm::vec3& probePos, int32_t startY) -> int32_t {
+    int32_t minGX = static_cast<int32_t>(std::floor(probePos.x + body.aabbMin.x));
+    int32_t maxGX = static_cast<int32_t>(std::floor(probePos.x + body.aabbMax.x));
+    int32_t minGZ = static_cast<int32_t>(std::floor(probePos.z + body.aabbMin.z));
+    int32_t maxGZ = static_cast<int32_t>(std::floor(probePos.z + body.aabbMax.z));
+    int32_t highest = -1;
+    for (int32_t gz = minGZ; gz <= maxGZ; ++gz) {
+      for (int32_t gx = minGX; gx <= maxGX; ++gx) {
+        int32_t groundY = getGroundHeightCached(
+            static_cast<float>(gx) + 0.5f,
+            static_cast<float>(gz) + 0.5f,
+            startY);
+        if (groundY > highest) highest = groundY;
+      }
+    }
+    return highest;
+  };
+
   for (int32_t s = 0; s < steps; ++s) {
     float subDx = dx * invSteps;
     float subDy = dy * invSteps;
     float subDz = dz * invSteps;
 
     glm::vec3 stepPos = transform.position;
+    bool hasPartialSupportClearance = false;
+    float partialSupportClearanceY = 0.0f;
 
     // ----- Y axis (gravity + landing) -----------------------------------
     glm::vec3 yStep = stepPos + glm::vec3(0.0f, subDy, 0.0f);
@@ -255,10 +276,17 @@ void EntityCollisions::resolveMovement(
         }
       }  // groundY >= 0
 
-      // Side-collision fallback (ground far below or no ground at all):
-      // Treat partial edge support as a fall so the player does not hover
-      // over ledges or old spawn-height plateaus while moving downhill.
       if (!fullySupported) {
+        // Remember the ledge top so X/Z can move off it even while falling
+        // below that height; otherwise the old ledge becomes a side wall.
+        int32_t supportTopY = highestGroundInFootprint(
+            supportProbePos,
+            std::max(0, static_cast<int32_t>(
+                std::floor(stepPos.y + body.aabbMin.y))));
+        if (supportTopY >= 0) {
+          hasPartialSupportClearance = true;
+          partialSupportClearanceY = static_cast<float>(supportTopY + 1);
+        }
         stepPos = yStep;
         body.onGround = 0;
       } else if (groundY < 0 ||
@@ -278,15 +306,26 @@ void EntityCollisions::resolveMovement(
     if (!collidesAt(xStep, body)) {
       stepPos.x = xStep.x;
     } else {
-      if (body.onGround && subDx != 0.0f) {
-        glm::vec3 raised = stepPos + glm::vec3(subDx, kStepHeight, 0.0f);
-        if (!collidesAt(raised, body)) {
-          stepPos = raised;
+      bool movedAcrossPartialSupport = false;
+      if (hasPartialSupportClearance && subDy < 0.0f) {
+        glm::vec3 clearanceStep = xStep;
+        clearanceStep.y = partialSupportClearanceY;
+        if (!collidesAt(clearanceStep, body)) {
+          stepPos.x = xStep.x;
+          movedAcrossPartialSupport = true;
+        }
+      }
+      if (!movedAcrossPartialSupport) {
+        if (body.onGround && subDx != 0.0f) {
+          glm::vec3 raised = stepPos + glm::vec3(subDx, kStepHeight, 0.0f);
+          if (!collidesAt(raised, body)) {
+            stepPos = raised;
+          } else {
+            body.velocity.x = 0.0f;
+          }
         } else {
           body.velocity.x = 0.0f;
         }
-      } else {
-        body.velocity.x = 0.0f;
       }
     }
 
@@ -295,15 +334,26 @@ void EntityCollisions::resolveMovement(
     if (!collidesAt(zStep, body)) {
       stepPos.z = zStep.z;
     } else {
-      if (body.onGround && subDz != 0.0f) {
-        glm::vec3 raised = stepPos + glm::vec3(0.0f, kStepHeight, subDz);
-        if (!collidesAt(raised, body)) {
-          stepPos = raised;
+      bool movedAcrossPartialSupport = false;
+      if (hasPartialSupportClearance && subDy < 0.0f) {
+        glm::vec3 clearanceStep = zStep;
+        clearanceStep.y = partialSupportClearanceY;
+        if (!collidesAt(clearanceStep, body)) {
+          stepPos.z = zStep.z;
+          movedAcrossPartialSupport = true;
+        }
+      }
+      if (!movedAcrossPartialSupport) {
+        if (body.onGround && subDz != 0.0f) {
+          glm::vec3 raised = stepPos + glm::vec3(0.0f, kStepHeight, subDz);
+          if (!collidesAt(raised, body)) {
+            stepPos = raised;
+          } else {
+            body.velocity.z = 0.0f;
+          }
         } else {
           body.velocity.z = 0.0f;
         }
-      } else {
-        body.velocity.z = 0.0f;
       }
     }
 
