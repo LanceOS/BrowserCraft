@@ -50,6 +50,9 @@ public:
   /// to the I/O thread pool so the main thread is not blocked.
   void markDirty(int32_t chunkX, int32_t chunkZ) override;
 
+  /// Record a manual terrain edit to the persistence layer.
+  void recordTerrainEdit(const TerrainBrush& brush) override;
+
   /// Flush all pending saves to disk synchronously (call on quit).
   void flushPending();
 

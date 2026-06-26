@@ -5,6 +5,7 @@
 #include "ChunkJobQueue.hpp"
 #include "IChunkWorker.hpp"
 #include "IChunkPersistence.hpp"
+#include "terrain/TerrainEditHistory.hpp"
 #include "BlockRegistry.hpp"
 #include "RemeshScheduler.hpp"
 #include "VoxelStore.hpp"
@@ -75,6 +76,11 @@ public:
 
   /// Attach a persistence backend for loading/saving chunks.
   void attachPersistence(IChunkPersistence* persistence) { m_persistence = persistence; }
+  [[nodiscard]] auto persistence() -> IChunkPersistence* { return m_persistence; }
+  [[nodiscard]] auto persistence() const -> const IChunkPersistence* { return m_persistence; }
+
+  [[nodiscard]] auto editHistory() -> TerrainEditHistory& { return m_editHistory; }
+  [[nodiscard]] auto editHistory() const -> const TerrainEditHistory& { return m_editHistory; }
 
   /// Get chunk by coordinates.
   [[nodiscard]] auto getChunk(int32_t cx, int32_t cz) const -> const Chunk*;
@@ -159,6 +165,7 @@ private:
   ChunkJobQueue m_jobQueue;
 
   IChunkPersistence* m_persistence = nullptr;
+  TerrainEditHistory m_editHistory;
   std::vector<int32_t> m_pendingUploadSlots;
   // Boundary edits collected during a frame — flushed at end of update()
   RemeshScheduler m_remeshScheduler;

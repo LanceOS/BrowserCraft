@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <vector>
+#include <ctime>
 
 namespace voxel {
 
@@ -207,6 +208,13 @@ void TerrainEditAPI::applyBrush(World& world, const WorldGenPipeline& pipeline, 
   for (auto* chunk : affectedChunks) {
     world.markChunkDirty(chunk->chunkX, chunk->chunkZ);
     world.requestRemesh(*chunk);
+  }
+
+  // Record the edit in the persistence backend, or directly in the history if no persistence is attached.
+  if (auto* persistence = world.persistence()) {
+    persistence->recordTerrainEdit(brush);
+  } else {
+    world.editHistory().addEdit(brush, static_cast<uint64_t>(std::time(nullptr)));
   }
 }
 

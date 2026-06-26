@@ -10,6 +10,7 @@
 #include "world/generation/WorldGenPipeline.hpp"
 #include "world/mesh/SurfaceNetsMesher.hpp"
 #include "world/terrain/TerrainCollision.hpp"
+#include "world/ChunkCoords.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -116,6 +117,146 @@ auto slotDensitySample(void* userData, float worldX, float worldY, float worldZ)
   return ctx->densityBuffer[idx];
 }
 
+/// Check if a sphere intersects a chunk's sample lattice bounding box (which includes the boundary halo).
+auto intersectsChunk(int32_t chunkX, int32_t chunkZ, int32_t sizeX, int32_t sizeY, int32_t sizeZ,
+                     const glm::vec3& center, float radius) -> bool {
+  const float xMin = static_cast<float>(chunkX * sizeX - 1);
+  const float xMax = static_cast<float>(chunkX * sizeX + sizeX);
+  const float yMin = 0.0f;
+  const float yMax = static_cast<float>(sizeY);
+  const float zMin = static_cast<float>(chunkZ * sizeZ - 1);
+  const float zMax = static_cast<float>(chunkZ * sizeZ + sizeZ);
+
+  const float closestX = std::max(xMin, std::min(center.x, xMax));
+  const float closestY = std::max(yMin, std::min(center.y, yMax));
+  const float closestZ = std::max(zMin, std::min(center.z, zMax));
+
+  const float dx = center.x - closestX;
+  const float dy = center.y - closestY;
+  const float dz = center.z - closestZ;
+  return (dx * dx + dy * dy + dz * dz) <= (radius * radius);
+}
+
+/// Helper to get density at any integer world coordinates, falling back to pipeline if outside the local chunk.
+auto getDensityAtReplay(int32_t wx, int32_t wy, int32_t wz,
+                        int32_t chunkX, int32_t chunkZ,
+                        const float* densityBuffer,
+                        const WorldGenPipeline& pipeline,
+                        int32_t chunkSize, int32_t worldHeight) -> float {
+  if (wy < 0 || wy > worldHeight) {
+    return wy < 0 ? -1.0f : 1.0f;
+  }
+
+  const int32_t cx = floorToChunk(wx, chunkSize);
+  const int32_t cz = floorToChunk(wz, chunkSize);
+
+  if (cx == chunkX && cz == chunkZ) {
+    int32_t localX = wx - cx * chunkSize + 1;
+    int32_t localZ = wz - cz * chunkSize + 1;
+    const int32_t sampleXCount = chunkSize + 2;
+    const int32_t sampleZCount = chunkSize + 2;
+    localX = std::clamp(localX, 0, sampleXCount - 1);
+    localZ = std::clamp(localZ, 0, sampleZCount - 1);
+    const size_t idx = (static_cast<size_t>(wy) * sampleZCount + localZ) * sampleXCount + localX;
+    return densityBuffer[idx];
+  }
+
+  return pipeline.sampleDensity(static_cast<float>(wx), static_cast<float>(wy), static_cast<float>(wz));
+}
+
+/// Replay a single terrain brush edit on a chunk slot's density buffer.
+void replayBrushEdit(int32_t chunkX, int32_t chunkZ, ChunkSlot& slot,
+                     const WorldGenPipeline& pipeline, const TerrainBrush& brush,
+                     int32_t chunkSize, int32_t worldHeight) {
+  if (!intersectsChunk(chunkX, chunkZ, chunkSize, worldHeight, chunkSize, brush.center, brush.radius)) {
+    return;
+  }
+
+  const int32_t sx = chunkSize;
+  const int32_t sy = worldHeight;
+  const int32_t sz = chunkSize;
+  const int32_t sampleXCount = sx + 2;
+  const int32_t sampleZCount = sz + 2;
+
+  struct DensityWrite {
+    size_t index;
+    float value;
+  };
+  std::vector<DensityWrite> smoothWrites;
+
+  for (int32_t y = 0; y <= sy; ++y) {
+    const float worldY = static_cast<float>(y);
+    for (int32_t z = -1; z <= sz; ++z) {
+      const float worldZ = static_cast<float>(chunkZ * sz + z);
+      for (int32_t x = -1; x <= sx; ++x) {
+        const float worldX = static_cast<float>(chunkX * sx + x);
+
+        const float dx = worldX - brush.center.x;
+        const float dy = worldY - brush.center.y;
+        const float dz = worldZ - brush.center.z;
+        const float distSq = dx * dx + dy * dy + dz * dz;
+
+        if (distSq <= brush.radius * brush.radius) {
+          const float dist = std::sqrt(distSq);
+          const size_t idx = (static_cast<size_t>(y) * sampleZCount + (z + 1)) * sampleXCount + (x + 1);
+
+          if (brush.type == BrushType::SubtractSphere) {
+            const float falloff = 1.0f - (dist / brush.radius);
+            const float delta = falloff * brush.strength;
+            slot.density[idx] += delta;
+            slot.density[idx] = std::clamp(slot.density[idx], -500.0f, 500.0f);
+          } else if (brush.type == BrushType::AddSphere) {
+            const float falloff = 1.0f - (dist / brush.radius);
+            const float delta = falloff * brush.strength;
+            slot.density[idx] -= delta;
+            slot.density[idx] = std::clamp(slot.density[idx], -500.0f, 500.0f);
+          } else if (brush.type == BrushType::Flatten) {
+            const float target = glm::dot(glm::vec3(worldX, worldY, worldZ) - brush.center, brush.planeNormal);
+            const float falloff = 1.0f - (dist / brush.radius);
+            const float blend = std::clamp(falloff * brush.strength, 0.0f, 1.0f);
+            slot.density[idx] = (1.0f - blend) * slot.density[idx] + blend * target;
+            slot.density[idx] = std::clamp(slot.density[idx], -500.0f, 500.0f);
+          } else if (brush.type == BrushType::Smooth) {
+            const int32_t wx = static_cast<int32_t>(std::round(worldX));
+            const int32_t wy = y;
+            const int32_t wz = static_cast<int32_t>(std::round(worldZ));
+
+            const float self = slot.density[idx];
+            float sum = 0.0f;
+            sum += getDensityAtReplay(wx - 1, wy, wz, chunkX, chunkZ, slot.density, pipeline, sx, sy);
+            sum += getDensityAtReplay(wx + 1, wy, wz, chunkX, chunkZ, slot.density, pipeline, sx, sy);
+            sum += getDensityAtReplay(wx, wy - 1, wz, chunkX, chunkZ, slot.density, pipeline, sx, sy);
+            sum += getDensityAtReplay(wx, wy + 1, wz, chunkX, chunkZ, slot.density, pipeline, sx, sy);
+            sum += getDensityAtReplay(wx, wy, wz - 1, chunkX, chunkZ, slot.density, pipeline, sx, sy);
+            sum += getDensityAtReplay(wx, wy, wz + 1, chunkX, chunkZ, slot.density, pipeline, sx, sy);
+            const float avg = sum / 6.0f;
+
+            const float falloff = 1.0f - (dist / brush.radius);
+            const float blend = std::clamp(falloff * brush.strength, 0.0f, 1.0f);
+            const float newValue = (1.0f - blend) * self + blend * avg;
+            smoothWrites.push_back({idx, std::clamp(newValue, -500.0f, 500.0f)});
+          }
+        }
+      }
+    }
+  }
+
+  if (brush.type == BrushType::Smooth) {
+    for (const auto& write : smoothWrites) {
+      slot.density[write.index] = write.value;
+    }
+  }
+}
+
+/// Replay all terrain edits from history on a chunk slot's density buffer.
+void replayAllTerrainEdits(int32_t chunkX, int32_t chunkZ, ChunkSlot& slot,
+                           const WorldGenPipeline& pipeline, const std::vector<TerrainEdit>& edits,
+                           int32_t chunkSize, int32_t worldHeight) {
+  for (const auto& edit : edits) {
+    replayBrushEdit(chunkX, chunkZ, slot, pipeline, edit.brush, chunkSize, worldHeight);
+  }
+}
+
 } // namespace
 
 ChunkWorkerImpl::ChunkWorkerImpl(WorkerThreadPool& genPool, WorkerThreadPool& meshPool,
@@ -155,6 +296,10 @@ void ChunkWorkerImpl::generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ
       }
     }
     *slot.densityInitialized = 1;
+
+    // Replay all manual terrain edits on the generated density field
+    const auto edits = m_controller.world().editHistory().getEdits();
+    replayAllTerrainEdits(chunkX, chunkZ, slot, m_pipeline, edits, sx, sy);
 
     *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
     m_controller.onGenCompleted(slotIndex);
@@ -239,6 +384,10 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
         }
       }
       *slot.densityInitialized = 1;
+
+      // Replay all manual terrain edits on the generated density field
+      const auto edits = m_controller.world().editHistory().getEdits();
+      replayAllTerrainEdits(chunkX, chunkZ, slot, m_pipeline, edits, sx, sy);
     }
 
     DensitySlotContext dctx{};

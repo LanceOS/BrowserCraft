@@ -157,6 +157,7 @@ add_library(voxel_engine STATIC
   src/engine/audio/AudioEngine.cpp
   src/engine/threading/WorkerThreadPool.cpp
   src/engine/save/SaveManager.cpp
+  src/engine/save/TerrainSaveData.cpp
   src/engine/save/WorldNamingService.cpp
   src/engine/save/WorldListService.cpp
   src/engine/save/SettingsRepository.cpp

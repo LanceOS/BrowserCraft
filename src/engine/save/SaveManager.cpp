@@ -1,4 +1,5 @@
 #include "SaveManager.hpp"
+#include "TerrainSaveData.hpp"
 #include "../alloc/SharedPool.hpp"
 #include "../../world/Chunk.hpp"
 #include "../../world/World.hpp"
@@ -6,6 +7,7 @@
 #include <fstream>
 #include <filesystem>
 #include <cstring>
+#include <ctime>
 
 namespace voxel {
 
@@ -26,6 +28,10 @@ SaveManager::SaveManager(const std::string& saveDir, const std::string& slotId,
     m_metadata = WorldMetadata::create(m_slotId, m_slotId, 0, 0);
     m_metadata.write(metaPath);
   }
+
+  // Load terrain edits history
+  std::string editsPath = m_saveDir + "/" + m_slotId + "/terrain.edits";
+  TerrainSaveData::load(editsPath, m_world.editHistory());
 }
 
 SaveManager::~SaveManager() { flushPending(); }
@@ -178,6 +184,24 @@ void SaveManager::processPending() {
       m_world.onSaveLoadFailed(load.chunkX, load.chunkZ);
     }
     ready.pop();
+  }
+}
+
+void SaveManager::recordTerrainEdit(const TerrainBrush& brush) {
+  uint64_t timestamp = static_cast<uint64_t>(std::time(nullptr));
+  TerrainEdit edit{brush, timestamp};
+
+  // 1. Add to the world's edit history so any future chunk generations see it immediately
+  m_world.editHistory().addEdit(edit);
+
+  // 2. Append to the save file
+  std::string filePath = m_saveDir + "/" + m_slotId + "/terrain.edits";
+  if (m_ioPool) {
+    m_ioPool->submitAndForget([filePath, edit]() {
+      TerrainSaveData::append(filePath, edit);
+    });
+  } else {
+    TerrainSaveData::append(filePath, edit);
   }
 }
 
