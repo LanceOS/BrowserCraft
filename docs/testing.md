@@ -4,22 +4,22 @@ The C++ port uses [Catch2 v3](https://github.com/catchorg/Catch2) for unit testi
 
 Relevant files:
 
-- [`cpp-voxel/CMakeLists.txt`](../cpp-voxel/CMakeLists.txt) — test targets
-- [`cpp-voxel/tests/`](../cpp-voxel/tests/) — test source files
+- [`cpp-terrain/CMakeLists.txt`](../cpp-terrain/CMakeLists.txt) — test targets
+- [`cpp-terrain/tests/`](../cpp-terrain/tests/) — test source files
 
 ## How Tests Run
 
 ```bash
-cd cpp-voxel
+cd cpp-terrain
 cmake -B build -S .
 cmake --build build
-./build/voxel_tests
+./build/terrain_tests
 ```
 
 Or use the CMake test runner:
 
 ```bash
-cd cpp-voxel/build
+cd cpp-terrain/build
 ctest
 ```
 
@@ -56,9 +56,9 @@ Covers chunk file I/O and path generation.
 ## Adding a New Test
 
 1. Create `tests/test_your_feature.cpp`
-2. Add the file to the `voxel_tests` target in `CMakeLists.txt`
+2. Add the file to the `terrain_tests` target in `CMakeLists.txt`
 3. Build and run:
 
 ```bash
-cmake --build build && ./build/voxel_tests
+cmake --build build && ./build/terrain_tests
 ```

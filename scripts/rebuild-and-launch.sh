@@ -3,10 +3,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${VOXEL_BUILD_DIR:-$ROOT_DIR/build}"
-CONFIG="${VOXEL_BUILD_TYPE:-Release}"
-TARGET="${VOXEL_TARGET:-voxel_app}"
-EXTRA_CMAKE_ARGS="${VOXEL_CMAKE_ARGS:-}"
+BUILD_DIR="${TERRAIN_BUILD_DIR:-$ROOT_DIR/build}"
+CONFIG="${TERRAIN_BUILD_TYPE:-Release}"
+TARGET="${TERRAIN_TARGET:-terrain_app}"
+EXTRA_CMAKE_ARGS="${TERRAIN_CMAKE_ARGS:-}"
 CLEAN_BUILD=false
 
 show_help() {
@@ -17,7 +17,7 @@ Usage: ./scripts/rebuild-and-launch.sh [--clean] [--debug|--release] [--build-di
   --release     Configure for Release (default)
   --unity       Enable unity/jumbo builds (faster full rebuilds)
   --build-dir   Override build directory (defaults to ./build)
-  --target      Override executable target name (defaults to voxel_app)
+  --target      Override executable target name (defaults to terrain_app)
 EOF
 }
 

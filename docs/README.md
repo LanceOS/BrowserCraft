@@ -1,10 +1,10 @@
 # Docs Index
 
 > **Note:** The engine has been converted from TypeScript to C++.
-> The C++ source lives in [`../cpp-voxel/src/`](../cpp-voxel/src/).
+> The C++ source lives in [`../cpp-terrain/src/`](../cpp-terrain/src/).
 > Some of the documentation below was originally derived from the TypeScript
 > version for design concepts, while the C++ headers and source files in
-> `cpp-voxel/src/` are authoritative for the current implementation.
+> `cpp-terrain/src/` are authoritative for the current implementation.
 
 This directory now contains two kinds of documentation:
 
@@ -15,7 +15,7 @@ If you are trying to understand or extend the repo, start with the current imple
 
 ## Start Here
 
-- [`../cpp-voxel/README.md`](../cpp-voxel/README.md): C++ project overview, build instructions, and architecture
+- [`../cpp-terrain/README.md`](../cpp-terrain/README.md): C++ project overview, build instructions, and architecture
 - [`chunk-and-worker-lifecycle.md`](chunk-and-worker-lifecycle.md): chunk state flow across `World`, `SharedPool`, workers, save/load, and renderer upload
 - [`rendering-pipeline.md`](rendering-pipeline.md): camera/time UBOs, texture array setup, chunk upload, sky pass, and frustum culling
 - [`input-ui-inventory-flow.md`](input-ui-inventory-flow.md): controls, pointer lock, menu state, inventory, crafting, and HUD behavior
@@ -37,7 +37,7 @@ These docs are intended to stay in sync with the source:
 These docs describe systems that are not fully implemented yet, but are meant
 to be grounded in the current C++ codebase:
 
-- [`smooth-terrain-proposal.md`](smooth-terrain-proposal.md): hybrid smooth-terrain plan using a density field for natural terrain while preserving the existing voxel block layer for gameplay; a Surface Nets prototype is already wired into `src/game/ChunkWorkerImpl.cpp` behind `GameConfig::useSurfaceNets`
+- [`smooth-terrain-proposal.md`](smooth-terrain-proposal.md): hybrid smooth-terrain plan using a density field for natural terrain while preserving the existing terrain block layer for gameplay; a Surface Nets prototype is already wired into `src/game/ChunkWorkerImpl.cpp` behind `GameConfig::useSurfaceNets`
 
 ## Older Subsystem Design Docs
 

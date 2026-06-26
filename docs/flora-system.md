@@ -1,4 +1,4 @@
-# Voxel Engine Technical Design Document: Flora System
+# Terrain engine Technical Design Document: Flora System
 
 **Version:** 1.0  
 **Scope:** Flora classification, abstract factories, worldgen spawning, player farming, growth mechanics, and rendering strategies for all plant life.  
@@ -84,8 +84,8 @@ export const enum GrowthStage {
 
 /** Base properties shared by all flora. */
 export interface FloraProperties {
-  /** Numeric block ID in the BlockRegistry. */
-  readonly blockId: number;
+  /** Numeric block ID in the MaterialRegistry. */
+  readonly materialId: number;
   /** Human-readable name. */
   readonly name: string;
   /** Render strategy. */
@@ -115,7 +115,7 @@ export interface FloraProperties {
 // /src/content/flora/FloraFactory.ts
 
 import type { FloraProperties } from "./FloraTypes.js";
-import type { BlockRegistry } from "../../world/BlockRegistry.js";
+import type { MaterialRegistry } from "../../world/MaterialRegistry.js";
 
 /**
  * Abstract factory for a class of flora.
@@ -124,8 +124,8 @@ import type { BlockRegistry } from "../../world/BlockRegistry.js";
  * gameplay systems.
  */
 export interface FloraCategoryFactory {
-  /** Register all blocks in this category with the BlockRegistry. */
-  registerBlocks(registry: BlockRegistry): void;
+  /** Register all blocks in this category with the MaterialRegistry. */
+  registerBlocks(registry: MaterialRegistry): void;
 
   /** Return the FloraProperties for a given species ID within this category. */
   getProperties(speciesId: number): FloraProperties;
@@ -149,7 +149,7 @@ Trees are spawned as multi-block structures via the existing `StructureBlueprint
 
 import type { FloraCategoryFactory, FloraProperties } from "./FloraTypes.js";
 import { FloraRenderType, SoilType, GrowthStage } from "./FloraTypes.js";
-import { BlockRegistry } from "../../world/BlockRegistry.js";
+import { MaterialRegistry } from "../../world/MaterialRegistry.js";
 import { StructureFactory } from "../structures/StructureRegistry.js";
 
 export interface TreeSpeciesDefinition {
@@ -189,7 +189,7 @@ export class TreeFactory implements FloraCategoryFactory {
     }
   }
 
-  registerBlocks(registry: BlockRegistry): void {
+  registerBlocks(registry: MaterialRegistry): void {
     // Trees themselves don't register new blocks — trunk and leaves blocks
     // are already registered in VanillaBlockFactory. Saplings are registered
     // as cross-quad flora (see SaplingFactory or inline here).
@@ -202,7 +202,7 @@ export class TreeFactory implements FloraCategoryFactory {
     if (!def) throw new Error(`Unknown tree species ${speciesId}`);
     // Return sapling properties — the tree itself is not a single block.
     return {
-      blockId: def.saplingBlockId,
+      materialId: def.saplingBlockId,
       name: `${def.name} Sapling`,
       renderType: FloraRenderType.CROSS_QUAD,
       textureLayers: [def.saplingBlockId], // maps to sapling texture layer
@@ -251,7 +251,7 @@ import { FloraRenderType, SoilType, GrowthStage } from "./FloraTypes.js";
 export interface CropSpeciesDefinition {
   readonly speciesId: number;
   readonly name: string;
-  readonly blockId: number;
+  readonly materialId: number;
   readonly seedItemId: number;
   readonly harvestItemId: number;
   readonly seedCount: [number, number]; // seeds dropped on harvest
@@ -284,7 +284,7 @@ export class CropFactory implements FloraCategoryFactory {
     }
   }
 
-  registerBlocks(registry: BlockRegistry): void {
+  registerBlocks(registry: MaterialRegistry): void {
     for (const def of this.cropList) {
       // Each growth stage is registered as a separate block variant or
       // we use a single block ID with metadata-driven texture selection.
@@ -296,7 +296,7 @@ export class CropFactory implements FloraCategoryFactory {
       // 5 block IDs per crop (one per stage). Stage 0-3 are immature,
       // stage 4 is mature.
       for (let stage = 0; stage < 5; stage++) {
-        const stageBlockId = def.blockId + stage;
+        const stageBlockId = def.materialId + stage;
         if (registry.tryGet(stageBlockId)) continue;
         registry.register({
           id: stageBlockId,
@@ -323,7 +323,7 @@ export class CropFactory implements FloraCategoryFactory {
     const def = this.crops.get(speciesId);
     if (!def) throw new Error(`Unknown crop species ${speciesId}`);
     return {
-      blockId: def.blockId,
+      materialId: def.materialId,
       name: def.name,
       renderType: FloraRenderType.CROSS_QUAD,
       textureLayers: def.stageTextures,
@@ -344,7 +344,7 @@ export class CropFactory implements FloraCategoryFactory {
   getGrowthStageBlockId(speciesId: number, stage: GrowthStage): number {
     const def = this.crops.get(speciesId);
     if (!def) throw new Error(`Unknown crop species ${speciesId}`);
-    return def.blockId + stage;
+    return def.materialId + stage;
   }
 }
 ```
@@ -362,7 +362,7 @@ import { FloraRenderType, SoilType } from "./FloraTypes.js";
 export interface FlowerSpeciesDefinition {
   readonly speciesId: number;
   readonly name: string;
-  readonly blockId: number;
+  readonly materialId: number;
   readonly textureLayer: number;
   readonly acceptableSoil: readonly SoilType[];
   readonly biomeAffinity: readonly string[];
@@ -383,10 +383,10 @@ export class FlowerFactory implements FloraCategoryFactory {
     }
   }
 
-  registerBlocks(registry: BlockRegistry): void {
+  registerBlocks(registry: MaterialRegistry): void {
     for (const def of this.flowerList) {
       registry.register({
-        id: def.blockId,
+        id: def.materialId,
         name: def.name,
         textures: {
           top: def.textureLayer,
@@ -409,7 +409,7 @@ export class FlowerFactory implements FloraCategoryFactory {
     const def = this.flowers.get(speciesId);
     if (!def) throw new Error(`Unknown flower species ${speciesId}`);
     return {
-      blockId: def.blockId,
+      materialId: def.materialId,
       name: def.name,
       renderType: def.isTall ? FloraRenderType.TALL_CROSS_QUAD : FloraRenderType.CROSS_QUAD,
       textureLayers: [def.textureLayer],
@@ -417,7 +417,7 @@ export class FlowerFactory implements FloraCategoryFactory {
       lightRequirements: { minSkyLight: 8, minBlockLight: 0, maxSkyLight: 15 },
       collision: { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 },
       dropsSelf: true,
-      dropItemId: def.blockId,
+      dropItemId: def.materialId,
       dropCount: [1, 1],
       boneMealable: false,
     };
@@ -442,7 +442,7 @@ import type { FloraCategoryFactory, FloraProperties } from "./FloraTypes.js";
 export interface GrassSpeciesDefinition {
   readonly speciesId: number;
   readonly name: string;
-  readonly blockId: number;
+  readonly materialId: number;
   readonly textureLayer: number;
   readonly acceptableSoil: readonly SoilType[];
   readonly biomeAffinity: readonly string[];
@@ -465,10 +465,10 @@ export class GrassFactory implements FloraCategoryFactory {
     }
   }
 
-  registerBlocks(registry: BlockRegistry): void {
+  registerBlocks(registry: MaterialRegistry): void {
     for (const def of this.grassList) {
       registry.register({
-        id: def.blockId,
+        id: def.materialId,
         name: def.name,
         textures: {
           top: def.textureLayer,
@@ -491,7 +491,7 @@ export class GrassFactory implements FloraCategoryFactory {
     const def = this.grasses.get(speciesId);
     if (!def) throw new Error(`Unknown grass species ${speciesId}`);
     return {
-      blockId: def.blockId,
+      materialId: def.materialId,
       name: def.name,
       renderType: def.isTall ? FloraRenderType.TALL_CROSS_QUAD : FloraRenderType.CROSS_QUAD,
       textureLayers: [def.textureLayer],
@@ -499,7 +499,7 @@ export class GrassFactory implements FloraCategoryFactory {
       lightRequirements: { minSkyLight: 8, minBlockLight: 0, maxSkyLight: 15 },
       collision: { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 },
       dropsSelf: true,
-      dropItemId: def.blockId,
+      dropItemId: def.materialId,
       dropCount: [1, 1],
       boneMealable: false,
     };
@@ -531,7 +531,7 @@ The `FloraRegistry` aggregates all category factories and provides a unified loo
 // /src/content/flora/FloraRegistry.ts
 
 import type { FloraCategoryFactory, FloraProperties } from "./FloraTypes.js";
-import type { BlockRegistry } from "../../world/BlockRegistry.js";
+import type { MaterialRegistry } from "../../world/MaterialRegistry.js";
 
 export class FloraRegistry {
   private readonly categories = new Map<string, FloraCategoryFactory>();
@@ -540,7 +540,7 @@ export class FloraRegistry {
   registerCategory(factory: FloraCategoryFactory): void {
     this.categories.set(factory.categoryName, factory);
     for (const props of factory.getAllProperties()) {
-      this.byBlockId.set(props.blockId, props);
+      this.byBlockId.set(props.materialId, props);
     }
   }
 
@@ -548,15 +548,15 @@ export class FloraRegistry {
     return this.categories.get(name);
   }
 
-  getProperties(blockId: number): FloraProperties | undefined {
-    return this.byBlockId.get(blockId);
+  getProperties(materialId: number): FloraProperties | undefined {
+    return this.byBlockId.get(materialId);
   }
 
-  isFlora(blockId: number): boolean {
-    return this.byBlockId.has(blockId);
+  isFlora(materialId: number): boolean {
+    return this.byBlockId.has(materialId);
   }
 
-  registerAllBlocks(registry: BlockRegistry): void {
+  registerAllBlocks(registry: MaterialRegistry): void {
     for (const factory of this.categories.values()) {
       factory.registerBlocks(registry);
     }
@@ -632,7 +632,7 @@ export const createDefaultFloraRegistry = (): FloraRegistry => {
     {
       speciesId: 0,
       name: "Wheat",
-      blockId: 110, // base block ID, stages use 110-114
+      materialId: 110, // base block ID, stages use 110-114
       seedItemId: 115, // wheat seeds
       harvestItemId: 116, // wheat
       seedCount: [1, 3],
@@ -644,7 +644,7 @@ export const createDefaultFloraRegistry = (): FloraRegistry => {
     {
       speciesId: 1,
       name: "Potato",
-      blockId: 120,
+      materialId: 120,
       seedItemId: 121, // potato
       harvestItemId: 121, // potato
       seedCount: [1, 1],
@@ -656,7 +656,7 @@ export const createDefaultFloraRegistry = (): FloraRegistry => {
     {
       speciesId: 2,
       name: "Carrot",
-      blockId: 130,
+      materialId: 130,
       seedItemId: 131, // carrot
       harvestItemId: 131, // carrot
       seedCount: [1, 1],
@@ -670,17 +670,17 @@ export const createDefaultFloraRegistry = (): FloraRegistry => {
   // --- Flowers ---
   registry.registerCategory(new FlowerFactory([
     {
-      speciesId: 0, name: "Dandelion", blockId: 140, textureLayer: 220,
+      speciesId: 0, name: "Dandelion", materialId: 140, textureLayer: 220,
       acceptableSoil: [SoilType.GRASS], biomeAffinity: ["plains", "forest"],
       spawnChance: 0.02, isTall: false,
     },
     {
-      speciesId: 1, name: "Rose", blockId: 141, textureLayer: 221,
+      speciesId: 1, name: "Rose", materialId: 141, textureLayer: 221,
       acceptableSoil: [SoilType.GRASS], biomeAffinity: ["forest"],
       spawnChance: 0.01, isTall: false,
     },
     {
-      speciesId: 2, name: "Rose Bush", blockId: 142, textureLayer: 222,
+      speciesId: 2, name: "Rose Bush", materialId: 142, textureLayer: 222,
       acceptableSoil: [SoilType.GRASS], biomeAffinity: ["forest"],
       spawnChance: 0.005, isTall: true,
     },
@@ -689,17 +689,17 @@ export const createDefaultFloraRegistry = (): FloraRegistry => {
   // --- Grass ---
   registry.registerCategory(new GrassFactory([
     {
-      speciesId: 0, name: "Tall Grass", blockId: 150, textureLayer: 230,
+      speciesId: 0, name: "Tall Grass", materialId: 150, textureLayer: 230,
       acceptableSoil: [SoilType.GRASS], biomeAffinity: ["plains", "forest"],
       spawnChance: 0.1, isTall: false, dropsSeeds: true, seedItemId: 115,
     },
     {
-      speciesId: 1, name: "Fern", blockId: 151, textureLayer: 231,
+      speciesId: 1, name: "Fern", materialId: 151, textureLayer: 231,
       acceptableSoil: [SoilType.GRASS], biomeAffinity: ["forest", "swamp"],
       spawnChance: 0.05, isTall: false, dropsSeeds: false, seedItemId: 0,
     },
     {
-      speciesId: 2, name: "Double Tallgrass", blockId: 152, textureLayer: 232,
+      speciesId: 2, name: "Double Tallgrass", materialId: 152, textureLayer: 232,
       acceptableSoil: [SoilType.GRASS], biomeAffinity: ["plains"],
       spawnChance: 0.03, isTall: true, dropsSeeds: true, seedItemId: 115,
     },
@@ -739,7 +739,7 @@ export class FloraDecorator {
   ) {}
 
   decorate(
-    voxels: Uint8Array,
+    density data: Uint8Array,
     light: Uint8Array,
     dims: { sizeX: number; sizeY: number; sizeZ: number },
     chunkX: number,
@@ -759,16 +759,16 @@ export class FloraDecorator {
 
         for (let y = sizeY - 1; y >= 0; y--) {
           const index = (y * sizeZ + z) * sizeX + x;
-          const blockId = voxels[index];
+          const materialId = density data[index];
 
-          if (blockId === 0) continue;
+          if (materialId === 0) continue;
 
           // The block above must be air for surface flora to spawn
           const aboveIndex = ((y + 1) * sizeZ + z) * sizeX + x;
-          if (y + 1 >= sizeY || voxels[aboveIndex] !== 0) break;
+          if (y + 1 >= sizeY || density data[aboveIndex] !== 0) break;
 
           // Sample biome-specific flora rules
-          this.tryPlaceFlora(voxels, dims, x, y, z, blockId, biome, worldX, worldZ, rng);
+          this.tryPlaceFlora(density data, dims, x, y, z, materialId, biome, worldX, worldZ, rng);
           break; // Only the topmost block in this column
         }
       }
@@ -776,7 +776,7 @@ export class FloraDecorator {
   }
 
   private tryPlaceFlora(
-    voxels: Uint8Array,
+    density data: Uint8Array,
     dims: { sizeX: number; sizeY: number; sizeZ: number },
     x: number, y: number, z: number,
     surfaceBlockId: number,
@@ -891,7 +891,7 @@ import type { GrassSpeciesDefinition } from "./GrassFactory.js";
 
 export interface BiomeFloraEntry {
   /** The block ID of the flora to place. */
-  readonly blockId: number;
+  readonly materialId: number;
   /** Probability 0.0-1.0 that this flora spawns on an eligible surface block. */
   readonly spawnChance: number;
   /** Whether this flora requires 2 blocks of vertical space (tall plants). */
@@ -906,25 +906,25 @@ export interface BiomeFloraEntry {
  */
 export const BIOME_FLORA_RULES: Record<string, readonly BiomeFloraEntry[]> = {
   plains: [
-    { blockId: 150, spawnChance: 0.10, requiresTwoBlocks: false }, // tall grass
-    { blockId: 152, spawnChance: 0.03, requiresTwoBlocks: true },  // double tallgrass
-    { blockId: 140, spawnChance: 0.02, requiresTwoBlocks: false }, // dandelion
+    { materialId: 150, spawnChance: 0.10, requiresTwoBlocks: false }, // tall grass
+    { materialId: 152, spawnChance: 0.03, requiresTwoBlocks: true },  // double tallgrass
+    { materialId: 140, spawnChance: 0.02, requiresTwoBlocks: false }, // dandelion
   ],
   forest: [
-    { blockId: 150, spawnChance: 0.08, requiresTwoBlocks: false }, // tall grass
-    { blockId: 151, spawnChance: 0.04, requiresTwoBlocks: false }, // fern
-    { blockId: 140, spawnChance: 0.01, requiresTwoBlocks: false }, // dandelion
-    { blockId: 141, spawnChance: 0.01, requiresTwoBlocks: false }, // rose
-    { blockId: 142, spawnChance: 0.005, requiresTwoBlocks: true }, // rose bush
+    { materialId: 150, spawnChance: 0.08, requiresTwoBlocks: false }, // tall grass
+    { materialId: 151, spawnChance: 0.04, requiresTwoBlocks: false }, // fern
+    { materialId: 140, spawnChance: 0.01, requiresTwoBlocks: false }, // dandelion
+    { materialId: 141, spawnChance: 0.01, requiresTwoBlocks: false }, // rose
+    { materialId: 142, spawnChance: 0.005, requiresTwoBlocks: true }, // rose bush
   ],
   desert: [
     // Cactus and dead bushes — defined separately via CactusFactory
   ],
   swamp: [
-    { blockId: 151, spawnChance: 0.06, requiresTwoBlocks: false }, // fern
+    { materialId: 151, spawnChance: 0.06, requiresTwoBlocks: false }, // fern
   ],
   mountains: [
-    { blockId: 150, spawnChance: 0.03, requiresTwoBlocks: false }, // sparse tall grass
+    { materialId: 150, spawnChance: 0.03, requiresTwoBlocks: false }, // sparse tall grass
   ],
 };
 
@@ -996,7 +996,7 @@ export class CropGrowthSystem {
   private tickChunkCrops(chunk: Chunk): void {
     const slot = this.world.getChunkSlot(chunk);
     const { sizeX, sizeY, sizeZ } = slot.dims; // (actual dims omitted for brevity)
-    const voxels = slot.voxels;
+    const density data = slot.density data;
     const light = slot.light;
 
     // Random tick: select random blocks in the chunk
@@ -1005,9 +1005,9 @@ export class CropGrowthSystem {
       const z = (Math.random() * sizeZ) | 0;
       const y = (Math.random() * sizeY) | 0;
       const index = (y * sizeZ + z) * sizeX + x;
-      const blockId = voxels[index];
+      const materialId = density data[index];
 
-      const props = this.flora.getProperties(blockId);
+      const props = this.flora.getProperties(materialId);
       if (!props) continue;
 
       // Check if this is a crop with growth stages
@@ -1015,15 +1015,15 @@ export class CropGrowthSystem {
       if (!cropFactory) continue;
 
       // Determine current growth stage and advance if conditions are met
-      this.attemptGrowth(voxels, light, index, blockId, props, sizeX, sizeZ);
+      this.attemptGrowth(density data, light, index, materialId, props, sizeX, sizeZ);
     }
   }
 
   private attemptGrowth(
-    voxels: Uint8Array,
+    density data: Uint8Array,
     light: Uint8Array,
     index: number,
-    blockId: number,
+    materialId: number,
     props: FloraProperties,
     sizeX: number,
     sizeZ: number,
@@ -1039,12 +1039,12 @@ export class CropGrowthSystem {
 
     // Determine current stage from block ID offset
     // (Stage 4 = mature, no further growth)
-    const stageOffset = blockId - props.blockId;
+    const stageOffset = materialId - props.materialId;
     if (stageOffset >= 4) return; // already mature
 
     // Advance to next stage with random probability
     if (Math.random() < 0.5) {
-      voxels[index] = blockId + 1;
+      density data[index] = materialId + 1;
       this.world.markChunkDirty(/* chunk coords from index */);
       this.world.requestRemesh(/* chunk ref */);
     }
@@ -1091,7 +1091,7 @@ function onRightClickBlock(
   const targetBlock = world.getBlockIdAt(worldX, worldY, worldZ);
   const floraProps = floraRegistry.getProperties(targetBlock);
   if (floraProps && !floraProps.dropsSelf) {
-    const stageOffset = targetBlock - floraProps.blockId;
+    const stageOffset = targetBlock - floraProps.materialId;
     if (stageOffset >= 4) {
       // Mature — harvest
       harvestCrop(worldX, worldY, worldZ, floraProps);
@@ -1141,11 +1141,11 @@ Flowers, grass, saplings, and crops use cross-quad rendering — two perpendicul
  * - Light data sampled at the block position
  */
 function meshCrossQuad(
-  voxels: Uint8Array,
+  density data: Uint8Array,
   vertices: Float32Array,
   indices: Uint32Array,
   x: number, y: number, z: number,
-  blockId: number,
+  materialId: number,
   textureLayer: number,
   isTall: boolean,
 ): { vertexCount: number; indexCount: number } {
@@ -1175,7 +1175,7 @@ The `foliage` flag in `BlockMaterial` is used by the mesher's `FaceCuller` to de
 
 ```typescript
 // In FaceCuller.ts — extended to handle foliage
-export const shouldCullFace = (a: number, b: number, blocks: BlockRegistry): boolean => {
+export const shouldCullFace = (a: number, b: number, blocks: MaterialRegistry): boolean => {
   if (a === b) return true;
   if (a === 0 || b === 0) return false;
 
@@ -1245,7 +1245,7 @@ WorldGenWorker.generate()
 
 ```
 Game constructor
-├── new BlockRegistry()
+├── new MaterialRegistry()
 ├── new VanillaBlockFactory().registerAll(blockRegistry)
 ├── [NEW] new FloraRegistry()
 ├── [NEW] createDefaultFloraRegistry(blockRegistry)
@@ -1271,15 +1271,15 @@ constructor(seed: number, biomeRegistry = new BiomeRegistry(), floraRegistry?: F
 
 ### 7.4 Data Flow for Flora State
 
-Flora growth stages are stored directly in the voxel data (different block IDs for different stages). This is consistent with the existing architecture where block ID encodes all state. No additional component storage is needed for crop stage tracking.
+Flora growth stages are stored directly in the terrain data (different block IDs for different stages). This is consistent with the existing architecture where block ID encodes all state. No additional component storage is needed for crop stage tracking.
 
 | Flora Type | State Encoding | Storage |
 |---|---|---|
-| Crop (wheat, etc.) | 5 block IDs per crop (stage 0-4) | Voxel Uint8Array |
-| Flowers/Grass | 1 block ID per species | Voxel Uint8Array |
-| Saplings | 1 block ID per species | Voxel Uint8Array |
-| Trees | Multi-block structure | Voxel Uint8Array |
-| Vines | Block ID + metadata in redstone array (optional) | Voxel + Redstone arrays |
+| Crop (wheat, etc.) | 5 block IDs per crop (stage 0-4) | Terrain Uint8Array |
+| Flowers/Grass | 1 block ID per species | Terrain Uint8Array |
+| Saplings | 1 block ID per species | Terrain Uint8Array |
+| Trees | Multi-block structure | Terrain Uint8Array |
+| Vines | Block ID + metadata in redstone array (optional) | Terrain + Redstone arrays |
 
 ---
 

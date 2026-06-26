@@ -17,7 +17,7 @@ Structures are stored as flat, bit-packed `Uint8Array` blobs to maximize CPU cac
  *   Byte 0: dx (i8) - relative X offset
  *   Byte 1: dy (i8) - relative Y offset
  *   Byte 2: dz (i8) - relative Z offset
- *   Byte 3: blockId (u8) - Block ID to place
+ *   Byte 3: materialId (u8) - Block ID to place
  * 
  * We use a terminating dx = -128 (0x80) to mark the end of the blueprint,
  * avoiding the need to store a separate length variable.
@@ -43,12 +43,12 @@ function rotateCoord(x: number, z: number, rotation: number): [number, number] {
 }
 
 /**
- * Applies a blueprint to the voxel array at a world position.
+ * Applies a blueprint to the terrain array at a world position.
  * O(B) complexity where B is the number of blocks in the blueprint.
  * Zero allocations. Uses bitwise operations for boundary checks.
  */
 export function stampBlueprint(
-  voxels: Uint8Array,
+  density data: Uint8Array,
   blueprint: StructureBlueprint,
   originX: number, originY: number, originZ: number,
   rotation: number,
@@ -63,7 +63,7 @@ export function stampBlueprint(
     
     const dy = blocks[i + 1];
     const dz = blocks[i + 2];
-    const blockId = blocks[i + 3];
+    const materialId = blocks[i + 3];
 
     // Apply rotation
     const [rx, rz] = rotateCoord(dx, dz, rotation);
@@ -83,11 +83,11 @@ export function stampBlueprint(
     
     // Some structures (like roads) only replace air/dirt. 
     // Others (like houses) overwrite everything.
-    if (replaceAirOnly && voxels[idx] !== 0) {
+    if (replaceAirOnly && density data[idx] !== 0) {
       continue;
     }
 
-    voxels[idx] = blockId;
+    density data[idx] = materialId;
   }
 }
 ```
@@ -126,13 +126,13 @@ export class VillagePlanner {
    * @param regionZ The structure region Z (worldZ / 64)
    * @param chunkX The current chunk being generated X
    * @param chunkZ The current chunk being generated Z
-   * @param voxels The voxel array to stamp into
+   * @param density data The terrain array to stamp into
    * @param dims Chunk dimensions
    */
   public generate(
     regionX: number, regionZ: number,
     chunkX: number, chunkZ: number,
-    voxels: Uint8Array,
+    density data: Uint8Array,
     dims: { sizeX: number; sizeY: number; sizeZ: number }
   ): void {
     // 1. Determine if this region has a village (1 in 4 chance)
@@ -171,7 +171,7 @@ export class VillagePlanner {
       // The worker only draws what belongs to its own chunk.
       this.tryStampComponent(
         compWorldX, baseHeight, compWorldZ, rotation, bp,
-        chunkX, chunkZ, voxels, dims
+        chunkX, chunkZ, density data, dims
       );
     }
 
@@ -180,7 +180,7 @@ export class VillagePlanner {
     if (wellBp) {
       this.tryStampComponent(
         worldCenterX, baseHeight, worldCenterZ, 0, wellBp,
-        chunkX, chunkZ, voxels, dims
+        chunkX, chunkZ, density data, dims
       );
     }
   }
@@ -189,7 +189,7 @@ export class VillagePlanner {
     compWorldX: number, compWorldY: number, compWorldZ: number,
     rotation: number, bp: StructureBlueprint,
     chunkX: number, chunkZ: number,
-    voxels: Uint8Array, dims: { sizeX: number; sizeY: number; sizeZ: number }
+    density data: Uint8Array, dims: { sizeX: number; sizeY: number; sizeZ: number }
   ): void {
     // Convert component world coords to chunk-local coords
     const localOriginX = compWorldX - (chunkX * dims.sizeX);
@@ -209,7 +209,7 @@ export class VillagePlanner {
     // The structure overlaps! Stamp the blocks.
     // stampBlueprint handles the per-block boundary clamping.
     stampBlueprint(
-      voxels, bp,
+      density data, bp,
       localOriginX, compWorldY, localOriginZ,
       rotation,
       dims.sizeX, dims.sizeY, dims.sizeZ,
@@ -372,14 +372,14 @@ export class WorldGenPipeline {
         this.villagePlanner.generate(
           rx, rz,
           chunkX, chunkZ,
-          slot.voxels,
+          slot.density data,
           dims
         );
       }
     }
 
     // 4. Ore Distribution (runs after structures so it doesn't overwrite them)
-    this.oreDist.distribute(slot.voxels, dims.sizeX, dims.sizeY, dims.sizeZ);
+    this.oreDist.distribute(slot.density data, dims.sizeX, dims.sizeY, dims.sizeZ);
 
     Atomics.store(slot.status, 0, ChunkSlotStatus.VOXELS_READY);
   }
@@ -390,8 +390,8 @@ export class WorldGenPipeline {
 
 
 1. **Deterministic Cross-Worker Generation**: The `VillagePlanner` does not use shared state. It uses pure functions and a seeded PRNG (`mulberry32`) based on the `RegionX/Z`. Worker A generating Chunk 1 and Worker B generating Chunk 2 will both independently compute the *same* village layout, but only stamp the blocks that fall within their respective chunk boundaries.
-2. **Zero-Copy & DOD Blueprints**: Structures are stored as flat `Uint8Array` buffers using a 4-byte bit-packed layout (`dx, dy, dz, blockId`). The `stampBlueprint` function processes this array linearly, maximizing CPU cache lines and triggering zero Garbage Collection.
-3. **O(1) Rotations**: The `rotateCoord` function maps structure components to the voxel grid using simple bitwise and arithmetic switches, allowing a single blueprint to be rendered in 4 different directions without duplication.
+2. **Zero-Copy & DOD Blueprints**: Structures are stored as flat `Uint8Array` buffers using a 4-byte bit-packed layout (`dx, dy, dz, materialId`). The `stampBlueprint` function processes this array linearly, maximizing CPU cache lines and triggering zero Garbage Collection.
+3. **O(1) Rotations**: The `rotateCoord` function maps structure components to the terrain grid using simple bitwise and arithmetic switches, allowing a single blueprint to be rendered in 4 different directions without duplication.
 4. **Chunk Boundary Clamping**: The `stampBlueprint` function gracefully skips blocks that fall outside the `sizeX/Y/Z` of the current chunk, preventing buffer overflows and cleanly handling structures that bisect chunk borders.
 
 

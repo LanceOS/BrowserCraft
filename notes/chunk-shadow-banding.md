@@ -1,4 +1,4 @@
-# Keep voxel sunlight from banding on parallel occluders
+# Keep terrain sunlight from banding on parallel occluders
 
 ## What happened
 When several blocks line up in front of the sky, the lighting can turn into visible stripes instead of reading as one blended shadow. The direct sun term was being multiplied by the AO factor, so each AO step darkened the sun itself and made the bands stand out.
@@ -10,7 +10,7 @@ When several blocks line up in front of the sky, the lighting can turn into visi
 - Continue sampling the baked corner light in the mesher so the shader can stay soft instead of inventing new hard edges.
 
 ## Related functions
-- `voxel::shaders::chunkFragment` lighting block
+- `terrain::shaders::chunkFragment` lighting block
 - `mesher::packLight`
 - `mesher::cornerLight`
 - `mesher::computeFaceAOPacked`

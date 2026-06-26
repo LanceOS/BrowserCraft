@@ -1,4 +1,4 @@
-# Voxel Engine Technical Design Document: Particle System
+# Terrain engine Technical Design Document: Particle System
 
 
 
@@ -9,7 +9,7 @@
 
 ## 1. System Overview
 
-A voxel engine requires thousands of short-lived particles (block breaking debris, rain, explosions) without inducing Garbage Collection (GC) pauses or overwhelming the GPU with draw calls.
+A terrain engine requires thousands of short-lived particles (block breaking debris, rain, explosions) without inducing Garbage Collection (GC) pauses or overwhelming the GPU with draw calls.
 
 The `ParticleSystem` utilizes a **Data-Oriented Structure of Arrays (SoA)** approach. Particles are not `class` instances; they are indices into pre-allocated `Float32Array` and `Uint32Array` blocks. When a particle dies, it is swap-popped from the active array, keeping contiguous memory blocks perfectly compact for the CPU update loop and GPU upload.
 
@@ -136,8 +136,8 @@ Spawning is O(1). We write directly to the end of the active array. If the pool 
    * Spawns a block break effect. 
    * Mirrors 1.5.2 behavior: 4-8 particles, brown/gray tinted to block texture.
    */
-  public spawnBlockBreak(x: number, y: number, z: number, blockId: number, blockRegistry: BlockRegistry): void {
-    const def = blockRegistry.get(blockId);
+  public spawnBlockBreak(x: number, y: number, z: number, materialId: number, blockRegistry: MaterialRegistry): void {
+    const def = blockRegistry.get(materialId);
     const count = 4 + Math.floor(Math.random() * 4);
     
     // Determine texture layer to sample color from (use side texture)
@@ -229,7 +229,7 @@ The update loop iterates backwards. When a particle dies, we copy the data from 
       this.positions[i * 3 + 1] += this.velocities[i * 3 + 1] * dt;
       this.positions[i * 3 + 2] += this.velocities[i * 3 + 2] * dt;
 
-      // 4. Shrink over time (classic voxel FX)
+      // 4. Shrink over time (classic terrain FX)
       const lifeRatio = this.lives[i] / this.maxLives[i];
       this.sizes[i] *= (0.9 + 0.1 * lifeRatio); 
     }

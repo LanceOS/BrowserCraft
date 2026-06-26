@@ -1,8 +1,8 @@
-# Voxel Engine Technical Design Document: Lighting & Day/Night Cycle
+# Terrain engine Technical Design Document: Lighting & Day/Night Cycle
 
 
 
-**Version:** 1.0**Scope:** Voxel Light Propagation (Block Light & Sky Light), Smooth Lighting interpolation, Time Progression, and Atmospheric Sky Rendering.**Architecture Constraints:** Strict TypeScript, Web Worker isolation, Zero-Copy SharedArrayBuffer, GLSL 300 ES, Data-Oriented Design.
+**Version:** 1.0**Scope:** Terrain Light Propagation (Block Light & Sky Light), Smooth Lighting interpolation, Time Progression, and Atmospheric Sky Rendering.**Architecture Constraints:** Strict TypeScript, Web Worker isolation, Zero-Copy SharedArrayBuffer, GLSL 300 ES, Data-Oriented Design.
 
 
 ---
@@ -26,7 +26,7 @@ A `TimeSystem` on the main thread updates a global `TimeBlock` UBO, dictating th
 
 In the `SharedPool` architecture defined previously, each chunk slot contains a `light: Uint8Array` of size 65,536 (16x16x256).
 
-To avoid doubling memory, we pack both light channels into a single byte per voxel:
+To avoid doubling memory, we pack both light channels into a single byte per terrain:
 
 * **High Nibble (bits 4-7):** Block Light (0-15)
 * **Low Nibble (bits 0-3):** Sky Light (0-15)
@@ -57,7 +57,7 @@ export function packLight(sky: number, block: number): number {
 
 ## 3. Light Propagation Algorithm (Worker-Side)
 
-Lighting is calculated in the `MesherWorker` *before* the greedy meshing step.
+Lighting is calculated in the `MesherWorker` *before* the SurfaceNets meshing step.
 
 Because workers operate in isolation, they can only accurately propagate light within their own 16x256x16 chunk column. To prevent harsh lighting seams at chunk borders, the mesher samples neighbor chunks (if provided by the main thread) using a +1 boundary extension.
 
@@ -80,11 +80,11 @@ export class LightPropagator {
    * Populates the chunk's light array.
    * Mutates the SharedArrayBuffer directly.
    * 
-   * @param voxels Uint8Array of block IDs
+   * @param density data Uint8Array of block IDs
    * @param light Uint8Array of packed light data (target)
    */
   public static calculate(
-    voxels: Uint8Array, 
+    density data: Uint8Array, 
     light: Uint8Array, 
     dims: ChunkDimensions,
     lightEmissionMap: Map<number, number>, // e.g., Block 50 (Torch) -> 14
@@ -102,9 +102,9 @@ export class LightPropagator {
         let skyLevel = MAX_LIGHT;
         for (let y = sizeY - 1; y >= 0; y--) {
           const idx = (y * sizeZ + z) * sizeX + x;
-          const blockId = voxels[idx];
+          const materialId = density data[idx];
           
-          if (!transparentBlocks.has(blockId)) {
+          if (!transparentBlocks.has(materialId)) {
             skyLevel = 0; // Solid block blocks sky light
           }
           
@@ -112,7 +112,7 @@ export class LightPropagator {
           light[idx] = packLight(skyLevel, 0);
 
           // Check if this block emits light
-          const emit = lightEmissionMap.get(blockId) || 0;
+          const emit = lightEmissionMap.get(materialId) || 0;
           if (emit > 0) {
             // Update block light in the packed byte
             light[idx] = packLight(skyLevel, emit);
@@ -142,30 +142,30 @@ export class LightPropagator {
 
       // Check 6 neighbors
       // +X
-      if (x < sizeX - 1) this.tryPropagate(x + 1, y, z, nextLight, skyLight, voxels, light, dims, queue, queueTail);
+      if (x < sizeX - 1) this.tryPropagate(x + 1, y, z, nextLight, skyLight, density data, light, dims, queue, queueTail);
       // -X
-      if (x > 0)         this.tryPropagate(x - 1, y, z, nextLight, skyLight, voxels, light, dims, queue, queueTail);
+      if (x > 0)         this.tryPropagate(x - 1, y, z, nextLight, skyLight, density data, light, dims, queue, queueTail);
       // +Y
-      if (y < sizeY - 1) this.tryPropagate(x, y + 1, z, nextLight, skyLight, voxels, light, dims, queue, queueTail);
+      if (y < sizeY - 1) this.tryPropagate(x, y + 1, z, nextLight, skyLight, density data, light, dims, queue, queueTail);
       // -Y
-      if (y > 0)         this.tryPropagate(x, y - 1, z, nextLight, skyLight, voxels, light, dims, queue, queueTail);
+      if (y > 0)         this.tryPropagate(x, y - 1, z, nextLight, skyLight, density data, light, dims, queue, queueTail);
       // +Z
-      if (z < sizeZ - 1) this.tryPropagate(x, y, z + 1, nextLight, skyLight, voxels, light, dims, queue, queueTail);
+      if (z < sizeZ - 1) this.tryPropagate(x, y, z + 1, nextLight, skyLight, density data, light, dims, queue, queueTail);
       // -Z
-      if (z > 0)         this.tryPropagate(x, y, z - 1, nextLight, skyLight, voxels, light, dims, queue, queueTail);
+      if (z > 0)         this.tryPropagate(x, y, z - 1, nextLight, skyLight, density data, light, dims, queue, queueTail);
     }
   }
 
   private static tryPropagate(
     x: number, y: number, z: number, 
     newLight: number, skyLight: number,
-    voxels: Uint8Array, light: Uint8Array, 
+    density data: Uint8Array, light: Uint8Array, 
     dims: ChunkDimensions, queue: Int32Array, queueTail: number
   ): void {
     const idx = (y * dims.sizeZ + z) * dims.sizeX + x;
-    const blockId = voxels[idx];
+    const materialId = density data[idx];
     // Cannot propagate into solid, non-transparent blocks
-    if (blockId !== 0 && blockId !== 18 /* leaves */ && blockId !== 20 /* glass */) return;
+    if (materialId !== 0 && materialId !== 18 /* leaves */ && materialId !== 20 /* glass */) return;
 
     const currentPacked = light[idx];
     if (getBlockLight(currentPacked) < newLight) {
@@ -183,9 +183,9 @@ export class LightPropagator {
 
 ## 4. Smooth Lighting (Mesher Integration)
 
-To achieve the classic 1.5.2 Smooth Lighting, the `GreedyMesher` cannot use a single light value per face. Instead, for every vertex, it samples the light values of the 4 surrounding voxels (air blocks adjacent to the face) and averages them.
+To achieve the classic 1.5.2 Smooth Lighting, the `SurfaceNetsMesher` cannot use a single light value per face. Instead, for every vertex, it samples the light values of the 4 surrounding density data (air blocks adjacent to the face) and averages them.
 
-This blends the light smoothly across the greedy meshed quads.
+This blends the light smoothly across the SurfaceNets meshed quads.
 
 ### 4.1 Vertex Format Update
 
@@ -199,11 +199,11 @@ We upgrade our interleaved vertex buffer from 8 floats to **8 floats + 1 Uint32*
 ### 4.2 Vertex Light Sampling
 
 ```typescript
-// /src/engine/workers/mesher/GreedyMesher.ts (Excerpt)
+// /src/engine/workers/mesher/SurfaceNetsMesher.ts (Excerpt)
 
 /**
  * Samples light for a specific corner of a quad.
- * Samples the 3 voxels diagonal/adjacent to the corner in the air space,
+ * Samples the 3 density data diagonal/adjacent to the corner in the air space,
  * averages them, and returns a packed u32.
  */
 private sampleSmoothLight(
@@ -212,7 +212,7 @@ private sampleSmoothLight(
   x: number, y: number, z: number,
   normal: number[], du: number[], dv: number[]
 ): number {
-  // The 4 voxels to sample are offset into the air space (normal direction)
+  // The 4 density data to sample are offset into the air space (normal direction)
   // and distributed around the corner.
   // This is a simplified 3-sample average for demonstration.
   const nx = x + normal[0];
@@ -356,7 +356,7 @@ void main() {
 
 
 1. **Zero-Copy Worker Baking:** Light propagation (BFS + Sky cast) runs entirely in the `MesherWorker`. It mutates the `SharedArrayBuffer` directly, avoiding main-thread stalls.
-2. **Smooth Lighting:** The `GreedyMesher` samples a 4-voxel area for every vertex corner, averaging the packed light nibbles. This produces the classic 1.5.2 gradient lighting on terrain faces.
+2. **Smooth Lighting:** The `SurfaceNetsMesher` samples a 4-terrain area for every vertex corner, averaging the packed light nibbles. This produces the classic 1.5.2 gradient lighting on terrain faces.
 3. **Bit-Packed Data:** Storing Sky and Block light in a single byte (`Uint8Array`) halves memory overhead compared to a `Uint16Array`, improving CPU cache line utilization during the BFS flood fill.
 4. **Time UBO:** The Day/Night cycle is driven by a 16-byte UBO uploaded once per frame. The fragment shader lerps the sky light contribution between 20% (moonlight) and 100% (daylight) using `u_daylight`.
 

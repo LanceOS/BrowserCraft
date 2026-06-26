@@ -1,15 +1,15 @@
-# Voxel Engine Technical Design Document: Physics & Collision Detection
+# Terrain engine Technical Design Document: Physics & Collision Detection
 
 
 
-**Version:** 1.0**Scope:** Entity Physics, Swept-AABB Voxel Collision, Step-Assist, Gravity, and Fluid Dynamics.**Architecture Constraints:** Strict TypeScript, Data-Oriented Design (SoA TypedArrays), Zero-Garbage-Collection on hot paths, Fixed-Timestep determinism.
+**Version:** 1.0**Scope:** Entity Physics, Swept-AABB Terrain Collision, Step-Assist, Gravity, and Fluid Dynamics.**Architecture Constraints:** Strict TypeScript, Data-Oriented Design (SoA TypedArrays), Zero-Garbage-Collection on hot paths, Fixed-Timestep determinism.
 
 
 ---
 
 ## 1. System Overview
 
-Physics in a voxel sandbox must handle entities of varying AABB sizes interacting with up to 65,536 blocks per chunk. To maintain 60 FPS with hundreds of entities, we discard heavy physics engines (like Rapier or Cannon.js) and implement a **Discrete Sub-stepping AABB Collider** directly against the voxel grid.
+Physics in a terrain sandbox must handle entities of varying AABB sizes interacting with up to 65,536 blocks per chunk. To maintain 60 FPS with hundreds of entities, we discard heavy physics engines (like Rapier or Cannon.js) and implement a **Discrete Sub-stepping AABB Collider** directly against the terrain grid.
 
 The `PhysicsSystem` iterates over the `RigidBody` and `Transform` components. It integrates velocity, applies gravity, and resolves collisions axis-by-axis (Y, then X, then Z) to prevent snagging on block seams.
 
@@ -40,7 +40,7 @@ export const RigidBodyDesc = {
 
 ---
 
-## 3. The Voxel Collision Algorithm
+## 3. The Terrain Collision Algorithm
 
 To prevent fast-moving entities from tunneling through 1-block-thick walls, we divide the frame's movement delta into discrete sub-steps. No entity may move more than 0.5 blocks per sub-step.
 
@@ -163,7 +163,7 @@ export class PhysicsSystem {
   }
 
   /**
-   * Checks if the entity's world-space AABB intersects any solid voxel.
+   * Checks if the entity's world-space AABB intersects any solid terrain.
    * O(W * H * D) complexity.
    */
   private checkCollision(
@@ -182,7 +182,7 @@ export class PhysicsSystem {
     const minZ = Math.floor(pos[base + 2] + bMin[base + 2]);
     const maxZ = Math.floor(pos[base + 2] + bMax[base + 2]);
 
-    // Iterate over all voxels overlapping the AABB
+    // Iterate over all density data overlapping the AABB
     for (let y = minY; y <= maxY; y++) {
       for (let z = minZ; z <= maxZ; z++) {
         for (let x = minX; x <= maxX; x++) {
@@ -200,11 +200,11 @@ export class PhysicsSystem {
 
 ---
 
-## 4. World Voxel Query Interface
+## 4. World Terrain Query Interface
 
 The `PhysicsSystem` relies on `World.isSolid(x, y, z)`. This function must account for partial AABBs (slabs, stairs, fences).
 
-To maintain DOD principles, block collision boundaries are defined in the `BlockRegistry` and fetched in O(1) time.
+To maintain DOD principles, block collision boundaries are defined in the `MaterialRegistry` and fetched in O(1) time.
 
 ```typescript
 // /src/world/World.ts (Excerpt)
@@ -223,10 +223,10 @@ public isSolid(x: number, y: number, z: number): boolean {
   if (!chunk) return false; // Unloaded chunk = no collision (let entity fall)
 
   // 3. Fetch Block ID and check Registry
-  const blockId = chunk.getBlock(localX, y, localZ);
-  if (blockId === 0) return false; // Air
+  const materialId = chunk.getBlock(localX, y, localZ);
+  if (materialId === 0) return false; // Air
 
-  const def = this.blockRegistry.get(blockId);
+  const def = this.blockRegistry.get(materialId);
   
   // Liquids and fences have specific rules.
   // For standard physics, we treat anything with a non-empty AABB as solid.

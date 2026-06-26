@@ -4,11 +4,11 @@ This guide explains how to extend the content that exists in the current codebas
 
 The main extension surfaces are:
 
-- blocks via [`cpp-voxel/src/world/blocks/VanillaBlockFactory.cpp`](../src/world/blocks/VanillaBlockFactory.cpp)
-- recipes via [`cpp-voxel/src/content/crafting/CraftingRegistry.hpp`](../cpp-voxel/src/content/crafting/CraftingRegistry.hpp)
+- blocks via [`cpp-terrain/src/world/blocks/VanillaBlockFactory.cpp`](../src/world/blocks/VanillaBlockFactory.cpp)
+- recipes via [`cpp-terrain/src/content/crafting/CraftingRegistry.hpp`](../cpp-terrain/src/content/crafting/CraftingRegistry.hpp)
 - structures via (to be ported)
-- biomes via [`cpp-voxel/src/content/biomes/BiomeData.hpp`](../cpp-voxel/src/content/biomes/BiomeData.hpp)
-- mobs via [`cpp-voxel/src/content/mobs/MobFactory.hpp`](../cpp-voxel/src/content/mobs/MobFactory.hpp)
+- biomes via [`cpp-terrain/src/content/biomes/BiomeData.hpp`](../cpp-terrain/src/content/biomes/BiomeData.hpp)
+- mobs via [`cpp-terrain/src/content/mobs/MobFactory.hpp`](../cpp-terrain/src/content/mobs/MobFactory.hpp)
 
 ## Before You Add Content
 
@@ -37,14 +37,14 @@ A block definition needs:
 - `material`
 - `collision`
 
-The data shape lives in [`BlockDefinition.hpp`](../src/world/BlockDefinition.hpp).
+The data shape lives in [`MaterialDefinition.hpp`](../src/world/MaterialDefinition.hpp).
 
 ### Steps
 
 1. Pick a new block ID that does not collide with an existing registration in `VanillaBlockFactory`.
 2. Add a texture entry in [`blocks.json`](../assets/blocks.json) under the `"textures"` section.
 3. Register the block in the `"blocks"` array of [`blocks.json`](../assets/blocks.json).
-4. Add a matching `BlockId` constant in [`BlockIds.hpp`](../src/world/BlockIds.hpp) if the block is referenced in C++ code.
+4. Add a matching `MaterialId` constant in [`BlockIds.hpp`](../src/world/BlockIds.hpp) if the block is referenced in C++ code.
 5. Set the right material flags in `blocks.json`:
    - `is_opaque` (bool) — whether the block is fully solid
    - `is_liquid` (bool) — enables liquid rendering and behavior
@@ -110,7 +110,7 @@ The player crafting grid is 2x2, stored in inventory slots `40..43`, with output
 
 If you add a recipe, add or update tests in:
 
-- [`cpp-voxel/tests/`](../cpp-voxel/tests/) (C++ test files)
+- [`cpp-terrain/tests/`](../cpp-terrain/tests/) (C++ test files)
 
 ## Adding A Structure
 
@@ -120,7 +120,7 @@ The runtime path is:
 
 1. `WorldGenWorker` creates a `StructureFactory`
 2. `StructureFactory.getAll()` feeds `VillagePlanner`
-3. `VillagePlanner` chooses and stamps structures into chunk voxel data
+3. `VillagePlanner` chooses and stamps structures into chunk terrain data
 
 ### Current Blueprint Format
 
@@ -129,14 +129,14 @@ Each structure is created from raw packed block tuples:
 - `x`
 - `y`
 - `z`
-- `blockId`
+- `materialId`
 
 `createBlueprint(...)` converts the raw block list into a packed `Uint8Array` and appends a terminator sequence.
 
 ### Steps
 
 1. Add a new registration method in `StructureFactory`.
-2. Build a `rawBlocks` array using repeated `(x, y, z, blockId)` entries.
+2. Build a `rawBlocks` array using repeated `(x, y, z, materialId)` entries.
 3. Call `createBlueprint(id, sizeX, sizeY, sizeZ, rawBlocks)`.
 4. Register the blueprint in `this.blueprints`.
 5. If needed, update the planner logic in `VillagePlanner` (to be ported) so the new blueprint is selected under the right conditions.
@@ -149,8 +149,8 @@ There is no external structure file format yet. Structures are still hard-coded 
 
 Biomes need extra care because there are two biome-related surfaces in the repo:
 
-- [`cpp-voxel/src/content/biomes/BiomeData.hpp`](../cpp-voxel/src/content/biomes/BiomeData.hpp)
-- (worldgen uses [`BiomeData`](../cpp-voxel/src/content/biomes/BiomeData.hpp) directly)
+- [`cpp-terrain/src/content/biomes/BiomeData.hpp`](../cpp-terrain/src/content/biomes/BiomeData.hpp)
+- (worldgen uses [`BiomeData`](../cpp-terrain/src/content/biomes/BiomeData.hpp) directly)
 
 The current worldgen pipeline actually uses `BiomeSampler`, not `BiomeRegistry`.
 
@@ -175,7 +175,7 @@ The content-side biome registry is not currently the source of truth for world g
 
 ## Adding A Mob
 
-Mob creation is centralized in [`MobFactory`](../cpp-voxel/src/content/mobs/MobFactory.hpp).
+Mob creation is centralized in [`MobFactory`](../cpp-terrain/src/content/mobs/MobFactory.hpp).
 
 The current system is data-driven through the `MOB_CONFIGS` table and component writes. There are no per-mob classes yet.
 
@@ -210,7 +210,7 @@ If you add a new gameplay concept that mobs need, update both the component defi
 
 ## Extending Creative Inventory
 
-If you add content that should be easy to test in-game, seed it into creative mode through `Game` (see [`Game`](../cpp-voxel/src/game/Game.hpp)).
+If you add content that should be easy to test in-game, seed it into creative mode through `Game` (see [`Game`](../cpp-terrain/src/game/Game.hpp)).
 
 That method currently populates hotbar slots with starter blocks and items when a creative session starts.
 

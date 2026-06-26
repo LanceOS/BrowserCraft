@@ -114,7 +114,7 @@ target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/
 target_link_libraries(imgui PUBLIC ${GLFW_TARGET} OpenGL::GL)
 
 # ---- Engine library ----
-add_library(voxel_engine STATIC
+add_library(terrain_engine STATIC
   src/engine/math/AABB.cpp
   src/engine/math/Frustum.cpp
   src/engine/alloc/RingBuffer.cpp
@@ -174,9 +174,9 @@ add_library(voxel_engine STATIC
   src/ui/UIManager.cpp
 )
 
-target_include_directories(voxel_engine PUBLIC src ${SQLITE3_INCLUDE_DIRS})
+target_include_directories(terrain_engine PUBLIC src ${SQLITE3_INCLUDE_DIRS})
 
-target_link_libraries(voxel_engine PUBLIC
+target_link_libraries(terrain_engine PUBLIC
   glm::glm
   ${GLFW_TARGET}
   OpenGL::GL
@@ -185,7 +185,7 @@ target_link_libraries(voxel_engine PUBLIC
 )
 
 # Precompiled headers (per-target to avoid -Winvalid-pch due to differing flags)
-target_precompile_headers(voxel_engine PRIVATE src/pch.hpp)
+target_precompile_headers(terrain_engine PRIVATE src/pch.hpp)
 
 # Release-specific optimizations (global — keeps PCH flags consistent across all targets)
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -194,13 +194,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 # ---- Main executable ----
-add_executable(voxel_app src/main.cpp)
-target_link_libraries(voxel_app PRIVATE voxel_engine ${GLFW_TARGET} OpenGL::GL imgui)
-target_precompile_headers(voxel_app PRIVATE src/pch.hpp)
+add_executable(terrain_app src/main.cpp)
+target_link_libraries(terrain_app PRIVATE terrain_engine ${GLFW_TARGET} OpenGL::GL imgui)
+target_precompile_headers(terrain_app PRIVATE src/pch.hpp)
 
 # ---- Tests ----
 enable_testing()
-add_executable(voxel_tests
+add_executable(terrain_tests
   tests/main.cpp
   tests/test_aabb.cpp
   tests/test_frustum.cpp
@@ -224,6 +224,6 @@ add_executable(voxel_tests
   tests/test_smooth_terrain_mesher.cpp
   tests/test_surface_nets_mesher.cpp
 )
-target_link_libraries(voxel_tests PRIVATE voxel_engine Catch2::Catch2WithMain)
-target_precompile_headers(voxel_tests PRIVATE src/pch.hpp)
-catch_discover_tests(voxel_tests)
+target_link_libraries(terrain_tests PRIVATE terrain_engine Catch2::Catch2WithMain)
+target_precompile_headers(terrain_tests PRIVATE src/pch.hpp)
+catch_discover_tests(terrain_tests)

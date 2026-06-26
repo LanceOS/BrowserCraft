@@ -1,4 +1,4 @@
-# Voxel Engine Technical Design Document: Day/Night Cycle & Sky Rendering
+# Terrain engine Technical Design Document: Day/Night Cycle & Sky Rendering
 
 
 
@@ -267,7 +267,7 @@ void main() {
 
 ## 5. Gameplay Hooks: DaylightSensorSystem
 
-The `TimeSystem` exposes state that other ECS systems query to drive gameplay logic. The `DaylightSensorSystem` iterates over Hostile Mobs. If it is day, and the mob is exposed to the sky (checked via voxel Y-raycast), the mob is flagged to burn.
+The `TimeSystem` exposes state that other ECS systems query to drive gameplay logic. The `DaylightSensorSystem` iterates over Hostile Mobs. If it is day, and the mob is exposed to the sky (checked via terrain Y-raycast), the mob is flagged to burn.
 
 ```typescript
 // /src/engine/ecs/systems/DaylightSensorSystem.ts
@@ -328,5 +328,5 @@ export class DaylightSensorSystem {
 1. **Zero-Allocation UBO Updates:** The `TimeSystem` calculates sun vectors and packs data directly into a pre-allocated 32-byte `ArrayBuffer` view (`Float32Array`), uploading to the GPU via `gl.bufferSubData` once per frame without allocating a single object.
 2. **Procedural Skybox:** Rendering a fullscreen triangle with a depth of 1.0 eliminates overdraw and geometry processing. The GLSL fragment shader reconstructs the view ray via the inverse projection-view matrix to procedurally generate gradients, the sun disc, the moon, and stars.
 3. **Deferred Sky Lighting:** Instead of re-running the BFS Light Propagation worker every frame (which would melt the CPU), the time of day dynamically scales the baked Sky Light in the fragment shader. Night time drops sky light to 20% (moonlight), while torches (Block Light) remain unaffected.
-4. **ECS Gameplay Hooks:** The `DaylightSensorSystem` queries the `TimeSystem` state and voxel raycasts to apply damage to hostile mobs, fulfilling the classic gameplay loop where Skeletons and Zombies burn at dawn.
+4. **ECS Gameplay Hooks:** The `DaylightSensorSystem` queries the `TimeSystem` state and terrain raycasts to apply damage to hostile mobs, fulfilling the classic gameplay loop where Skeletons and Zombies burn at dawn.
 

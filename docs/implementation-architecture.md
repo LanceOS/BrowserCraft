@@ -232,7 +232,7 @@ src/
 │
 ├── world/               ← NO imports from game/ or content/
 │   ├── blocks/          ← Data definitions, no logic
-│   └── Chunk.hpp, World.hpp, BlockRegistry.hpp
+│   └── Chunk.hpp, World.hpp, MaterialRegistry.hpp
 │
 ├── content/             ← Imports from engine/ and world/ only
 │   ├── items/           ← Item definitions, factories
@@ -486,7 +486,7 @@ export const CharacterIdentityDesc = {
 
 ```
 Hot Path (every frame, must complete in <1ms):
-├── PhysicsSystem       — swept AABB vs voxel grid
+├── PhysicsSystem       — swept AABB vs terrain grid
 ├── PlayerController    — input → transform
 ├── ManaRegenSystem     — mana += regen * dt
 ├── NpcScheduleSystem   — pathfinding for active NPCs
@@ -748,7 +748,7 @@ export interface GrowthConfig {
 
 // Composed into FloraProperties
 export interface FloraProperties {
-  readonly blockId: number;
+  readonly materialId: number;
   readonly name: string;
   readonly renderType: FloraRenderType;
   readonly soil: SoilPreference;
@@ -844,7 +844,7 @@ TEST_CASE("xpForLevel produces correct values", "[stats]") {
 
 ```cmake
 # CMakeLists.txt — Compiler warnings enforce architecture
-target_compile_options(voxel_app PRIVATE
+target_compile_options(terrain_app PRIVATE
   -Wall -Wextra -Wpedantic
   -Werror=shadow -Werror=return-type
   -Wno-unused-parameter
@@ -856,13 +856,13 @@ target_compile_options(voxel_app PRIVATE
 
 ```cmake
 # CMakeLists.txt — Strict compiler flags prevent common debt patterns
-target_compile_options(voxel_app PRIVATE
+target_compile_options(terrain_app PRIVATE
   -Wall -Wextra -Wpedantic
   -Werror=return-type -Werror=unused-result
   $<$<CONFIG:Release>:-O2 -DNDEBUG>
   $<$<CONFIG:Debug>:-g -O0 -DDEBUG>
 )
-target_compile_features(voxel_app PRIVATE cxx_std_20)
+target_compile_features(terrain_app PRIVATE cxx_std_20)
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true

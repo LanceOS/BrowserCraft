@@ -1,6 +1,6 @@
 # Performance Optimization
 
-To extract maximum performance from the C++ voxel engine, we must attack the three primary bottlenecks: **Heap Fragmentation** (caused by per-frame allocations), **CPU-to-GPU bandwidth** (draw calls and buffer uploads), and **CPU cache misses** (pointer-chasing in object-oriented structures).
+To extract maximum performance from the C++ terrain engine, we must attack the three primary bottlenecks: **Heap Fragmentation** (caused by per-frame allocations), **CPU-to-GPU bandwidth** (draw calls and buffer uploads), and **CPU cache misses** (pointer-chasing in object-oriented structures).
 
 Below is the strict C++ implementation of the **Performance Core**: GPU-driven rendering, persistent mapped buffers, lock-free worker dispatch, and SIMD-accelerated bitwise processing.
 
@@ -142,7 +142,7 @@ public:
 
 ### 4. Bitwise Ambient Occlusion & SIMD (Defeating Branch Prediction)
 
-In the mesher, calculating AO requires checking neighbor voxels. Using `if` statements causes branch prediction misses. We replace this entirely with a **Lookup Table (LUT)** and bitwise packing, which can be further accelerated using AVX2 SIMD instructions to process multiple voxels concurrently.
+In the mesher, calculating AO requires checking neighbor density data. Using `if` statements causes branch prediction misses. We replace this entirely with a **Lookup Table (LUT)** and bitwise packing, which can be further accelerated using AVX2 SIMD instructions to process multiple density data concurrently.
 
 ```cpp
 // /src/engine/workers/mesher/AmbientOcclusion.hpp

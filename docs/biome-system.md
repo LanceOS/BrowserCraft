@@ -156,7 +156,7 @@ public:
     return s;
   }
   BiomeId id() const noexcept override { return BiomeId::Plains; }
-  uint8_t topBlock() const noexcept override { return BlockId::GRASS; }
+  uint8_t topBlock() const noexcept override { return MaterialId::GRASS; }
   // ...
 private:
   PlainsBiome() = default;
@@ -293,11 +293,11 @@ const bool noWater = (activeBiome.id() == biome::BiomeId::Desert
 
 // 7. Apply surface layering
 if (y == surfaceY) {
-    voxels[index] = activeBiome.topBlock();
+    density data[index] = activeBiome.topBlock();
 } else if (y > surfaceY - activeBiome.surfaceDepth()) {
-    voxels[index] = activeBiome.fillerBlock();
+    density data[index] = activeBiome.fillerBlock();
 } else {
-    voxels[index] = BlockId::STONE;
+    density data[index] = MaterialId::STONE;
 }
 ```
 
@@ -354,7 +354,7 @@ After generation completes, `World::onWorldGenDone()` validates the chunk by che
 const int32_t checkIndices[] = {0, sz - 1, (sz - 1) * sx, sz * sx - 1};
 bool hasBedrock = false;
 for (int32_t ci : checkIndices) {
-    if (slot.voxels[ci] != 0) { hasBedrock = true; break; }
+    if (slot.density data[ci] != 0) { hasBedrock = true; break; }
 }
 if (!hasBedrock && chunk->genRetries < MAX_CHUNK_GEN_RETRIES) {
     ++chunk->genRetries;

@@ -1,17 +1,17 @@
-# RPG Voxel Game — Design Vision
+# RPG Terrain Game — Design Vision
 
 
 
-**Version:** 1.0**Scope:** Re-imagining the voxel engine as a standalone RPG, breaking away from Minecraft conventions. Characters, classes, stats, magic, quests, trading, factions, and progression systems.**Architecture Constraints:** Strict TypeScript, DOD-based ECS with SoA TypedArray storage, zero-copy worker boundaries via `SharedArrayBuffer`/`Atomics`, WebGL2, no OOP classes for game objects.
+**Version:** 1.0**Scope:** Re-imagining the terrain engine as a standalone RPG, breaking away from Minecraft conventions. Characters, classes, stats, magic, quests, trading, factions, and progression systems.**Architecture Constraints:** Strict TypeScript, DOD-based ECS with SoA TypedArray storage, zero-copy worker boundaries via `SharedArrayBuffer`/`Atomics`, WebGL2, no OOP classes for game objects.
 
 
 ---
 
 ## 1. Vision Statement
 
-This is not a Minecraft clone. It is a voxel-based action RPG with a living world — procedurally generated continents with towns, dungeons, ruins, and wilderness. The player creates a character, chooses a class, levels up through combat and quests, learns magic, trades with NPCs, builds alliances with factions, and shapes the world.
+This is not a Minecraft clone. It is a terrain-based action RPG with a living world — procedurally generated continents with towns, dungeons, ruins, and wilderness. The player creates a character, chooses a class, levels up through combat and quests, learns magic, trades with NPCs, builds alliances with factions, and shapes the world.
 
-The underlying engine (chunked voxel world, ECS, WebGL2 renderer, greedy meshing, shared-memory workers) provides the technical foundation. This document defines the *game* layer built on top of it.
+The underlying engine (chunked terrain world, ECS, WebGL2 renderer, SurfaceNets meshing, shared-memory workers) provides the technical foundation. This document defines the *game* layer built on top of it.
 
 ### Design Pillars
 
@@ -1245,11 +1245,11 @@ src/content/
 
 ### What Stays
 
-* Chunked voxel world with `SharedPool` zero-copy workers
+* Chunked terrain world with `SharedPool` zero-copy workers
 * ECS with SoA `TypedArray` storage
-* WebGL2 renderer with greedy meshing, two-pass transparency, texture arrays
+* WebGL2 renderer with SurfaceNets meshing, two-pass transparency, texture arrays
 * Camera, physics, collision, pathfinding systems
-* Block registry and factory pattern
+* Material registry and factory pattern
 * Deterministic world generation
 * Inventory and crafting (extended)
 
