@@ -13,11 +13,11 @@ namespace mesher {
 
 /// Build a smooth terrain mesh for a chunk using the continuous terrain
 /// density field. The output uses the same vertex layout as the greedy voxel
-/// mesher so the existing renderer can draw it without any shader changes.
+/// mesher so the renderer can choose between block and terrain shaders without
+/// changing the buffer layout.
 ///
 /// The mesh is flat-shaded for now. Each triangle gets a single normal and a
-/// terrain texture layer chosen from the sampled material at the triangle
-/// centroid.
+/// terrain material sample derived from slope, depth, and biome context.
 bool smoothTerrainMesh(
     const WorldGenPipeline& pipeline,
     const BlockRegistry& blocks,

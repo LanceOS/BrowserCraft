@@ -8,7 +8,9 @@
 #include "SimplexNoise.hpp"
 #include "content/biomes/BiomeFactory.hpp"
 #include "content/biomes/BiomeSampler.hpp"
-#include "world/BlockIds.hpp"
+#include "world/terrain/TerrainMaterial.hpp"
+
+#include <glm/glm.hpp>
 
 // @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
@@ -48,27 +50,26 @@ struct WorldGenerationConfig {
   float densityDepthScale = 0.12f;
 };
 
-/// Terrain material categories used by the continuous sampler.
-/// These intentionally model the terrain surface materials only. Water,
-/// air, and other special voxel states remain on the legacy block path.
-enum class MaterialId : uint8_t {
-  Grass = 0,
-  Dirt  = 1,
-  Stone = 2,
-  Sand  = 3,
-};
-
-using TerrainMaterial = MaterialId;
+using MaterialId = terrain::MaterialId;
+using TerrainMaterial = terrain::TerrainMaterial;
 
 /// Continuous terrain state for a single world-space x/z column.
 /// `surfaceHeight` is the unclamped float surface used by the smooth mesher.
 /// `surfaceY` mirrors the legacy voxel column logic.
 /// `biome` points at the dominant biome for the column.
+/// `biomeId`, `temperature`, and `humidity` carry the climate context into the
+/// terrain material system.
+/// `surfaceDepth` mirrors the biome surface layering used by the legacy block
+/// generator so the smooth renderer can keep a similar material profile.
 /// `noWater` matches the legacy rule that deserts and oceans skip water fill.
 struct TerrainSample {
   float surfaceHeight = 0.0f;
   int32_t surfaceY = 0;
   const biome::Biome* biome = nullptr;
+  biome::BiomeId biomeId = biome::BiomeId::Plains;
+  float temperature = 0.0f;
+  float humidity = 0.0f;
+  int32_t surfaceDepth = 4;
   bool noWater = false;
 };
 
@@ -106,8 +107,14 @@ public:
   [[nodiscard]] auto sampleDensity(float worldX, float worldY, float worldZ) const -> float;
 
   /// Sample the terrain material for a world coordinate.
-  /// Returns the same top/filler/stone/sand layering used by voxel terrain.
-  [[nodiscard]] auto sampleMaterial(float worldX, float worldY, float worldZ) const -> MaterialId;
+  /// Returns blended terrain material hints derived from slope, depth, and
+  /// biome context.
+  [[nodiscard]] auto sampleMaterial(float worldX, float worldY, float worldZ) const -> TerrainMaterial;
+
+  /// Sample the terrain material for a world coordinate using a surface normal
+  /// to estimate slope. This is the preferred path for smooth terrain meshes.
+  [[nodiscard]] auto sampleMaterial(float worldX, float worldY, float worldZ,
+                                    const glm::vec3& normal) const -> TerrainMaterial;
 
   /// Access the sampler configuration.
   [[nodiscard]] auto config() const -> const WorldGenerationConfig& { return m_config; }
@@ -118,18 +125,6 @@ private:
                                            int octaves,
                                            float lacunarity,
                                            float persistence) -> float;
-
-  [[nodiscard]] static constexpr auto materialFromBlock(uint8_t blockId) -> MaterialId {
-    switch (blockId) {
-      case BlockId::GRASS: return MaterialId::Grass;
-      case BlockId::DIRT:  return MaterialId::Dirt;
-      case BlockId::SAND:  return MaterialId::Sand;
-      case BlockId::STONE:
-      case BlockId::BEDROCK:
-      default:
-        return MaterialId::Stone;
-    }
-  }
 
   std::unique_ptr<biome::BiomeSampler> m_ownedSampler;
   biome::IClimateSource* m_climateSource;
@@ -201,6 +196,10 @@ inline auto TerrainSampler::sampleTerrain(float worldX, float worldZ) const -> T
       + mountainExtra;
   sample.surfaceY = static_cast<int32_t>(sample.surfaceHeight);
   sample.biome = activeBiome;
+  sample.biomeId = activeBiome ? activeBiome->id() : biome::BiomeId::Plains;
+  sample.temperature = climate.temperature;
+  sample.humidity = climate.humidity;
+  sample.surfaceDepth = activeBiome ? activeBiome->surfaceDepth() : 4;
   if (activeBiome) {
     sample.noWater = (activeBiome->id() == biome::BiomeId::Desert ||
                       activeBiome->id() == biome::BiomeId::Ocean);
@@ -232,24 +231,24 @@ inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worl
   return density;
 }
 
-inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float worldZ) const -> MaterialId {
+inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float worldZ) const -> TerrainMaterial {
+  return sampleMaterial(worldX, worldY, worldZ, glm::vec3(0.0f, 1.0f, 0.0f));
+}
+
+inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float worldZ,
+                                           const glm::vec3& normal) const -> TerrainMaterial {
   const auto terrain = sampleTerrain(worldX, worldZ);
-  if (!terrain.biome) {
-    return MaterialId::Stone;
-  }
-
-  const int32_t blockY = static_cast<int32_t>(std::floor(worldY));
-  if (blockY <= 0) {
-    return MaterialId::Stone;
-  }
-
-  if (blockY >= terrain.surfaceY) {
-    return materialFromBlock(terrain.biome->topBlock());
-  }
-  if (blockY > terrain.surfaceY - terrain.biome->surfaceDepth()) {
-    return materialFromBlock(terrain.biome->fillerBlock());
-  }
-  return MaterialId::Stone;
+  terrain::TerrainMaterialContext ctx{};
+  ctx.surfaceHeight = terrain.surfaceHeight;
+  ctx.seaLevel = static_cast<float>(m_config.seaLevel);
+  ctx.depthBelowSurface = terrain.surfaceHeight - worldY;
+  ctx.slope = std::clamp(1.0f - std::abs(normal.y), 0.0f, 1.0f);
+  ctx.temperature = terrain.temperature;
+  ctx.humidity = terrain.humidity;
+  ctx.biomeId = terrain.biomeId;
+  ctx.surfaceDepth = terrain.surfaceDepth;
+  ctx.noWater = terrain.noWater;
+  return terrain::resolveTerrainMaterial(ctx);
 }
 
 } // namespace voxel

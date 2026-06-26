@@ -21,6 +21,7 @@ enum class ChunkSlotStatus : int32_t {
 /// unaware of render-specific state.
 inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_TRANSPARENT = 1u << 0;
 inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_OPAQUE = 1u << 1;
+inline constexpr uint32_t CHUNK_RENDER_FLAG_TERRAIN = 1u << 2;
 
 /// Canonical chunk sizing metadata used when constructing the shared pool.
 struct ChunkDimensions {

@@ -4,10 +4,10 @@
 
 namespace voxel {
 
-DrawDispatcher::DrawDispatcher(ShaderProgram& chunkShader, ShaderProgram& skyShader,
+DrawDispatcher::DrawDispatcher(ShaderProgram& terrainShader, ShaderProgram& chunkShader, ShaderProgram& skyShader,
                                Texture2DArray& textures, IndirectBatcher& indirectBatcher,
                                uint32_t& masterVao, uint32_t& skyVao)
-  : m_chunkShader(chunkShader), m_skyShader(skyShader),
+  : m_terrainShader(terrainShader), m_chunkShader(chunkShader), m_skyShader(skyShader),
     m_textures(textures), m_indirectBatcher(indirectBatcher),
     m_masterVao(masterVao), m_skyVao(skyVao)
 {}
@@ -25,35 +25,57 @@ void DrawDispatcher::renderSky() {
 }
 
 void DrawDispatcher::renderChunks(const Frustum& frustum) {
-  m_chunkShader.use();
   m_textures.bind(0);
-  gl::Uniform1i(m_chunkShader.uniform("u_blockTextures"), 0);
-
   m_indirectBatcher.buildIndirectCommands(frustum);
 
   gl::BindVertexArray(m_masterVao);
   gl::Enable(GL_CULL_FACE);
   ::glCullFace(GL_BACK);
 
-  const uint32_t opaqueCount = m_indirectBatcher.opaqueCommandCount();
-  const uint32_t transparentCount = m_indirectBatcher.transparentCommandCount();
+  const uint32_t terrainOpaqueCount = m_indirectBatcher.terrainOpaqueCommandCount();
+  const uint32_t terrainTransparentCount = m_indirectBatcher.terrainTransparentCommandCount();
+  const uint32_t blockOpaqueCount = m_indirectBatcher.blockOpaqueCommandCount();
+  const uint32_t blockTransparentCount = m_indirectBatcher.blockTransparentCommandCount();
 
-  // Pass 1: opaque geometry first. Transparent texels are discarded in the shader.
-  if (opaqueCount > 0u) {
+  m_terrainShader.use();
+  gl::Uniform1i(m_terrainShader.uniform("u_terrainTextures"), 0);
+
+  // Terrain pass: opaque geometry first.
+  if (terrainOpaqueCount > 0u) {
+    gl::Disable(GL_BLEND);
+    gl::Uniform1i(m_terrainShader.uniform("u_opaquePass"), 1);
+    gl::DepthMask(GL_TRUE);
+    gl::DepthFunc(GL_LESS);
+    m_indirectBatcher.drawIndirect(terrainOpaqueCount, m_indirectBatcher.terrainOpaqueCommandBase());
+  }
+
+  // Terrain transparent pass, kept for future material effects.
+  if (terrainTransparentCount > 0u) {
+    gl::Enable(GL_BLEND);
+    gl::Uniform1i(m_terrainShader.uniform("u_opaquePass"), 0);
+    gl::DepthMask(GL_FALSE);
+    gl::DepthFunc(GL_LEQUAL);
+    m_indirectBatcher.drawIndirect(terrainTransparentCount, m_indirectBatcher.terrainTransparentCommandBase());
+  }
+
+  m_chunkShader.use();
+  gl::Uniform1i(m_chunkShader.uniform("u_blockTextures"), 0);
+
+  // Legacy block pass: opaque geometry first, then transparent materials.
+  if (blockOpaqueCount > 0u) {
     gl::Disable(GL_BLEND);
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
     gl::DepthMask(GL_TRUE);
     gl::DepthFunc(GL_LESS);
-    m_indirectBatcher.drawIndirect(opaqueCount, 0u);
+    m_indirectBatcher.drawIndirect(blockOpaqueCount, m_indirectBatcher.blockOpaqueCommandBase());
   }
 
-  // Pass 2: transparent geometry only, blended over the opaque pass.
-  if (transparentCount > 0u) {
+  if (blockTransparentCount > 0u) {
     gl::Enable(GL_BLEND);
     gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
     gl::DepthMask(GL_FALSE);
     gl::DepthFunc(GL_LEQUAL);
-    m_indirectBatcher.drawIndirect(transparentCount, m_indirectBatcher.transparentCommandBase());
+    m_indirectBatcher.drawIndirect(blockTransparentCount, m_indirectBatcher.blockTransparentCommandBase());
   }
 
   gl::BindVertexArray(0);

@@ -45,6 +45,10 @@ struct ChunkCullData {
     uint slotIndex;
     uint pad1;
     uint pad2;
+    uint renderFlags;
+    uint pad3;
+    uint pad4;
+    uint pad5;
 };
 
 layout(std430, binding = 0) readonly buffer InputChunks {

@@ -6,11 +6,53 @@
 #include <cmath>
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <stdexcept>
+
+namespace {
+
+auto loadShaderSourceFile(const std::string& relativePath) -> std::string {
+  namespace fs = std::filesystem;
+
+  const auto tryLoadFrom = [&](fs::path cursor) -> std::string {
+    for (int32_t depth = 0; depth < 12; ++depth) {
+      fs::path candidate = cursor / relativePath;
+      if (fs::exists(candidate) && fs::is_regular_file(candidate)) {
+        std::ifstream file(candidate, std::ios::binary);
+        if (!file.is_open()) {
+          throw std::runtime_error("Failed to open shader file: " + candidate.string());
+        }
+        return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+      }
+
+      if (!cursor.has_parent_path()) break;
+      cursor = cursor.parent_path();
+    }
+    return {};
+  };
+
+  if (auto source = tryLoadFrom(fs::path(__FILE__).parent_path()); !source.empty()) {
+    return source;
+  }
+
+  if (auto source = tryLoadFrom(fs::current_path()); !source.empty()) {
+    return source;
+  }
+
+  throw std::runtime_error("Failed to locate shader file: " + relativePath);
+}
+
+} // namespace
+
 namespace voxel {
 
 Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config,
                    ChunkMeshAllocator& meshAllocator)
   : m_window(window), m_config(config),
+    m_terrainShader(loadShaderSourceFile("src/render/shaders/terrain.vert"),
+                    loadShaderSourceFile("src/render/shaders/terrain.frag")),
     m_chunkShader(shaders::chunkVertex, shaders::chunkFragment),
     m_skyShader(shaders::skyVertex, shaders::skyFragment),
     m_cameraUbo(0, CAMERA_BLOCK_FLOATS * sizeof(float)),
@@ -22,10 +64,12 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
         return std::make_unique<IndirectBatcher>(poolCap);
     }()),
     m_chunkSyncer(m_meshAllocator, *m_indirectBatcher, config),
-    m_drawDispatcher(m_chunkShader, m_skyShader, m_textures, *m_indirectBatcher, m_masterVao, m_skyVao)
+    m_drawDispatcher(m_terrainShader, m_chunkShader, m_skyShader, m_textures, *m_indirectBatcher, m_masterVao, m_skyVao)
 {
   (void)blocks;
 
+  m_terrainShader.bindUniformBlock("CameraBlock", 0);
+  m_terrainShader.bindUniformBlock("TimeBlock", 2);
   m_chunkShader.bindUniformBlock("CameraBlock", 0);
   m_chunkShader.bindUniformBlock("TimeBlock", 2);
   m_skyShader.bindUniformBlock("CameraBlock", 0);

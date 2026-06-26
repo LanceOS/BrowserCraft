@@ -46,17 +46,43 @@ TEST_CASE("TerrainSampler exposes continuous density and layered materials", "[w
   REQUIRE(sampler.sampleDensity(8.0f, terrain.surfaceHeight, 8.0f) == Catch::Approx(0.0f));
   REQUIRE(sampler.sampleDensity(8.0f, terrain.surfaceHeight + 1.0f, 8.0f) == Catch::Approx(1.0f));
 
-  REQUIRE(sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY), 8.0f) == voxel::MaterialId::Grass);
-  REQUIRE(sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 1), 8.0f) == voxel::MaterialId::Dirt);
-  REQUIRE(sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 5), 8.0f) == voxel::MaterialId::Stone);
+  const auto grass = sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY), 8.0f,
+                                            glm::vec3(0.0f, 1.0f, 0.0f));
+  REQUIRE(grass.dominant() == voxel::MaterialId::Grass);
+  REQUIRE(grass.primary == voxel::MaterialId::Grass);
+  REQUIRE(grass.secondary == voxel::MaterialId::Dirt);
+
+  const auto steep = sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY), 8.0f,
+                                            glm::vec3(0.0f, 0.2f, 0.98f));
+  REQUIRE(steep.dominant() == voxel::MaterialId::Stone);
+
+  const auto dirt = sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 1), 8.0f,
+                                           glm::vec3(0.0f, 1.0f, 0.0f));
+  REQUIRE(dirt.dominant() == voxel::MaterialId::Dirt);
+  REQUIRE(dirt.primary == voxel::MaterialId::Dirt);
+  REQUIRE(dirt.secondary == voxel::MaterialId::Stone);
+
+  const auto stone = sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 5), 8.0f,
+                                            glm::vec3(0.0f, 1.0f, 0.0f));
+  REQUIRE(stone.dominant() == voxel::MaterialId::Stone);
+  REQUIRE(stone.primary == voxel::MaterialId::Stone);
 
   FixedClimateSource desert{{0.8f, 0.2f}};
   voxel::TerrainSampler desertSampler(desert, 42, makeFlatTerrainConfig());
   const auto desertTerrain = desertSampler.sampleTerrain(8.0f, 8.0f);
 
-  REQUIRE(desertSampler.sampleMaterial(8.0f, static_cast<float>(desertTerrain.surfaceY), 8.0f) == voxel::MaterialId::Sand);
-  REQUIRE(desertSampler.sampleMaterial(8.0f, static_cast<float>(desertTerrain.surfaceY - 1), 8.0f) == voxel::MaterialId::Sand);
-  REQUIRE(desertSampler.sampleMaterial(8.0f, static_cast<float>(desertTerrain.surfaceY - 5), 8.0f) == voxel::MaterialId::Stone);
+  const auto desertSurface = desertSampler.sampleMaterial(
+      8.0f, static_cast<float>(desertTerrain.surfaceY), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+  REQUIRE(desertSurface.dominant() == voxel::MaterialId::Sand);
+  REQUIRE(desertSurface.primary == voxel::MaterialId::Sand);
+
+  const auto desertShallow = desertSampler.sampleMaterial(
+      8.0f, static_cast<float>(desertTerrain.surfaceY - 1), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+  REQUIRE(desertShallow.dominant() == voxel::MaterialId::Sand);
+
+  const auto desertDeep = desertSampler.sampleMaterial(
+      8.0f, static_cast<float>(desertTerrain.surfaceY - 5), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+  REQUIRE(desertDeep.dominant() == voxel::MaterialId::Stone);
 }
 
 TEST_CASE("WorldGenPipeline sample helpers match the terrain sampler", "[worldgen][terrain]") {
@@ -73,12 +99,26 @@ TEST_CASE("WorldGenPipeline sample helpers match the terrain sampler", "[worldge
   REQUIRE(pipeline.sampleDensity(8.0f, terrain.surfaceHeight + 1.0f, 8.0f)
           == Catch::Approx(sampler.sampleDensity(8.0f, terrain.surfaceHeight + 1.0f, 8.0f)));
 
-  REQUIRE(pipeline.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY), 8.0f)
-          == sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY), 8.0f));
-  REQUIRE(pipeline.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 1), 8.0f)
-          == sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 1), 8.0f));
-  REQUIRE(pipeline.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 5), 8.0f)
-          == sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 5), 8.0f));
+  const auto pipelineGrass = pipeline.sampleMaterial(
+      8.0f, static_cast<float>(terrain.surfaceY), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+  const auto samplerGrass = sampler.sampleMaterial(
+      8.0f, static_cast<float>(terrain.surfaceY), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+  REQUIRE(pipelineGrass.dominant() == samplerGrass.dominant());
+  REQUIRE(pipelineGrass.blend == Catch::Approx(samplerGrass.blend));
+
+  const auto pipelineDirt = pipeline.sampleMaterial(
+      8.0f, static_cast<float>(terrain.surfaceY - 1), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+  const auto samplerDirt = sampler.sampleMaterial(
+      8.0f, static_cast<float>(terrain.surfaceY - 1), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+  REQUIRE(pipelineDirt.dominant() == samplerDirt.dominant());
+  REQUIRE(pipelineDirt.blend == Catch::Approx(samplerDirt.blend));
+
+  const auto pipelineStone = pipeline.sampleMaterial(
+      8.0f, static_cast<float>(terrain.surfaceY - 5), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+  const auto samplerStone = sampler.sampleMaterial(
+      8.0f, static_cast<float>(terrain.surfaceY - 5), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+  REQUIRE(pipelineStone.dominant() == samplerStone.dominant());
+  REQUIRE(pipelineStone.blend == Catch::Approx(samplerStone.blend));
 }
 
 TEST_CASE("WorldGenPipeline generates terrain", "[worldgen]") {
