@@ -86,7 +86,7 @@ public:
   [[nodiscard]] auto getChunkSlot(const Chunk& chunk) -> ChunkSlot;
 
   /// Resolve world coords to a block reference.
-  [[nodiscard]] auto resolveBlock(int32_t worldX, int32_t worldY, int32_t worldZ) -> std::optional<WorldBlockRef>;
+  [[nodiscard]] auto resolveBlock(int32_t worldX, int32_t worldY, int32_t worldZ) const -> std::optional<WorldBlockRef>;
 
   /// Mark a chunk as uploaded to GPU.
   void markUploaded(const Chunk& chunk);

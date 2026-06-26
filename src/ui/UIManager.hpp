@@ -68,6 +68,9 @@ public:
   /// Render the hotbar HUD at the bottom of the screen.
   void renderHotbar(int32_t selectedSlot);
 
+  /// Set the currently selected hotbar slot for the HUD.
+  void setSelectedHotbarSlot(int32_t slot);
+
   /// Render inventory panel.
   void renderInventory(bool open);
 
@@ -114,6 +117,7 @@ private:
   Callbacks m_callbacks;
   UIState m_state = UIState::MainMenu;
   bool m_inventoryOpen = false;
+  int32_t m_selectedHotbarSlot = -1;
   // FPS counter
   double m_fpsLastSampleTime = 0.0;
   int m_fpsFrameCount = 0;

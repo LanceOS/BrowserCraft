@@ -14,6 +14,9 @@
 
 namespace voxel {
 
+class BlockInteractionAudio;
+class BlockRegistry;
+
 /// Handles first-person player controls: mouse look, WASD movement,
 /// gravity, collision, jumping, flying, and camera synchronisation.
 ///
@@ -29,6 +32,8 @@ public:
     ComponentStore<cmp::RigidBody>& bodies,
     ComponentStore<cmp::Player>& players,
     World& world,
+    BlockRegistry& blocks,
+    BlockInteractionAudio* blockAudio,
     CameraView& camera,
     const GameConfig& config,
     UIManager& ui,
@@ -46,19 +51,25 @@ public:
 private:
   void applyMouseLook(float dt);
   void applyMovement(float dt, cmp::Transform& transform, cmp::RigidBody& body, cmp::Player& player, const glm::vec3& moveDir);
+  void handleBlockInteraction(const cmp::Transform& transform, const cmp::RigidBody& body, const cmp::Player& player);
   void syncCameraFromPlayer();
   void handleInventoryToggle();
+  [[nodiscard]] auto selectedHotbarBlockId(const cmp::Player& player) const -> uint8_t;
 
   static constexpr float kMouseSensitivity = 0.0025f;
   static constexpr float kMaxPitch = 1.553343f; // ~89 degrees
   static constexpr float kJumpSpeed = 8.0f;
   static constexpr float kSwimSpeed = 3.5f;
+  static constexpr float kReachDistance = 6.0f;
 
   GLFWwindow* m_window;
   InputState& m_input;
   ComponentStore<cmp::Transform>& m_transforms;
   ComponentStore<cmp::RigidBody>& m_bodies;
   ComponentStore<cmp::Player>& m_players;
+  World& m_world;
+  BlockRegistry& m_blocks;
+  BlockInteractionAudio* m_blockAudio;
   CameraView& m_camera;
   UIManager& m_ui;
   GameSession& m_session;

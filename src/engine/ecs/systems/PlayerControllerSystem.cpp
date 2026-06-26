@@ -1,8 +1,106 @@
 #include "PlayerControllerSystem.hpp"
 #include "engine/core/TickContext.hpp"
 #include "engine/ecs/EntityManager.hpp"
+#include "game/BlockInteractionAudio.hpp"
+#include "world/BlockIds.hpp"
+#include "world/BlockRaycast.hpp"
+#include "world/BlockRegistry.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
+
+namespace {
+
+constexpr std::array<uint8_t, 9> kDebugHotbarPalette = {
+  voxel::BlockId::GRASS,
+  voxel::BlockId::DIRT,
+  voxel::BlockId::STONE,
+  voxel::BlockId::SAND,
+  voxel::BlockId::OAK_WOOD,
+  voxel::BlockId::OAK_PLANKS,
+  voxel::BlockId::OAK_LEAVES,
+  voxel::BlockId::WATER,
+  voxel::BlockId::LAVA,
+};
+
+void syncHotbarSelection(const voxel::InputState& input, voxel::cmp::Player& player) {
+  if (input.isPressed(voxel::InputState::KEY_1)) player.selectedHotbarSlot = 0;
+  else if (input.isPressed(voxel::InputState::KEY_2)) player.selectedHotbarSlot = 1;
+  else if (input.isPressed(voxel::InputState::KEY_3)) player.selectedHotbarSlot = 2;
+  else if (input.isPressed(voxel::InputState::KEY_4)) player.selectedHotbarSlot = 3;
+  else if (input.isPressed(voxel::InputState::KEY_5)) player.selectedHotbarSlot = 4;
+  else if (input.isPressed(voxel::InputState::KEY_6)) player.selectedHotbarSlot = 5;
+  else if (input.isPressed(voxel::InputState::KEY_7)) player.selectedHotbarSlot = 6;
+  else if (input.isPressed(voxel::InputState::KEY_8)) player.selectedHotbarSlot = 7;
+  else if (input.isPressed(voxel::InputState::KEY_9)) player.selectedHotbarSlot = 8;
+}
+
+auto highestGroundInFootprint(
+    const voxel::EntityCollisions& collisions,
+    const voxel::cmp::RigidBody& body,
+    const glm::vec3& position,
+    int32_t startY) -> int32_t
+{
+  const int32_t minGX = static_cast<int32_t>(std::floor(position.x + body.aabbMin.x));
+  const int32_t maxGX = static_cast<int32_t>(std::floor(position.x + body.aabbMax.x));
+  const int32_t minGZ = static_cast<int32_t>(std::floor(position.z + body.aabbMin.z));
+  const int32_t maxGZ = static_cast<int32_t>(std::floor(position.z + body.aabbMax.z));
+  int32_t highest = -1;
+
+  for (int32_t gz = minGZ; gz <= maxGZ; ++gz) {
+    for (int32_t gx = minGX; gx <= maxGX; ++gx) {
+      const int32_t groundY = collisions.groundHeightAt(
+          static_cast<float>(gx) + 0.5f,
+          static_cast<float>(gz) + 0.5f,
+          startY);
+      if (groundY > highest) highest = groundY;
+    }
+  }
+
+  return highest;
+}
+
+auto lookDirectionFromPlayer(const voxel::cmp::Player& player) -> glm::vec3 {
+  const float cosPitch = std::cos(player.pitch);
+  return glm::normalize(glm::vec3(
+      cosPitch * std::sin(player.yaw),
+      std::sin(player.pitch),
+      -cosPitch * std::cos(player.yaw)));
+}
+
+auto isReplaceableBlock(const voxel::BlockRegistry& blocks, uint8_t blockId) -> bool {
+  if (blockId == 0) return true;
+  const auto* def = blocks.tryGet(blockId);
+  return def && !def->collision.hasVolume();
+}
+
+auto overlapsPlacedBlock(
+    const voxel::cmp::Transform& transform,
+    const voxel::cmp::RigidBody& body,
+    const voxel::BlockDefinition& blockDef,
+    int32_t worldX,
+    int32_t worldY,
+    int32_t worldZ) -> bool
+{
+  if (!blockDef.collision.hasVolume()) return false;
+
+  const glm::vec3 playerMin = transform.position + body.aabbMin;
+  const glm::vec3 playerMax = transform.position + body.aabbMax;
+  const glm::vec3 blockMin(
+      static_cast<float>(worldX) + blockDef.collision.minX,
+      static_cast<float>(worldY) + blockDef.collision.minY,
+      static_cast<float>(worldZ) + blockDef.collision.minZ);
+  const glm::vec3 blockMax(
+      static_cast<float>(worldX) + blockDef.collision.maxX,
+      static_cast<float>(worldY) + blockDef.collision.maxY,
+      static_cast<float>(worldZ) + blockDef.collision.maxZ);
+
+  return playerMin.x < blockMax.x && playerMax.x > blockMin.x &&
+         playerMin.y < blockMax.y && playerMax.y > blockMin.y &&
+         playerMin.z < blockMax.z && playerMax.z > blockMin.z;
+}
+
+} // namespace
 
 namespace voxel {
 
@@ -13,6 +111,8 @@ PlayerControllerSystem::PlayerControllerSystem(
     ComponentStore<cmp::RigidBody>& bodies,
     ComponentStore<cmp::Player>& players,
     World& world,
+    BlockRegistry& blocks,
+    BlockInteractionAudio* blockAudio,
     CameraView& camera,
     const GameConfig& config,
     UIManager& ui,
@@ -23,6 +123,9 @@ PlayerControllerSystem::PlayerControllerSystem(
   , m_transforms(transforms)
   , m_bodies(bodies)
   , m_players(players)
+  , m_world(world)
+  , m_blocks(blocks)
+  , m_blockAudio(blockAudio)
   , m_camera(camera)
   , m_ui(ui)
   , m_session(session)
@@ -63,6 +166,7 @@ void PlayerControllerSystem::update(TickContext& ctx) {
   auto& body = m_bodies.get(idx);
   auto& player = m_players.get(idx);
 
+  syncHotbarSelection(m_input, player);
   const bool canControl = (m_session.state() == GameState::InGame ||
                           m_session.state() == GameState::GeneratingWorld) &&
     (m_ui.state() == UIState::InGame) &&
@@ -109,6 +213,7 @@ void PlayerControllerSystem::update(TickContext& ctx) {
   }
 
   applyMovement(ctx.dt, transform, body, player, moveDir);
+  handleBlockInteraction(transform, body, player);
   syncCameraFromPlayer();
 }
 
@@ -161,15 +266,17 @@ void PlayerControllerSystem::applyMovement(
   // instead of relying on body.onGround, because body.onGround can be
   // spuriously zeroed by sub-step iteration quirks (step-assist raising,
   // overshoot, etc.) even when the player is visually on the surface.
-  int32_t gY = m_collisions.groundHeightAt(
-      transform.position.x, transform.position.z,
+  int32_t gY = highestGroundInFootprint(
+      m_collisions,
+      body,
+      transform.position,
       std::max(0, static_cast<int32_t>(
           std::floor(transform.position.y + body.aabbMin.y))));
-  bool grounded = false;
+  bool grounded = body.onGround != 0;
   if (gY >= 0) {
     float feetY = transform.position.y + body.aabbMin.y;
     float surfY = static_cast<float>(gY + 1);
-    grounded = (feetY - surfY) <= 0.55f; // covers kStepHeight (0.52) so step-assist raising doesn't prevent jump
+    grounded = grounded || (feetY - surfY) <= 0.55f; // covers kStepHeight (0.52) so step-assist raising doesn't prevent jump
   }
 
   // Jump trigger: tap Space (isPressed) for a single jump, or hold Space
@@ -217,6 +324,61 @@ void PlayerControllerSystem::applyMovement(
   }
 }
 
+void PlayerControllerSystem::handleBlockInteraction(
+    const cmp::Transform& transform,
+    const cmp::RigidBody& body,
+    const cmp::Player& player)
+{
+  if (!m_input.pointerLocked) return;
+  if (!m_input.isMousePressed(GLFW_MOUSE_BUTTON_LEFT) &&
+      !m_input.isMousePressed(GLFW_MOUSE_BUTTON_RIGHT)) {
+    return;
+  }
+
+  const glm::vec3 origin = transform.position + glm::vec3(0.0f, player.eyeHeight, 0.0f);
+  const glm::vec3 lookDir = lookDirectionFromPlayer(player);
+  const BlockRaycastHit hit = raycastFirstBlock(m_world, origin, lookDir, kReachDistance);
+  if (!hit.hit) return;
+
+  if (m_input.isMousePressed(GLFW_MOUSE_BUTTON_LEFT)) {
+    if (hit.blockId == BlockId::BEDROCK) return;
+    if (m_world.setBlockIdAt(hit.block.x, hit.block.y, hit.block.z, BlockId::AIR) &&
+        m_blockAudio != nullptr) {
+      m_blockAudio->onBlockBroken(
+          static_cast<float>(hit.block.x),
+          static_cast<float>(hit.block.y),
+          static_cast<float>(hit.block.z),
+          hit.blockId);
+    }
+    return;
+  }
+
+  const uint8_t selectedBlockId = selectedHotbarBlockId(player);
+  if (selectedBlockId == 0) return;
+
+  const auto* placeDef = m_blocks.tryGet(selectedBlockId);
+  if (!placeDef) return;
+
+  const uint8_t currentBlockId =
+      m_world.getBlockIdAt(hit.previous.x, hit.previous.y, hit.previous.z);
+  if (!isReplaceableBlock(m_blocks, currentBlockId)) return;
+  if (overlapsPlacedBlock(transform, body, *placeDef,
+                          hit.previous.x, hit.previous.y, hit.previous.z)) {
+    return;
+  }
+
+  m_world.setBlockIdAt(
+      hit.previous.x,
+      hit.previous.y,
+      hit.previous.z,
+      selectedBlockId);
+}
+
+auto PlayerControllerSystem::selectedHotbarBlockId(const cmp::Player& player) const -> uint8_t {
+  if (player.selectedHotbarSlot >= kDebugHotbarPalette.size()) return 0;
+  return kDebugHotbarPalette[player.selectedHotbarSlot];
+}
+
 void PlayerControllerSystem::syncCameraFromPlayer() {
   int32_t idx = m_cachedPlayerIndex;
   if (idx < 0 ||
@@ -227,12 +389,7 @@ void PlayerControllerSystem::syncCameraFromPlayer() {
   const auto& transform = m_transforms.get(idx);
   const auto& player = m_players.get(idx);
 
-  float cp = std::cos(player.pitch);
-  m_camera.forward = glm::normalize(glm::vec3(
-    cp * std::sin(player.yaw),
-    std::sin(player.pitch),
-    -cp * std::cos(player.yaw)
-  ));
+  m_camera.forward = lookDirectionFromPlayer(player);
   m_camera.right = glm::normalize(glm::cross(m_camera.forward, m_camera.up));
   m_camera.position = transform.position + glm::vec3(0.0f, player.eyeHeight, 0.0f);
   m_cameraDirty = true;

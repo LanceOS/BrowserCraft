@@ -221,8 +221,8 @@ void GameOrchestrator::initSystems(Game& game) {
   // --- Player controller ---
   auto controller = std::make_unique<PlayerControllerSystem>(
     game.m_window, game.m_input, game.m_transforms, game.m_bodies, game.m_players,
-    game.m_worldController->world(), game.m_camera, game.m_config, *game.m_ui, game.m_session,
-    game.m_cameraDirty);
+    game.m_worldController->world(), game.m_blocks, game.m_blockAudio.get(), game.m_camera,
+    game.m_config, *game.m_ui, game.m_session, game.m_cameraDirty);
   // Keep a non-owning pointer for direct access (e.g. pushPlayerOutOfBlocks).
   game.m_playerController = controller.get();
   game.m_systems.add(std::move(controller));
@@ -302,7 +302,7 @@ void GameOrchestrator::startWorld(Game& game, GameMode mode, const std::string& 
 }
 
 auto GameOrchestrator::playerIndex(const Game& game) -> int32_t {
-  if (game.m_playerEntityId == 0) return -1;
+  if (game.m_playerEntityId < 0) return -1;
   return EntityManager::indexOf(game.m_playerEntityId);
 }
 
@@ -387,6 +387,7 @@ void GameOrchestrator::run(Game& game) {
 
       if (game.m_input.isPressed(InputState::KEY_ESCAPE)) {
         if (game.m_ui->state() == UIState::InGame) {
+          game.m_ui->setInventoryOpen(false);
           game.m_session.pause();
           game.m_ui->showPauseMenu();
           glfwSetInputMode(game.m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
@@ -397,6 +398,12 @@ void GameOrchestrator::run(Game& game) {
         }
       }
 
+      const int32_t playerIdx = GameOrchestrator::playerIndex(game);
+      int32_t selectedHotbarSlot = -1;
+      if (playerIdx >= 0 && game.m_players.has(playerIdx)) {
+        selectedHotbarSlot = game.m_players.get(playerIdx).selectedHotbarSlot;
+      }
+      game.m_ui->setSelectedHotbarSlot(selectedHotbarSlot);
       game.m_ui->beginFrame();
       GameOrchestrator::render(game, 0.0f, game.m_dayNightCycle.time());
       game.m_ui->endFrame();

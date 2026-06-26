@@ -127,7 +127,7 @@ private:
   PlayerControllerSystem* m_playerController = nullptr;
   bool m_spawnedToSurface = false;
   bool m_cameraDirty = true;
-  int32_t m_playerEntityId = 0;
+  int32_t m_playerEntityId = -1;
 };
 
 } // namespace voxel

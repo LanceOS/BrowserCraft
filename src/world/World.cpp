@@ -5,6 +5,13 @@
 #include <cstring>
 
 namespace voxel {
+namespace {
+
+inline auto voxelIndex(int32_t worldY, int32_t localX, int32_t localZ, int32_t chunkSize) -> int32_t {
+  return (worldY * chunkSize + localZ) * chunkSize + localX;
+}
+
+} // namespace
 
 World::World(SharedPool& pool,
              BlockRegistry& blocks,
@@ -68,15 +75,15 @@ auto World::getChunkSlot(const Chunk& chunk) -> ChunkSlot {
   return m_pool.view(chunk.slotIndex);
 }
 
-auto World::resolveBlock(int32_t worldX, int32_t worldY, int32_t worldZ) -> std::optional<WorldBlockRef> {
+auto World::resolveBlock(int32_t worldX, int32_t worldY, int32_t worldZ) const -> std::optional<WorldBlockRef> {
   if (worldY < 0 || worldY >= m_config.worldHeight) return std::nullopt;
-  int32_t cx = worldToChunk(worldX, m_config.chunkSize);
-  int32_t cz = worldToChunk(worldZ, m_config.chunkSize);
+  int32_t cx = floorToChunk(worldX, m_config.chunkSize);
+  int32_t cz = floorToChunk(worldZ, m_config.chunkSize);
   auto* chunk = m_chunks.get(cx, cz);
   if (!chunk) return std::nullopt;
   int32_t localX = mod(worldX, m_config.chunkSize);
   int32_t localZ = mod(worldZ, m_config.chunkSize);
-  int32_t idx = (worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX;
+  int32_t idx = voxelIndex(worldY, localX, localZ, m_config.chunkSize);
   return WorldBlockRef{chunk, localX, localZ, idx};
 }
 
@@ -94,7 +101,7 @@ auto World::setBlockIdAt(int32_t worldX, int32_t worldY, int32_t worldZ, uint8_t
   auto slot = m_pool.view(ref->chunk->slotIndex);
   if (slot.voxels[ref->index] == blockId) return false;
   m_store.setBlockId(*ref->chunk, worldY, ref->localX, ref->localZ, blockId);
-  if (blockId == 0) slot.redstone[ref->index] = 0;
+  slot.redstone[ref->index] = 0;
   markChunkDirty(ref->chunk->chunkX, ref->chunk->chunkZ);
   auto* mutChunk = m_chunks.getMut(ref->chunk->chunkX, ref->chunk->chunkZ);
   if (mutChunk) {
@@ -109,9 +116,9 @@ auto World::setBlockIdAt(int32_t worldX, int32_t worldY, int32_t worldZ, uint8_t
 }
 
 auto World::getRedstonePackedAt(int32_t worldX, int32_t worldY, int32_t worldZ) const -> uint8_t {
-  auto ref = const_cast<World*>(this)->resolveBlock(worldX, worldY, worldZ);
+  auto ref = resolveBlock(worldX, worldY, worldZ);
   if (!ref) return 0;
-  auto slot = const_cast<World*>(this)->m_pool.view(ref->chunk->slotIndex);
+  auto slot = m_pool.view(ref->chunk->slotIndex);
   return slot.redstone[ref->index];
 }
 

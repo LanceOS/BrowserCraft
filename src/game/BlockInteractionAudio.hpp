@@ -3,6 +3,8 @@
 #include "engine/audio/AudioEngine.hpp"
 #include "world/BlockRegistry.hpp"
 #include "world/BlockIds.hpp"
+#include <mutex>
+#include <random>
 
 namespace voxel {
 
@@ -21,13 +23,13 @@ public:
     if (!def) return;
 
     auto soundId = audio::SoundId::STONE_BREAK;
-    if (blockId == BlockId::DIRT || blockId == BlockId::STONE || def->material.foliage) {
+    if (blockId == BlockId::GRASS || blockId == BlockId::DIRT || def->material.foliage) {
       soundId = audio::SoundId::GRASS_BREAK;
     }
 
     auto* buffer = m_registry.get(soundId);
     if (!buffer) return;
-    m_engine.playOneShot(*buffer, x + 0.5f, y + 0.5f, z + 0.5f, 1.0f, 0.85f + 0.3f * (rand() / float(RAND_MAX)));
+    m_engine.playOneShot(*buffer, x + 0.5f, y + 0.5f, z + 0.5f, 1.0f, randomPitch(0.85f, 1.15f));
   }
 
   /// Play a step sound.
@@ -37,19 +39,27 @@ public:
     if (!def) return;
 
     auto soundId = audio::SoundId::STONE_STEP;
-    if (blockId == BlockId::DIRT || blockId == BlockId::STONE || def->material.foliage) {
+    if (blockId == BlockId::GRASS || blockId == BlockId::DIRT || def->material.foliage) {
       soundId = audio::SoundId::GRASS_STEP;
     }
 
     auto* buffer = m_registry.get(soundId);
     if (!buffer) return;
-    m_engine.playOneShot(*buffer, x, y, z, 0.4f, 0.9f + 0.2f * (rand() / float(RAND_MAX)));
+    m_engine.playOneShot(*buffer, x, y, z, 0.4f, randomPitch(0.9f, 1.1f));
   }
 
 private:
+  auto randomPitch(float minPitch, float maxPitch) -> float {
+    std::lock_guard<std::mutex> lock(m_rngMutex);
+    std::uniform_real_distribution<float> dist(minPitch, maxPitch);
+    return dist(m_rng);
+  }
+
   audio::AudioEngine& m_engine;
   audio::AudioRegistry& m_registry;
   BlockRegistry& m_blocks;
+  std::mt19937 m_rng{std::random_device{}()};
+  std::mutex m_rngMutex;
 };
 
 } // namespace voxel

@@ -9,6 +9,7 @@
 #include "engine/ecs/components/Components.hpp"
 #include "engine/alloc/SharedPool.hpp"
 #include "world/ChunkCoords.hpp"
+#include "world/BlockRaycast.hpp"
 #include "world/World.hpp"
 #include "world/BlockRegistry.hpp"
 #include "MockWorker.hpp"
@@ -159,6 +160,23 @@ TEST_CASE("InputState mouse delta accumulate and clear", "[input]") {
   REQUIRE(input.mouseDY() == Approx(0.0f));
 }
 
+TEST_CASE("InputState mouse buttons distinguish pressed from held", "[input]") {
+  InputState input;
+
+  input.setMouseButton(GLFW_MOUSE_BUTTON_LEFT, true);
+  REQUIRE(input.isMousePressed(GLFW_MOUSE_BUTTON_LEFT));
+  REQUIRE(input.isMouseHeld(GLFW_MOUSE_BUTTON_LEFT));
+
+  input.clearFrameState();
+  REQUIRE_FALSE(input.isMousePressed(GLFW_MOUSE_BUTTON_LEFT));
+  REQUIRE(input.isMouseHeld(GLFW_MOUSE_BUTTON_LEFT));
+  REQUIRE(input.mouseButton(GLFW_MOUSE_BUTTON_LEFT) == 2);
+
+  input.setMouseButton(GLFW_MOUSE_BUTTON_LEFT, false);
+  REQUIRE_FALSE(input.isMousePressed(GLFW_MOUSE_BUTTON_LEFT));
+  REQUIRE_FALSE(input.isMouseHeld(GLFW_MOUSE_BUTTON_LEFT));
+}
+
 TEST_CASE("InputState setKeyByCode maps GLFW keys correctly", "[input]") {
   InputState input;
 
@@ -172,12 +190,16 @@ TEST_CASE("InputState setKeyByCode maps GLFW keys correctly", "[input]") {
   input.setKeyByCode(GLFW_KEY_SPACE, true);
   REQUIRE(input.isHeld(InputState::KEY_SPACE));
 
+  input.setKeyByCode(GLFW_KEY_RIGHT_CONTROL, true);
+  REQUIRE(input.isHeld(InputState::KEY_CTRL));
+
   // Unknown key should be ignored — W and E remain unchanged
   input.clearFrameState(); // demote W/E from pressed to held
   input.setKeyByCode(GLFW_KEY_F1, true);
   CHECK(input.isHeld(InputState::KEY_W));   // still held (F1 didn't unpress it)
   CHECK(input.isHeld(InputState::KEY_E));   // still held
   CHECK(input.isHeld(InputState::KEY_SPACE)); // still held
+  CHECK(input.isHeld(InputState::KEY_CTRL)); // right control maps too
 }
 
 // ===========================================================================
@@ -303,6 +325,35 @@ TEST_CASE("isSolidInChunk reads correct block data", "[world][collision]") {
   CHECK(world.isSolidInChunk(3, 5, 7, *chunk)); // slab has partial volume
 }
 
+TEST_CASE("Block raycast returns hit block and previous air cell", "[world][interaction]") {
+  auto cfg = makeTestConfig();
+  auto pool = SharedPool::create(16, makeDims(cfg));
+  BlockRegistry blocks(256);
+  registerTestBlocks(blocks);
+
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
+
+  world.update(glm::vec3(8.0f, 40.0f, 8.0f));
+  REQUIRE(world.setBlockIdAt(3, 5, 3, 1));
+
+  const BlockRaycastHit hit = raycastFirstBlock(
+      world,
+      glm::vec3(3.5f, 5.5f, 0.5f),
+      glm::vec3(0.0f, 0.0f, 1.0f),
+      10.0f);
+
+  REQUIRE(hit.hit);
+  CHECK(hit.block.x == 3);
+  CHECK(hit.block.y == 5);
+  CHECK(hit.block.z == 3);
+  CHECK(hit.previous.x == 3);
+  CHECK(hit.previous.y == 5);
+  CHECK(hit.previous.z == 2);
+  CHECK(hit.blockId == 1);
+}
+
 // ===========================================================================
 // Ground height scan logic
 // ===========================================================================
@@ -425,6 +476,18 @@ TEST_CASE("Player spawn centers on the selected surface column", "[world][spawn]
     int32_t idx = (y * cfg.chunkSize + 0) * cfg.chunkSize + 1;
     slot.voxels[idx] = 1;
   }
+
+  // Finalize the full 3x3 spawn neighborhood so the spawn system can safely
+  // wait for all nearby columns before choosing the best surface.
+  for (int32_t cz = -1; cz <= 1; ++cz) {
+    for (int32_t cx = -1; cx <= 1; ++cx) {
+      auto* readyChunk = world.getChunk(cx, cz);
+      REQUIRE(readyChunk != nullptr);
+      world.onWorldGenDone(readyChunk->slotIndex);
+      CHECK(readyChunk->state >= ChunkState::VoxelsReady);
+    }
+  }
+  CHECK(world.hasTerrain());
 
   EntityManager em(8);
   ComponentStore<cmp::Transform> transforms(8);

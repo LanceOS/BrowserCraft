@@ -82,7 +82,7 @@ void UIManager::beginFrame() {
     case UIState::Paused:      renderPauseMenu(); break;
     case UIState::Options:     renderOptionsMenu(); break;
     case UIState::InGame:
-      renderHotbar(-1);
+      renderHotbar(m_selectedHotbarSlot);
       renderInventory(m_inventoryOpen);
       if (m_showFps) renderFpsOverlay();
       break;
@@ -98,7 +98,18 @@ void UIManager::endFrame() {
 void UIManager::showMainMenu() { m_state = UIState::MainMenu; }
 void UIManager::showPauseMenu() { m_state = UIState::Paused; }
 void UIManager::showOptions() { m_state = UIState::Options; }
-void UIManager::clearUI() { m_state = UIState::InGame; }
+void UIManager::clearUI() {
+  m_state = UIState::InGame;
+  m_inventoryOpen = false;
+}
+
+void UIManager::setSelectedHotbarSlot(int32_t slot) {
+  if (slot < 0 || slot >= 9) {
+    m_selectedHotbarSlot = -1;
+    return;
+  }
+  m_selectedHotbarSlot = slot;
+}
 
 void UIManager::handleAction(const std::string& action) {
   if (action == "resume-game") {
