@@ -310,6 +310,25 @@ TEST_CASE("SettingsRepository persists across sessions", "[save][settings][persi
   fs::remove_all(tmpDir);
 }
 
+TEST_CASE("SaveOrchestrator clamps loaded render distance", "[save][orchestrator][settings]") {
+  auto tmpDir = fs::temp_directory_path() / "voxel_test_orch_settings";
+  fs::remove_all(tmpDir);
+  fs::create_directories(tmpDir);
+
+  {
+    voxel::SettingsRepository repo((tmpDir / "settings.db").string());
+    repo.setInt("renderDistance", 40);
+    repo.setBool("showFps", false);
+  }
+
+  voxel::SaveOrchestrator orch(tmpDir.string());
+  auto settings = orch.loadSettings();
+  REQUIRE(settings.renderDistance == voxel::MAX_RENDER_DISTANCE);
+  REQUIRE(settings.showFps == false);
+
+  fs::remove_all(tmpDir);
+}
+
 TEST_CASE("SaveOrchestrator buildWorldEntries", "[save][orchestrator]") {
   std::vector<voxel::WorldMetadata> worlds;
 

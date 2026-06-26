@@ -160,20 +160,21 @@ void GameOrchestrator::initialize(Game& game, GLFWwindow* window, const Game::Op
   // Dedicated I/O pool for async chunk loading (1-2 threads; disk I/O is serial-bound)
   game.m_ioPool = std::make_unique<WorkerThreadPool>(std::max(1, threads / 4));
 
-  buildRuntimeStack(game);
-
   game.m_saveDir = options.saveDir;
   game.m_currentSaveSlug = options.saveSlotId.empty() ? std::string("default") : options.saveSlotId;
-  game.m_worldController->configureSaveWorld(game.m_saveDir, game.m_currentSaveSlug, false, game.m_ioPool.get());
 
   // Initialize save system orchestrator
   game.m_saveOrchestrator = std::make_unique<SaveOrchestrator>(game.m_saveDir);
 
-  // Load saved settings (apply to UI after it's constructed below)
+  // Load saved settings before building the runtime stack so the chunk pool,
+  // world, and renderer all agree on render distance from the first frame.
   auto saved = game.m_saveOrchestrator->loadSettings();
-  int32_t savedRd = std::clamp(saved.renderDistance, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
+  int32_t savedRd = saved.renderDistance;
   game.m_config.renderDistance = savedRd;
   game.m_session.setRenderDistance(savedRd);
+
+  buildRuntimeStack(game);
+  game.m_worldController->configureSaveWorld(game.m_saveDir, game.m_currentSaveSlug, false, game.m_ioPool.get());
 
   game.m_audioRegistry.seedBuiltinSounds();
   game.m_blockAudio = std::make_unique<BlockInteractionAudio>(game.m_audioEngine, game.m_audioRegistry, game.m_blocks);
@@ -196,7 +197,7 @@ void GameOrchestrator::initialize(Game& game, GLFWwindow* window, const Game::Op
   });
 
   // Apply saved settings to the now-constructed UI
-  game.m_ui->setRenderDistance(saved.renderDistance);
+  game.m_ui->setRenderDistance(savedRd);
   game.m_ui->setShowFps(saved.showFps);
 
   if (options.initialState == GameState::MainMenu) {
