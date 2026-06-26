@@ -1,6 +1,7 @@
 #include "VanillaBlockFactory.hpp"
 #include "engine/assets/AssetManager.hpp"
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 void VanillaBlockFactory::registerAll(BlockRegistry& registry) {

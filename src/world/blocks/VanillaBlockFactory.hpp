@@ -2,6 +2,7 @@
 
 #include "world/BlockFactory.hpp"
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Concrete factory that populates the BlockRegistry with vanilla blocks

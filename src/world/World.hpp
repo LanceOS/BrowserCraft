@@ -19,6 +19,7 @@
 #include <functional>
 #include <utility>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 struct WorldBlockRef {

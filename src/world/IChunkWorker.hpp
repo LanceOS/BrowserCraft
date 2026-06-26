@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Interface for asynchronous chunk generation and meshing.

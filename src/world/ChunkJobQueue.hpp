@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <unordered_map>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 class ChunkManager;

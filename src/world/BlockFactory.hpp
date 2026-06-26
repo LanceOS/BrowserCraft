@@ -2,6 +2,7 @@
 
 #include "world/BlockRegistry.hpp"
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Abstract factory contract: subclasses decide HOW block definitions are

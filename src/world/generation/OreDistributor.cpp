@@ -2,6 +2,7 @@
 #include "world/BlockIds.hpp"
 #include <cmath>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 struct OreConfig { uint8_t blockId; int32_t minY, maxY, veinsPerChunk, veinSize; };

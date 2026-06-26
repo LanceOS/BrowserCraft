@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <algorithm>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 WorldController::WorldController(SharedPool& pool, BlockRegistry& blocks, const GameConfig& config)

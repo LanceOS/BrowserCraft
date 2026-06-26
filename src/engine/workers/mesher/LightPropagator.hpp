@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <vector>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel::mesher {
 
 inline constexpr uint8_t MAX_LIGHT_LEVEL = 15u;
