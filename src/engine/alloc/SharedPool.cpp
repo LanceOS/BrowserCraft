@@ -16,6 +16,7 @@ constexpr size_t kGenSeedOffset = 20;
 constexpr size_t kRenderFlagsOffset = 24;
 constexpr size_t kOpaqueIndexCountOffset = 28;
 constexpr size_t kTransparentIndexCountOffset = 32;
+constexpr size_t kDensityInitializedOffset = 36;
 
 } // namespace
 
@@ -32,13 +33,18 @@ void SharedPool::computeLayout() {
   m_voxelsBytes = static_cast<size_t>(m_dims.sizeX) * m_dims.sizeY * m_dims.sizeZ;
   m_lightBytes = m_voxelsBytes;
   m_redstoneBytes = m_voxelsBytes;
+  // Size of density grid: (sizeX + 2) * (sizeY + 1) * (sizeZ + 2) floats
+  size_t densityCount = (static_cast<size_t>(m_dims.sizeX) + 2) *
+                        (static_cast<size_t>(m_dims.sizeY) + 1) *
+                        (static_cast<size_t>(m_dims.sizeZ) + 2);
+  m_densityBytes = densityCount * sizeof(float);
   // Vertex and index buffers removed — mesher writes directly to GPU VBO/IBO
   m_vertsBytes = 0;
   m_indicesBytes = 0;
 
   size_t unaligned =
     m_headerBytes + m_voxelsBytes + m_lightBytes +
-    m_redstoneBytes + m_vertsBytes + m_indicesBytes;
+    m_redstoneBytes + m_densityBytes + m_vertsBytes + m_indicesBytes;
   m_slotByteSize = (unaligned + 63) & ~size_t{63};
 }
 
@@ -58,9 +64,11 @@ auto SharedPool::acquire() -> std::optional<ChunkSlot> {
   *slot.indexCount = 0;
   *slot.opaqueIndexCount = 0;
   *slot.transparentIndexCount = 0;
+  *slot.densityInitialized = 0;
   std::memset(slot.voxels, 0, m_voxelsBytes);
   std::memset(slot.light, 0, m_lightBytes);
   std::memset(slot.redstone, 0, m_redstoneBytes);
+  std::memset(slot.density, 0, m_densityBytes);
   return slot;
 }
 
@@ -72,6 +80,7 @@ void SharedPool::release(ChunkSlot slot) {
   *slot.indexCount = 0u;
   *slot.opaqueIndexCount = 0u;
   *slot.transparentIndexCount = 0u;
+  *slot.densityInitialized = 0;
   m_freeList[m_freeHead++] = slot.slotIndex;
 }
 
@@ -112,9 +121,11 @@ auto SharedPool::view(int32_t slotIndex) const -> ChunkSlot {
   slot.chunkX = reinterpret_cast<int32_t*>(buf + base + kChunkXOffset);
   slot.chunkZ = reinterpret_cast<int32_t*>(buf + base + kChunkZOffset);
   slot.genSeed = reinterpret_cast<uint32_t*>(buf + base + kGenSeedOffset);
+  slot.densityInitialized = reinterpret_cast<int32_t*>(buf + base + kDensityInitializedOffset);
   slot.voxels = buf + base + m_headerBytes;
   slot.light = buf + base + m_headerBytes + m_voxelsBytes;
   slot.redstone = buf + base + m_headerBytes + m_voxelsBytes + m_lightBytes;
+  slot.density = reinterpret_cast<float*>(buf + base + m_headerBytes + m_voxelsBytes + m_lightBytes + m_redstoneBytes);
   // slot.vertices and slot.indices removed — mesher writes directly to GPU.
   return slot;
 }

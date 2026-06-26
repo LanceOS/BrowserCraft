@@ -78,6 +78,7 @@ public:
 
   /// Get chunk by coordinates.
   [[nodiscard]] auto getChunk(int32_t cx, int32_t cz) const -> const Chunk*;
+  [[nodiscard]] auto getChunkMut(int32_t cx, int32_t cz) -> Chunk*;
 
   /// Get chunk by slot index.
   [[nodiscard]] auto getChunkBySlotIndex(int32_t slotIndex) const -> const Chunk*;
@@ -130,12 +131,14 @@ public:
   [[nodiscard]] auto hasChunkKey(int64_t key) const -> bool { return m_chunks.hasKey(key); }
   [[nodiscard]] auto chunkCount() const -> size_t { return m_chunks.size(); }
 
+  [[nodiscard]] auto config() const -> const GameConfig& { return m_config; }
+  void requestRemesh(Chunk& chunk);
+  void markChunkDirty(int32_t cx, int32_t cz);
+
 private:
   void ensureVisibleRadius(int32_t centerCX, int32_t centerCZ);
   void unloadFarChunks(int32_t centerCX, int32_t centerCZ);
   void restartChunkFromScratch(Chunk& chunk);
-  void requestRemesh(Chunk& chunk);
-  void markChunkDirty(int32_t cx, int32_t cz);
   void requestNeighborRemeshes(const Chunk& chunk);
   void requestBoundaryNeighborRemeshes(const Chunk& chunk, int32_t localX, int32_t localZ);
   void requestNeighborRemesh(const Chunk& chunk, int32_t dx, int32_t dz);

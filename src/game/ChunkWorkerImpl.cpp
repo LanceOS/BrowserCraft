@@ -86,6 +86,35 @@ void annotateSurfaceNetsVertices(const WorldGenPipeline& pipeline,
   }
 }
 
+struct DensitySlotContext {
+  const float* densityBuffer;
+  int32_t chunkX;
+  int32_t chunkZ;
+  int32_t sizeX;
+  int32_t sizeY;
+  int32_t sizeZ;
+};
+
+auto slotDensitySample(void* userData, float worldX, float worldY, float worldZ) -> float {
+  auto* ctx = static_cast<DensitySlotContext*>(userData);
+  const int32_t sx = ctx->sizeX;
+  const int32_t sy = ctx->sizeY;
+  const int32_t sz = ctx->sizeZ;
+  const int32_t sampleXCount = sx + 2;
+  const int32_t sampleZCount = sz + 2;
+
+  const int32_t localX = static_cast<int32_t>(std::round(worldX)) - ctx->chunkX * sx + 1;
+  const int32_t localY = static_cast<int32_t>(std::round(worldY));
+  const int32_t localZ = static_cast<int32_t>(std::round(worldZ)) - ctx->chunkZ * sz + 1;
+
+  const int32_t clampedX = std::clamp(localX, 0, sampleXCount - 1);
+  const int32_t clampedY = std::clamp(localY, 0, sy);
+  const int32_t clampedZ = std::clamp(localZ, 0, sampleZCount - 1);
+
+  const size_t idx = (static_cast<size_t>(clampedY) * sampleZCount + clampedZ) * sampleXCount + clampedX;
+  return ctx->densityBuffer[idx];
+}
+
 } // namespace
 
 ChunkWorkerImpl::ChunkWorkerImpl(WorkerThreadPool& genPool, WorkerThreadPool& meshPool,
@@ -102,6 +131,30 @@ void ChunkWorkerImpl::generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ
     auto slot = m_pool.view(slotIndex);
     m_pipeline.generate(slot.voxels, chunkX, chunkZ,
       m_config.chunkSize, m_config.worldHeight, m_config.chunkSize, seed);
+
+    // Initialize density buffer
+    const int32_t sx = m_config.chunkSize;
+    const int32_t sy = m_config.worldHeight;
+    const int32_t sz = m_config.chunkSize;
+    const int32_t sampleXCount = sx + 2;
+    const int32_t sampleYCount = sy + 1;
+    const int32_t sampleZCount = sz + 2;
+    const int32_t sampleMinX = -1;
+    const int32_t sampleMinZ = -1;
+
+    for (int32_t y = 0; y < sampleYCount; ++y) {
+      const float worldY = static_cast<float>(y);
+      for (int32_t z = 0; z < sampleZCount; ++z) {
+        const float worldZ = static_cast<float>(chunkZ * sz + sampleMinZ + z);
+        for (int32_t x = 0; x < sampleXCount; ++x) {
+          const float worldX = static_cast<float>(chunkX * sx + sampleMinX + x);
+          const size_t idx = (static_cast<size_t>(y) * sampleZCount + z) * sampleXCount + x;
+          slot.density[idx] = m_pipeline.sampleDensity(worldX, worldY, worldZ);
+        }
+      }
+    }
+    *slot.densityInitialized = 1;
+
     *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
     m_controller.onGenCompleted(slotIndex);
   });
@@ -162,9 +215,42 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     scfg.originY = 0.0f;
     scfg.originZ = static_cast<float>(chunkZ * m_config.chunkSize);
 
+    // Ensure density buffer is initialized (e.g. if loaded from disk)
+    if (*slot.densityInitialized == 0) {
+      const int32_t sx = m_config.chunkSize;
+      const int32_t sy = m_config.worldHeight;
+      const int32_t sz = m_config.chunkSize;
+      const int32_t sampleXCount = sx + 2;
+      const int32_t sampleYCount = sy + 1;
+      const int32_t sampleZCount = sz + 2;
+      const int32_t sampleMinX = -1;
+      const int32_t sampleMinZ = -1;
+
+      for (int32_t y = 0; y < sampleYCount; ++y) {
+        const float worldY = static_cast<float>(y);
+        for (int32_t z = 0; z < sampleZCount; ++z) {
+          const float worldZ = static_cast<float>(chunkZ * sz + sampleMinZ + z);
+          for (int32_t x = 0; x < sampleXCount; ++x) {
+            const float worldX = static_cast<float>(chunkX * sx + sampleMinX + x);
+            const size_t idx = (static_cast<size_t>(y) * sampleZCount + z) * sampleXCount + x;
+            slot.density[idx] = m_pipeline.sampleDensity(worldX, worldY, worldZ);
+          }
+        }
+      }
+      *slot.densityInitialized = 1;
+    }
+
+    DensitySlotContext dctx{};
+    dctx.densityBuffer = slot.density;
+    dctx.chunkX = chunkX;
+    dctx.chunkZ = chunkZ;
+    dctx.sizeX = m_config.chunkSize;
+    dctx.sizeY = m_config.worldHeight;
+    dctx.sizeZ = m_config.chunkSize;
+
     mesh::DensitySampler sampler{};
-    sampler.userData = &m_pipeline;
-    sampler.sample = &surfaceDensitySample;
+    sampler.userData = &dctx;
+    sampler.sample = &slotDensitySample;
 
     bool ok = mesh::surfaceNetsMesh(
         scfg, sampler,

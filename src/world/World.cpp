@@ -60,6 +60,10 @@ auto World::getChunk(int32_t cx, int32_t cz) const -> const Chunk* {
   return m_chunks.get(cx, cz);
 }
 
+auto World::getChunkMut(int32_t cx, int32_t cz) -> Chunk* {
+  return m_chunks.getMut(cx, cz);
+}
+
 auto World::getChunkBySlotIndex(int32_t slotIndex) const -> const Chunk* {
   auto it = m_slotToChunk.find(slotIndex);
   if (it == m_slotToChunk.end()) return nullptr;

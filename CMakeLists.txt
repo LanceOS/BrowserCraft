@@ -136,6 +136,7 @@ add_library(voxel_engine STATIC
   src/world/Chunk.cpp
   src/world/ChunkManager.cpp
   src/world/World.cpp
+  src/world/terrain/TerrainBrush.cpp
   src/world/daynight/DayNightCycle.cpp
   src/engine/render/gl_core.cpp
   src/engine/render/ShaderProgram.cpp
