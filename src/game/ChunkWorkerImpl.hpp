@@ -14,10 +14,6 @@ class WorkerThreadPool;
 class WorldController;
 class WorldGenPipeline;
 
-namespace mesher {
-struct NeighborVoxelViews;
-}
-
 class ChunkWorkerImpl final : public IChunkWorker {
 public:
   ChunkWorkerImpl(WorkerThreadPool& genPool, WorkerThreadPool& meshPool,
@@ -31,9 +27,6 @@ public:
                      uint32_t* iboPtr, size_t iboMaxBytes) override;
 
 private:
-  auto gatherNeighborVoxels(int32_t slotIndex, int32_t chunkX, int32_t chunkZ) const
-      -> mesher::NeighborVoxelViews;
-
   WorkerThreadPool& m_genPool;
   WorkerThreadPool& m_meshPool;
   SharedPool& m_pool;

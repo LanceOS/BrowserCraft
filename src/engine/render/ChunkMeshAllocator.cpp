@@ -7,7 +7,9 @@
 namespace voxel {
 
 namespace {
-constexpr float kMeshBudgetFactor = 0.25f;
+// Smooth terrain meshes are denser than the old greedy voxel surfaces, so the
+// shared arena needs a little more breathing room to avoid churn at runtime.
+constexpr float kMeshBudgetFactor = 0.40f;
 constexpr size_t kMinVboBudgetBytes = 1u << 20; // 1 MiB
 constexpr size_t kMinIboBudgetBytes = 1u << 20; // 1 MiB
 }

@@ -4,6 +4,7 @@
 #include "engine/threading/WorkerThreadPool.hpp"
 #include "engine/workers/mesher/GreedyMesher.hpp"
 #include "engine/workers/mesher/LightPropagator.hpp"
+#include "engine/workers/mesher/SmoothTerrainMesher.hpp"
 #include "game/WorldController.hpp"
 #include "world/BlockRegistry.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
@@ -16,7 +17,7 @@ namespace voxel {
 
 namespace {
 
-inline auto slotHasVoxelData(int32_t status) -> bool {
+auto slotHasVoxelData(int32_t status) -> bool {
   return status >= static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
 }
 
@@ -26,6 +27,36 @@ struct MeshScratchBuffers {
 };
 
 thread_local MeshScratchBuffers g_meshScratch;
+
+auto gatherNeighborVoxels(const SharedPool& pool, int32_t slotIndex,
+                          int32_t chunkX, int32_t chunkZ) -> mesher::NeighborVoxelViews {
+  mesher::NeighborVoxelViews neighbors{};
+
+  for (int32_t i = 0; i < pool.capacity(); ++i) {
+    if (i == slotIndex) continue;
+
+    auto candidate = pool.view(i);
+    if (!slotHasVoxelData(*candidate.status)) continue;
+
+    const int32_t cx = *candidate.chunkX;
+    const int32_t cz = *candidate.chunkZ;
+    if (cx == chunkX + 1 && cz == chunkZ) {
+      neighbors.px = candidate.voxels;
+    } else if (cx == chunkX - 1 && cz == chunkZ) {
+      neighbors.nx = candidate.voxels;
+    } else if (cx == chunkX && cz == chunkZ + 1) {
+      neighbors.pz = candidate.voxels;
+    } else if (cx == chunkX && cz == chunkZ - 1) {
+      neighbors.nz = candidate.voxels;
+    }
+
+    if (neighbors.px && neighbors.nx && neighbors.pz && neighbors.nz) {
+      break;
+    }
+  }
+
+  return neighbors;
+}
 
 } // namespace
 
@@ -67,10 +98,7 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
 
     const int32_t chunkX = *slot.chunkX;
     const int32_t chunkZ = *slot.chunkZ;
-    const auto neighbors = gatherNeighborVoxels(slotIndex, chunkX, chunkZ);
-
-    // Rebuild the packed light volume for every remesh so terrain edits and
-    // streamed-in chunks keep their smooth lighting in sync with geometry.
+    const auto neighbors = gatherNeighborVoxels(m_pool, slotIndex, chunkX, chunkZ);
     mesher::calculateLighting(slot.voxels, slot.light, m_blocks, mcfg);
 
     const size_t scratchVertexFloats =
@@ -86,16 +114,33 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
 
     uint32_t vc = 0, ic = 0;
     uint32_t opaqueIc = 0, transparentIc = 0;
-    bool hasTransparent = false;
-    bool hasOpaque = false;
-    bool ok = mesher::greedyMesh(
-        slot.voxels, slot.light, m_blocks, mcfg,
+    bool ok = mesher::smoothTerrainMesh(
+        m_pipeline, m_blocks, mcfg, chunkX, chunkZ,
         g_meshScratch.vertices.data(),
         g_meshScratch.indices.data(),
-        vc, ic, &hasTransparent, &hasOpaque, &opaqueIc, &transparentIc, neighbors);
+        vc, ic, &opaqueIc, &transparentIc);
     if (!ok) {
       std::cerr << "Chunk mesh build exceeded scratch limits for (" << chunkX << ", " << chunkZ
                 << ") max " << mcfg.maxVertices << " verts / "
+                << mcfg.maxIndices << " indices\n";
+      m_meshAllocator.releaseSlot(slotIndex);
+      *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+      m_controller.onMeshCompleted(slotIndex, false);
+      return;
+    }
+
+    const uint32_t smoothVertexCount = vc;
+    const uint32_t smoothOpaqueIndexCount = ic;
+
+    ok = mesher::overlayGreedyMesh(
+        slot.voxels, slot.light, m_blocks, mcfg,
+        smoothVertexCount, smoothOpaqueIndexCount,
+        g_meshScratch.vertices.data(),
+        g_meshScratch.indices.data(),
+        vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
+    if (!ok) {
+      std::cerr << "Chunk overlay build exceeded scratch limits for (" << chunkX << ", "
+                << chunkZ << ") max " << mcfg.maxVertices << " verts / "
                 << mcfg.maxIndices << " indices\n";
       m_meshAllocator.releaseSlot(slotIndex);
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
@@ -115,6 +160,29 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
         static_cast<size_t>(vc) * m_config.vertexStrideFloats * sizeof(float),
         static_cast<size_t>(ic) * sizeof(uint32_t));
     if (!allocation || !allocation->valid()) {
+      // Smooth terrain can be a lot denser than the legacy greedy mesh.
+      // If the combined surface + overlay mesh does not fit, fall back to
+      // the existing greedy voxel path rather than dropping the chunk.
+      ok = mesher::greedyMesh(
+          slot.voxels, slot.light, m_blocks, mcfg,
+          g_meshScratch.vertices.data(),
+          g_meshScratch.indices.data(),
+          vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
+      if (!ok) {
+        std::cerr << "Chunk mesh allocation failed for (" << chunkX << ", " << chunkZ
+                  << ") requesting " << vc << " verts / "
+                  << ic << " indices after greedy fallback\n";
+        *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+        m_controller.onMeshCompleted(slotIndex, false);
+        return;
+      }
+
+      allocation = m_meshAllocator.allocateForSlot(
+          slotIndex,
+          static_cast<size_t>(vc) * m_config.vertexStrideFloats * sizeof(float),
+          static_cast<size_t>(ic) * sizeof(uint32_t));
+    }
+    if (!allocation || !allocation->valid()) {
       std::cerr << "Chunk mesh allocation failed for (" << chunkX << ", " << chunkZ
                 << ") requesting " << vc << " verts / "
                 << ic << " indices\n";
@@ -133,8 +201,8 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     *slot.opaqueIndexCount = opaqueIc;
     *slot.transparentIndexCount = transparentIc;
     *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-    if (hasTransparent) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
-    if (hasOpaque) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
+    if (transparentIc > 0u) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
+    if (opaqueIc > 0u) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
     m_controller.onMeshCompleted(slotIndex, true);
   });
 }
@@ -145,36 +213,6 @@ void ChunkWorkerImpl::setGpuTargets(float* vboPtr, size_t vboMaxBytes,
   (void)vboMaxBytes;
   (void)iboPtr;
   (void)iboMaxBytes;
-}
-
-auto ChunkWorkerImpl::gatherNeighborVoxels(int32_t slotIndex, int32_t chunkX, int32_t chunkZ) const
-    -> mesher::NeighborVoxelViews {
-  mesher::NeighborVoxelViews neighbors{};
-
-  for (int32_t i = 0; i < m_pool.capacity(); ++i) {
-    if (i == slotIndex) continue;
-
-    auto candidate = m_pool.view(i);
-    if (!slotHasVoxelData(*candidate.status)) continue;
-
-    const int32_t cx = *candidate.chunkX;
-    const int32_t cz = *candidate.chunkZ;
-    if (cx == chunkX + 1 && cz == chunkZ) {
-      neighbors.px = candidate.voxels;
-    } else if (cx == chunkX - 1 && cz == chunkZ) {
-      neighbors.nx = candidate.voxels;
-    } else if (cx == chunkX && cz == chunkZ + 1) {
-      neighbors.pz = candidate.voxels;
-    } else if (cx == chunkX && cz == chunkZ - 1) {
-      neighbors.nz = candidate.voxels;
-    }
-
-    if (neighbors.px && neighbors.nx && neighbors.pz && neighbors.nz) {
-      break;
-    }
-  }
-
-  return neighbors;
 }
 
 } // namespace voxel

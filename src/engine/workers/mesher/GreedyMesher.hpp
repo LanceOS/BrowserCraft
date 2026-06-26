@@ -73,5 +73,29 @@ bool greedyMesh(
     uint32_t* transparentIndexCountOut = nullptr,
     const NeighborVoxelViews& neighbors = {});
 
+/// Append a greedy-meshed overlay layer on top of an existing mesh buffer.
+/// Terrain mass blocks are treated as occluders only, so the smooth terrain
+/// surface can stay visible while fluids and placed blocks continue to render.
+///
+/// The \a vertexBase and \a opaqueIndexBase parameters describe the current
+/// end of the combined mesh. The overlay is written after those counts, and
+/// the output counts report the final combined totals.
+bool overlayGreedyMesh(
+    const uint8_t* voxels,
+    const uint8_t* light,
+    const BlockRegistry& blocks,
+    const MesherConfig& cfg,
+    uint32_t vertexBase,
+    uint32_t opaqueIndexBase,
+    float* vertexOut,
+    uint32_t* indexOut,
+    uint32_t& vertexCountOut,
+    uint32_t& indexCountOut,
+    bool* hasTransparentOut = nullptr,
+    bool* hasOpaqueOut = nullptr,
+    uint32_t* opaqueIndexCountOut = nullptr,
+    uint32_t* transparentIndexCountOut = nullptr,
+    const NeighborVoxelViews& neighbors = {});
+
 } // namespace mesher
 } // namespace voxel
