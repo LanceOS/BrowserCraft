@@ -37,12 +37,12 @@ layout(location = 4) in float a_lightData;
 struct ChunkCullData {
     vec4 min;
     vec4 max;
-    uint indexCount;
-    uint firstIndex;
+    uint opaqueIndexCount;
+    uint opaqueFirstIndex;
+    uint transparentIndexCount;
+    uint transparentFirstIndex;
     uint baseVertex;
     uint slotIndex;
-    uint hasOpaque;
-    uint hasTransparent;
     uint pad1;
     uint pad2;
 };

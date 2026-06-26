@@ -32,6 +32,8 @@ inline auto chunkSeed(int32_t chunkX, int32_t chunkZ, uint32_t seed) -> uint32_t
 
 /// Maximum number of times to retry chunk generation before giving up.
 inline constexpr int32_t MAX_CHUNK_GEN_RETRIES = 3;
+/// Maximum number of times to restart a chunk from scratch after mesh failure.
+inline constexpr int32_t MAX_CHUNK_MESH_RESTART_RETRIES = 2;
 
 /// Represents one chunk in the world.
 struct Chunk {
@@ -41,10 +43,13 @@ struct Chunk {
   ChunkState state = ChunkState::QueuedGen;
   uint32_t vertexCount = 0;
   uint32_t indexCount = 0;
+  uint32_t opaqueIndexCount = 0;
+  uint32_t transparentIndexCount = 0;
   bool needsRemesh = false;
   bool hasOpaque = false; // whether mesh contains opaque geometry
   bool hasTransparent = false; // whether mesh contains alpha-blended geometry
   int32_t genRetries = 0; // number of times generation has been attempted
+  int32_t meshRestartRetries = 0; // number of full chunk restarts after mesh failure
 
   [[nodiscard]] auto key() const -> int64_t {
     return chunkKey(chunkX, chunkZ);

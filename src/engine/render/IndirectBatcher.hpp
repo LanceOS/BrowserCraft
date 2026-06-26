@@ -14,12 +14,12 @@ namespace voxel {
 struct ChunkCullData {
     float min[4]; // vec4
     float max[4]; // vec4
-    uint32_t indexCount;
-    uint32_t firstIndex;
+    uint32_t opaqueIndexCount;
+    uint32_t opaqueFirstIndex;
+    uint32_t transparentIndexCount;
+    uint32_t transparentFirstIndex;
     uint32_t baseVertex;
     uint32_t slotIndex;
-    uint32_t hasOpaque;
-    uint32_t hasTransparent;
     uint32_t pad1;
     uint32_t pad2;
 };
@@ -73,18 +73,15 @@ public:
       uint32_t transparentCount = 0u;
       for (uint32_t i = 0; i < activeLimit; ++i) {
         const auto& c = chunks[i];
-        if (c.indexCount == 0u) continue;
+        if (c.opaqueIndexCount == 0u && c.transparentIndexCount == 0u) continue;
         if (!frustum.intersectsAABB(c.min[0], c.min[1], c.min[2],
                                    c.max[0], c.max[1], c.max[2])) continue;
-        const bool hasOpaque = c.hasOpaque != 0u;
-        const bool hasTransparent = c.hasTransparent != 0u;
-        if (!hasOpaque && !hasTransparent) continue;
-
-        const DrawCommand cmd{c.indexCount, 1u, c.firstIndex, c.baseVertex, c.slotIndex};
-        if (hasOpaque) {
+        if (c.opaqueIndexCount > 0u) {
+          const DrawCommand cmd{c.opaqueIndexCount, 1u, c.opaqueFirstIndex, c.baseVertex, c.slotIndex};
           commands[opaqueCount++] = cmd;
         }
-        if (hasTransparent) {
+        if (c.transparentIndexCount > 0u) {
+          const DrawCommand cmd{c.transparentIndexCount, 1u, c.transparentFirstIndex, c.baseVertex, c.slotIndex};
           commands[m_maxChunks + transparentCount++] = cmd;
         }
       }

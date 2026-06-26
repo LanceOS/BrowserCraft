@@ -19,6 +19,8 @@ TEST_CASE("SharedPool create and acquire", "[alloc]") {
   REQUIRE(*slot->status == static_cast<int32_t>(voxel::ChunkSlotStatus::FREE));
   REQUIRE(*slot->vertexCount == 0);
   REQUIRE(*slot->indexCount == 0);
+  REQUIRE(*slot->opaqueIndexCount == 0);
+  REQUIRE(*slot->transparentIndexCount == 0);
 
   // Write voxel data and verify
   slot->voxels[0] = 5;

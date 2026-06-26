@@ -5,6 +5,7 @@
 #include "engine/ecs/components/Components.hpp"
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace voxel {
 
@@ -196,6 +197,23 @@ void EntityCollisions::resolveMovement(
     return m_world.isSolidInChunk(worldX, y, worldZ, *supportChunk);
   };
 
+  const auto countSupportColumns =
+      [&](const glm::vec3& probePos, int32_t checkY) -> std::pair<int32_t, int32_t> {
+    int32_t minGX = static_cast<int32_t>(std::floor(probePos.x + body.aabbMin.x));
+    int32_t maxGX = static_cast<int32_t>(std::floor(probePos.x + body.aabbMax.x));
+    int32_t minGZ = static_cast<int32_t>(std::floor(probePos.z + body.aabbMin.z));
+    int32_t maxGZ = static_cast<int32_t>(std::floor(probePos.z + body.aabbMax.z));
+    int32_t solidCols = 0;
+    int32_t totalCols = 0;
+    for (int32_t gz = minGZ; gz <= maxGZ; ++gz) {
+      for (int32_t gx = minGX; gx <= maxGX; ++gx) {
+        ++totalCols;
+        if (isSolidAtY(gx, gz, checkY)) ++solidCols;
+      }
+    }
+    return {solidCols, totalCols};
+  };
+
   for (int32_t s = 0; s < steps; ++s) {
     float subDx = dx * invSteps;
     float subDy = dy * invSteps;
@@ -209,13 +227,19 @@ void EntityCollisions::resolveMovement(
       stepPos = yStep;
       body.onGround = 0;
     } else if (subDy <= 0.0f) {
+      const glm::vec3 supportProbePos = stepPos + glm::vec3(subDx, 0.0f, subDz);
+      const int32_t checkY =
+          static_cast<int32_t>(std::floor(yStep.y + body.aabbMin.y));
+      const auto [solidCols, totalCols] = countSupportColumns(supportProbePos, checkY);
+      const bool fullySupported = totalCols > 0 && solidCols == totalCols;
+
       // Potential landing — scan downward from feet
       int32_t groundY = getGroundHeightCached(
-          stepPos.x,
-          stepPos.z,
-          std::max(0, static_cast<int32_t>(std::floor(stepPos.y + body.aabbMin.y))));
-      if (groundY >= 0) {
-        float feetY   = stepPos.y + body.aabbMin.y;
+          supportProbePos.x,
+          supportProbePos.z,
+          std::max(0, checkY));
+      if (fullySupported && groundY >= 0) {
+        float feetY   = yStep.y + body.aabbMin.y;
         float surfaceY = static_cast<float>(groundY + 1);
         float distToGround = feetY - surfaceY;
         if (distToGround <= 1.5f) {
@@ -232,29 +256,16 @@ void EntityCollisions::resolveMovement(
       }  // groundY >= 0
 
       // Side-collision fallback (ground far below or no ground at all):
-      // only let gravity pull the player down when their AABB footprint
-      // is 100 % over air.  Otherwise hold them on the surface to
-      // prevent wall-clipping on deep drops.
-      if (groundY < 0 || (groundY >= 0 && (stepPos.y + body.aabbMin.y - static_cast<float>(groundY + 1)) > 1.5f)) {
-        int32_t checkY = static_cast<int32_t>(std::floor(yStep.y + body.aabbMin.y));
-        int32_t minGX = static_cast<int32_t>(std::floor(stepPos.x + body.aabbMin.x));
-        int32_t maxGX = static_cast<int32_t>(std::floor(stepPos.x + body.aabbMax.x));
-        int32_t minGZ = static_cast<int32_t>(std::floor(stepPos.z + body.aabbMin.z));
-        int32_t maxGZ = static_cast<int32_t>(std::floor(stepPos.z + body.aabbMax.z));
-        int32_t solidCols = 0, totalCols = 0;
-        for (int32_t gz = minGZ; gz <= maxGZ; ++gz) {
-          for (int32_t gx = minGX; gx <= maxGX; ++gx) {
-            ++totalCols;
-            if (isSolidAtY(gx, gz, checkY)) ++solidCols;
-          }
-        }
-        if (totalCols > 0 && solidCols == 0) {
-          stepPos = yStep;
-          body.onGround = 0;
-        } else {
-          body.velocity.y = 0.0f;
-          body.onGround = 1;
-        }
+      // Treat partial edge support as a fall so the player does not hover
+      // over ledges or old spawn-height plateaus while moving downhill.
+      if (!fullySupported) {
+        stepPos = yStep;
+        body.onGround = 0;
+      } else if (groundY < 0 ||
+                 (groundY >= 0 &&
+                  (yStep.y + body.aabbMin.y - static_cast<float>(groundY + 1)) > 1.5f)) {
+        body.velocity.y = 0.0f;
+        body.onGround = 1;
       }
     } else {
       // Hit ceiling

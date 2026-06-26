@@ -14,6 +14,8 @@ constexpr size_t kChunkXOffset = 12;
 constexpr size_t kChunkZOffset = 16;
 constexpr size_t kGenSeedOffset = 20;
 constexpr size_t kRenderFlagsOffset = 24;
+constexpr size_t kOpaqueIndexCountOffset = 28;
+constexpr size_t kTransparentIndexCountOffset = 32;
 
 } // namespace
 
@@ -54,6 +56,8 @@ auto SharedPool::acquire() -> std::optional<ChunkSlot> {
   *slot.renderFlags = 0u;
   *slot.vertexCount = 0;
   *slot.indexCount = 0;
+  *slot.opaqueIndexCount = 0;
+  *slot.transparentIndexCount = 0;
   std::memset(slot.voxels, 0, m_voxelsBytes);
   std::memset(slot.light, 0, m_lightBytes);
   std::memset(slot.redstone, 0, m_redstoneBytes);
@@ -64,6 +68,10 @@ void SharedPool::release(ChunkSlot slot) {
   std::lock_guard<std::mutex> lock(m_mutex);
   *slot.status = static_cast<int32_t>(ChunkSlotStatus::FREE);
   *slot.renderFlags = 0u;
+  *slot.vertexCount = 0u;
+  *slot.indexCount = 0u;
+  *slot.opaqueIndexCount = 0u;
+  *slot.transparentIndexCount = 0u;
   m_freeList[m_freeHead++] = slot.slotIndex;
 }
 
@@ -99,6 +107,8 @@ auto SharedPool::view(int32_t slotIndex) const -> ChunkSlot {
   slot.renderFlags = reinterpret_cast<uint32_t*>(buf + base + kRenderFlagsOffset);
   slot.vertexCount = reinterpret_cast<uint32_t*>(buf + base + kVertexCountOffset);
   slot.indexCount = reinterpret_cast<uint32_t*>(buf + base + kIndexCountOffset);
+  slot.opaqueIndexCount = reinterpret_cast<uint32_t*>(buf + base + kOpaqueIndexCountOffset);
+  slot.transparentIndexCount = reinterpret_cast<uint32_t*>(buf + base + kTransparentIndexCountOffset);
   slot.chunkX = reinterpret_cast<int32_t*>(buf + base + kChunkXOffset);
   slot.chunkZ = reinterpret_cast<int32_t*>(buf + base + kChunkZOffset);
   slot.genSeed = reinterpret_cast<uint32_t*>(buf + base + kGenSeedOffset);

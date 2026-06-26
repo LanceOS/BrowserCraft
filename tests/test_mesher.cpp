@@ -586,6 +586,51 @@ TEST_CASE("GreedyMesher reports opaque and transparent geometry independently",
   CHECK(hasOpaque == false);
 }
 
+TEST_CASE("GreedyMesher groups opaque indices before transparent indices",
+          "[mesher][face][transparent]") {
+  BlockRegistry reg(256);
+  registerTestBlock(reg, 1, "Opaque", 0, 0, 0, true);
+  registerTestBlock(reg, 2, "Transparent", 1, 1, 1, false);
+
+  constexpr int32_t SX = 4, SY = 3, SZ = 3;
+  std::vector<uint8_t> voxels(SX * SY * SZ, 0);
+  std::vector<uint8_t> light(SX * SY * SZ, 0);
+
+  voxels[(1 * SZ + 1) * SX + 1] = 1;
+  voxels[(1 * SZ + 1) * SX + 2] = 2;
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = SX;
+  cfg.sizeY = SY;
+  cfg.sizeZ = SZ;
+  cfg.maxVertices = 5000;
+  cfg.maxIndices = 10000;
+  cfg.strideFloats = VP_STRIDE;
+
+  std::vector<float> vertices(cfg.maxVertices * cfg.strideFloats, 0.0f);
+  std::vector<uint32_t> indices(cfg.maxIndices, 0);
+  uint32_t vertexCount = 0;
+  uint32_t indexCount = 0;
+  uint32_t opaqueIndexCount = 0;
+  uint32_t transparentIndexCount = 0;
+  bool hasTransparent = false;
+  bool hasOpaque = false;
+
+  bool ok = mesher::greedyMesh(
+      voxels.data(), light.data(), reg, cfg,
+      vertices.data(), indices.data(),
+      vertexCount, indexCount,
+      &hasTransparent, &hasOpaque,
+      &opaqueIndexCount, &transparentIndexCount);
+
+  REQUIRE(ok);
+  CHECK(hasOpaque);
+  CHECK(hasTransparent);
+  CHECK(indexCount == opaqueIndexCount + transparentIndexCount);
+  CHECK(opaqueIndexCount > 0);
+  CHECK(transparentIndexCount > 0);
+}
+
 // ======================================================================
 // Test: Face culling — opaque blocks don't produce faces between them
 // ======================================================================
@@ -626,6 +671,47 @@ TEST_CASE("GreedyMesher culls faces between adjacent opaque blocks",
   const uint32_t numVerts = vertexCount;
   const uint32_t expectedFaces = 10;
   CHECK(numVerts / 4 == expectedFaces);
+}
+
+TEST_CASE("GreedyMesher culls faces against opaque neighbor chunks",
+          "[mesher][face][chunk-border]") {
+  BlockRegistry reg(256);
+  registerTestBlock(reg, 1, "Stone", 7, 7, 7, true);
+
+  constexpr int32_t SX = 2, SY = 2, SZ = 2;
+  std::vector<uint8_t> voxels(SX * SY * SZ, 0);
+  std::vector<uint8_t> light(SX * SY * SZ, 0);
+  std::vector<uint8_t> plusXNeighbor(SX * SY * SZ, 0);
+
+  // A boundary block on the +X edge of the chunk.
+  voxels[(0 * SZ + 0) * SX + (SX - 1)] = 1;
+  // Matching opaque neighbor block at x=0 in the adjacent +X chunk.
+  plusXNeighbor[(0 * SZ + 0) * SX + 0] = 1;
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = SX;
+  cfg.sizeY = SY;
+  cfg.sizeZ = SZ;
+  cfg.maxVertices = 5000;
+  cfg.maxIndices = 10000;
+  cfg.strideFloats = VP_STRIDE;
+
+  std::vector<float> vertices(cfg.maxVertices * cfg.strideFloats, 0.0f);
+  std::vector<uint32_t> indices(cfg.maxIndices, 0);
+  uint32_t vertexCount = 0;
+  uint32_t indexCount = 0;
+
+  mesher::NeighborVoxelViews neighbors{};
+  neighbors.px = plusXNeighbor.data();
+
+  bool ok = mesher::greedyMesh(
+      voxels.data(), light.data(), reg, cfg,
+      vertices.data(), indices.data(),
+      vertexCount, indexCount, nullptr, nullptr, nullptr, nullptr, neighbors);
+
+  REQUIRE(ok);
+  CHECK(vertexCount / 4 == 5);
+  CHECK(indexCount / 6 == 5);
 }
 
 // ======================================================================

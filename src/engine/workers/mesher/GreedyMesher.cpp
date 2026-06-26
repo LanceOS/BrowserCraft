@@ -24,11 +24,39 @@ static inline auto voxelIndex(int32_t x, int32_t y, int32_t z,
 
 static inline auto getBlock(const uint8_t* voxels,
                             int32_t x, int32_t y, int32_t z,
-                            const MesherConfig& cfg) -> uint8_t {
-  if (x < 0 || x >= cfg.sizeX) return 0;
+                            const MesherConfig& cfg,
+                            const NeighborVoxelViews& neighbors) -> uint8_t {
   if (y < 0 || y >= cfg.sizeY) return 0;
-  if (z < 0 || z >= cfg.sizeZ) return 0;
-  return voxels[voxelIndex(x, y, z, cfg)];
+  if (x >= 0 && x < cfg.sizeX && z >= 0 && z < cfg.sizeZ) {
+    return voxels[voxelIndex(x, y, z, cfg)];
+  }
+
+  if (z >= 0 && z < cfg.sizeZ) {
+    if (x < 0 && neighbors.nx) {
+      return neighbors.nx[voxelIndex(cfg.sizeX - 1, y, z, cfg)];
+    }
+    if (x >= cfg.sizeX && neighbors.px) {
+      return neighbors.px[voxelIndex(0, y, z, cfg)];
+    }
+  }
+
+  if (x >= 0 && x < cfg.sizeX) {
+    if (z < 0 && neighbors.nz) {
+      return neighbors.nz[voxelIndex(x, y, cfg.sizeZ - 1, cfg)];
+    }
+    if (z >= cfg.sizeZ && neighbors.pz) {
+      return neighbors.pz[voxelIndex(x, y, 0, cfg)];
+    }
+  }
+
+  return 0;
+}
+
+static inline auto getBlock(const uint8_t* voxels,
+                            int32_t x, int32_t y, int32_t z,
+                            const MesherConfig& cfg) -> uint8_t {
+  static constexpr NeighborVoxelViews kNoNeighbors{};
+  return getBlock(voxels, x, y, z, cfg, kNoNeighbors);
 }
 
 static inline auto isOpaqueBlock(uint8_t blockId, const BlockRegistry& blocks) -> bool {
@@ -41,8 +69,9 @@ static inline auto isOpaqueBlock(uint8_t blockId, const BlockRegistry& blocks) -
 static inline auto isSolid(const uint8_t* voxels,
                            int32_t x, int32_t y, int32_t z,
                            const MesherConfig& cfg,
-                           const BlockRegistry& blocks) -> bool {
-  uint8_t id = getBlock(voxels, x, y, z, cfg);
+                           const BlockRegistry& blocks,
+                           const NeighborVoxelViews& neighbors) -> bool {
+  uint8_t id = getBlock(voxels, x, y, z, cfg, neighbors);
   if (id == 0) return false;
   const auto* def = blocks.tryGet(id);
   return def && def->material.opaque;
@@ -54,9 +83,10 @@ static inline auto isSolidExcluding(const uint8_t* voxels,
                                     int32_t x, int32_t y, int32_t z,
                                     const MesherConfig& cfg,
                                     const BlockRegistry& blocks,
-                                    int32_t skipX, int32_t skipY, int32_t skipZ) -> bool {
+                                    int32_t skipX, int32_t skipY, int32_t skipZ,
+                                    const NeighborVoxelViews& neighbors) -> bool {
   if (x == skipX && y == skipY && z == skipZ) return false;
-  return isSolid(voxels, x, y, z, cfg, blocks);
+  return isSolid(voxels, x, y, z, cfg, blocks, neighbors);
 }
 
 static inline auto skyNibble(uint8_t packed) -> int32_t { return (packed >> 4) & 0x0F; }
@@ -101,11 +131,12 @@ static inline int32_t aoTop(const uint8_t* voxels,
                              int32_t cx, int32_t faceY, int32_t cz,
                              int32_t bx, int32_t by, int32_t bz,
                              const MesherConfig& cfg,
-                             const BlockRegistry& blocks) {
+                             const BlockRegistry& blocks,
+                             const NeighborVoxelViews& neighbors) {
   int32_t ly = faceY; // blocks at the face level (air side)
-  bool s1 = isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz);
-  bool s2 = isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz);
-  bool c  = isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz);
+  bool s1 = isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz, neighbors);
+  bool s2 = isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz, neighbors);
+  bool c  = isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz, neighbors);
   return calculateAO(s1, s2, c);
 }
 
@@ -113,11 +144,12 @@ static inline int32_t aoBottom(const uint8_t* voxels,
                                 int32_t cx, int32_t faceY, int32_t cz,
                                 int32_t bx, int32_t by, int32_t bz,
                                 const MesherConfig& cfg,
-                                const BlockRegistry& blocks) {
+                                const BlockRegistry& blocks,
+                                const NeighborVoxelViews& neighbors) {
   int32_t ly = faceY - 1; // blocks at the face level (air side)
-  bool s1 = isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz);
-  bool s2 = isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz);
-  bool c  = isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz);
+  bool s1 = isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz, neighbors);
+  bool s2 = isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz, neighbors);
+  bool c  = isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz, neighbors);
   return calculateAO(s1, s2, c);
 }
 
@@ -125,11 +157,12 @@ static inline int32_t aoRight(const uint8_t* voxels,
                                int32_t faceX, int32_t cy, int32_t cz,
                                int32_t bx, int32_t by, int32_t bz,
                                const MesherConfig& cfg,
-                               const BlockRegistry& blocks) {
+                               const BlockRegistry& blocks,
+                               const NeighborVoxelViews& neighbors) {
   int32_t lx = faceX; // blocks at the face level (air side)
-  bool s1 = isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz);
-  bool s2 = isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz);
-  bool c  = isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz);
+  bool s1 = isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz, neighbors);
+  bool s2 = isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz, neighbors);
+  bool c  = isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz, neighbors);
   return calculateAO(s1, s2, c);
 }
 
@@ -137,11 +170,12 @@ static inline int32_t aoLeft(const uint8_t* voxels,
                               int32_t faceX, int32_t cy, int32_t cz,
                               int32_t bx, int32_t by, int32_t bz,
                               const MesherConfig& cfg,
-                              const BlockRegistry& blocks) {
+                              const BlockRegistry& blocks,
+                              const NeighborVoxelViews& neighbors) {
   int32_t lx = faceX - 1; // blocks at the face level (air side)
-  bool s1 = isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz);
-  bool s2 = isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz);
-  bool c  = isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz);
+  bool s1 = isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz, neighbors);
+  bool s2 = isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz, neighbors);
+  bool c  = isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz, neighbors);
   return calculateAO(s1, s2, c);
 }
 
@@ -149,11 +183,12 @@ static inline int32_t aoFront(const uint8_t* voxels,
                                int32_t cx, int32_t cy, int32_t faceZ,
                                int32_t bx, int32_t by, int32_t bz,
                                const MesherConfig& cfg,
-                               const BlockRegistry& blocks) {
+                               const BlockRegistry& blocks,
+                               const NeighborVoxelViews& neighbors) {
   int32_t lz = faceZ; // blocks at the face level (air side)
-  bool s1 = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz);
-  bool s2 = isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz);
-  bool c  = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz);
+  bool s1 = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz, neighbors);
+  bool s2 = isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz, neighbors);
+  bool c  = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz, neighbors);
   return calculateAO(s1, s2, c);
 }
 
@@ -161,11 +196,12 @@ static inline int32_t aoBack(const uint8_t* voxels,
                               int32_t cx, int32_t cy, int32_t faceZ,
                               int32_t bx, int32_t by, int32_t bz,
                               const MesherConfig& cfg,
-                              const BlockRegistry& blocks) {
+                              const BlockRegistry& blocks,
+                              const NeighborVoxelViews& neighbors) {
   int32_t lz = faceZ - 1; // blocks at the face level (air side)
-  bool s1 = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz);
-  bool s2 = isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz);
-  bool c  = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz);
+  bool s1 = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz, neighbors);
+  bool s2 = isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz, neighbors);
+  bool c  = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz, neighbors);
   return calculateAO(s1, s2, c);
 }
 
@@ -253,7 +289,8 @@ static constexpr DirInfo kDirs[6] = {
 // Returns 8 bits: 4 corners × 2 bits each (AO values 0-3).
 static inline uint8_t computeFaceAOPacked(
     const uint8_t* voxels, int32_t di, int32_t sl, int32_t u, int32_t v,
-    const DirInfo& info, const MesherConfig& cfg, const BlockRegistry& blocks)
+    const DirInfo& info, const MesherConfig& cfg, const BlockRegistry& blocks,
+    const NeighborVoxelViews& neighbors)
 {
   const int32_t axis  = info.axis;
   const int32_t uAxis = info.uAxis;
@@ -277,12 +314,12 @@ static inline uint8_t computeFaceAOPacked(
     const int32_t cx = corners[ci][0], cy = corners[ci][1], cz = corners[ci][2];
     int32_t ao;
     switch (di) {
-      case 0: ao = aoRight (voxels, fc, cy, cz, bx, by, bz, cfg, blocks); break;
-      case 1: ao = aoLeft  (voxels, fc, cy, cz, bx, by, bz, cfg, blocks); break;
-      case 2: ao = aoTop   (voxels, cx, fc, cz, bx, by, bz, cfg, blocks); break;
-      case 3: ao = aoBottom(voxels, cx, fc, cz, bx, by, bz, cfg, blocks); break;
-      case 4: ao = aoFront (voxels, cx, cy, fc, bx, by, bz, cfg, blocks); break;
-      case 5: ao = aoBack  (voxels, cx, cy, fc, bx, by, bz, cfg, blocks); break;
+      case 0: ao = aoRight (voxels, fc, cy, cz, bx, by, bz, cfg, blocks, neighbors); break;
+      case 1: ao = aoLeft  (voxels, fc, cy, cz, bx, by, bz, cfg, blocks, neighbors); break;
+      case 2: ao = aoTop   (voxels, cx, fc, cz, bx, by, bz, cfg, blocks, neighbors); break;
+      case 3: ao = aoBottom(voxels, cx, fc, cz, bx, by, bz, cfg, blocks, neighbors); break;
+      case 4: ao = aoFront (voxels, cx, cy, fc, bx, by, bz, cfg, blocks, neighbors); break;
+      case 5: ao = aoBack  (voxels, cx, cy, fc, bx, by, bz, cfg, blocks, neighbors); break;
       default: ao = 3; break;
     }
     packed |= static_cast<uint8_t>((ao & 0x3) << (ci * 2));
@@ -293,6 +330,7 @@ static inline uint8_t computeFaceAOPacked(
 namespace {
 struct GreedyMeshScratch {
   std::vector<uint16_t> mask;
+  std::vector<uint32_t> transparentIndices;
 };
 thread_local GreedyMeshScratch g_scratch;
 }
@@ -304,7 +342,8 @@ thread_local GreedyMeshScratch g_scratch;
 auto estimateMeshCapacity(
     const uint8_t* voxels,
     const BlockRegistry& blocks,
-    const MesherConfig& cfg) -> MeshCapacityHint
+    const MesherConfig& cfg,
+    const NeighborVoxelViews& neighbors) -> MeshCapacityHint
 {
   MeshCapacityHint hint{};
   if (!voxels) return hint;
@@ -319,7 +358,7 @@ auto estimateMeshCapacity(
   for (int32_t y = 0; y < cfg.sizeY; ++y) {
     for (int32_t z = 0; z < cfg.sizeZ; ++z) {
       for (int32_t x = 0; x < cfg.sizeX; ++x) {
-        uint8_t bid = getBlock(voxels, x, y, z, cfg);
+        uint8_t bid = getBlock(voxels, x, y, z, cfg, neighbors);
         if (bid == 0) continue;
 
         const auto* def = blocks.tryGet(bid);
@@ -329,7 +368,7 @@ auto estimateMeshCapacity(
           const int32_t nx = x + off[0];
           const int32_t ny = y + off[1];
           const int32_t nz = z + off[2];
-          if (isOpaqueBlock(getBlock(voxels, nx, ny, nz, cfg), blocks)) {
+          if (isOpaqueBlock(getBlock(voxels, nx, ny, nz, cfg, neighbors), blocks)) {
             continue;
           }
           ++hint.quadCount;
@@ -354,12 +393,17 @@ bool greedyMesh(
     uint32_t& vertexCountOut,
     uint32_t& indexCountOut,
     bool* hasTransparentOut,
-    bool* hasOpaqueOut)
+    bool* hasOpaqueOut,
+    uint32_t* opaqueIndexCountOut,
+    uint32_t* transparentIndexCountOut,
+    const NeighborVoxelViews& neighbors)
 {
   vertexCountOut = 0;
   indexCountOut = 0;
   if (hasTransparentOut) *hasTransparentOut = false;
   if (hasOpaqueOut) *hasOpaqueOut = false;
+  if (opaqueIndexCountOut) *opaqueIndexCountOut = 0;
+  if (transparentIndexCountOut) *transparentIndexCountOut = 0;
 
   if (!voxels || !light || !vertexOut || !indexOut) return false;
   if (cfg.sizeX <= 0 || cfg.sizeY <= 0 || cfg.sizeZ <= 0) return false;
@@ -375,7 +419,7 @@ bool greedyMesh(
   const uint32_t strideFloats = static_cast<uint32_t>(S);
 
   uint32_t vo = 0; // float offset into vertexOut
-  uint32_t io = 0; // index count
+  uint32_t opaqueIo = 0; // opaque index count
 
   // Scratch mask sized to the largest face for this chunk configuration.
   const auto neededScratch =
@@ -383,6 +427,7 @@ bool greedyMesh(
   if (g_scratch.mask.size() < neededScratch) {
     g_scratch.mask.resize(neededScratch);
   }
+  g_scratch.transparentIndices.clear();
   uint16_t* mask = g_scratch.mask.data();
 
   for (int32_t di = 0; di < 6; ++di) {
@@ -415,16 +460,16 @@ bool greedyMesh(
           co[vAxis] = v;
           int32_t bx = co[0], by = co[1], bz = co[2];
 
-          uint8_t bid = getBlock(voxels, bx, by, bz, cfg);
+          uint8_t bid = getBlock(voxels, bx, by, bz, cfg, neighbors);
           if (bid == 0) continue;
 
           int32_t nn[3] = {bx + info.normal[0], by + info.normal[1], bz + info.normal[2]};
-          uint8_t nid = getBlock(voxels, nn[0], nn[1], nn[2], cfg);
+          uint8_t nid = getBlock(voxels, nn[0], nn[1], nn[2], cfg, neighbors);
           if (nid != 0) {
             const auto* nd = blocks.tryGet(nid);
             if (nd && nd->material.opaque) continue;
           }
-          uint8_t aoKey = computeFaceAOPacked(voxels, di, sl, u, v, info, cfg, blocks);
+          uint8_t aoKey = computeFaceAOPacked(voxels, di, sl, u, v, info, cfg, blocks, neighbors);
           mask[v * uSz + u] = static_cast<uint16_t>(bid) | (static_cast<uint16_t>(aoKey) << 8);
         }
       }
@@ -517,9 +562,14 @@ bool greedyMesh(
 
           // Capacity
           const uint32_t nextVertexCount = (vo / strideFloats) + 4u;
-          if (nextVertexCount > maxVertices || io + 6 > maxI) {
+          const bool faceOpaque = def->material.opaque;
+          const uint32_t transparentIo = static_cast<uint32_t>(g_scratch.transparentIndices.size());
+          const uint32_t nextIndexCount = opaqueIo + transparentIo + 6u;
+          if (nextVertexCount > maxVertices || nextIndexCount > maxI) {
             vertexCountOut = vo / strideFloats;
-            indexCountOut = io;
+            indexCountOut = opaqueIo + transparentIo;
+            if (opaqueIndexCountOut) *opaqueIndexCountOut = opaqueIo;
+            if (transparentIndexCountOut) *transparentIndexCountOut = transparentIo;
             return false;
           }
 
@@ -530,6 +580,13 @@ bool greedyMesh(
           writeVtx(vertexOut, vo, tr[0],tr[1],tr[2], nx,ny,nz, uv[3][0],uv[3][1], tlF, ld[3]); vo += S;
 
           uint32_t base = (vo / strideFloats) - 4;
+          auto emitIndex = [&](uint32_t idx) {
+            if (faceOpaque) {
+              indexOut[opaqueIo++] = idx;
+            } else {
+              g_scratch.transparentIndices.push_back(idx);
+            }
+          };
 
           // Faces X+ (di=0), Y+ (di=2), and Z- (di=5) produce a computed
           // normal opposite to the face normal with the default winding.
@@ -540,19 +597,19 @@ bool greedyMesh(
 
           if (!flip) {
             if (!reverseWind) {
-              indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+2;
-              indexOut[io++] = base+1; indexOut[io++] = base+3; indexOut[io++] = base+2;
+              emitIndex(base);   emitIndex(base+1); emitIndex(base+2);
+              emitIndex(base+1); emitIndex(base+3); emitIndex(base+2);
             } else {
-              indexOut[io++] = base;   indexOut[io++] = base+2; indexOut[io++] = base+3;
-              indexOut[io++] = base+1; indexOut[io++] = base;   indexOut[io++] = base+3;
+              emitIndex(base);   emitIndex(base+2); emitIndex(base+3);
+              emitIndex(base+1); emitIndex(base);   emitIndex(base+3);
             }
           } else {
             if (!reverseWind) {
-              indexOut[io++] = base;   indexOut[io++] = base+1; indexOut[io++] = base+3;
-              indexOut[io++] = base;   indexOut[io++] = base+3; indexOut[io++] = base+2;
+              emitIndex(base);   emitIndex(base+1); emitIndex(base+3);
+              emitIndex(base);   emitIndex(base+3); emitIndex(base+2);
             } else {
-              indexOut[io++] = base;   indexOut[io++] = base+2; indexOut[io++] = base+1;
-              indexOut[io++] = base+2; indexOut[io++] = base+3; indexOut[io++] = base+1;
+              emitIndex(base);   emitIndex(base+2); emitIndex(base+1);
+              emitIndex(base+2); emitIndex(base+3); emitIndex(base+1);
             }
           }
         }
@@ -560,8 +617,15 @@ bool greedyMesh(
     }
   }
 
+  const uint32_t transparentIo = static_cast<uint32_t>(g_scratch.transparentIndices.size());
+  if (transparentIo > 0u) {
+    std::memcpy(indexOut + opaqueIo, g_scratch.transparentIndices.data(),
+                static_cast<size_t>(transparentIo) * sizeof(uint32_t));
+  }
   vertexCountOut = vo / strideFloats;
-  indexCountOut  = io;
+  indexCountOut  = opaqueIo + transparentIo;
+  if (opaqueIndexCountOut) *opaqueIndexCountOut = opaqueIo;
+  if (transparentIndexCountOut) *transparentIndexCountOut = transparentIo;
   return true;
 }
 

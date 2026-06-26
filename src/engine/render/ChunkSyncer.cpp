@@ -33,8 +33,6 @@ void ChunkSyncer::sync(World& world) {
   m_meshAllocator.releaseMissing(m_liveSlots, [&](int32_t slotIndex) {
     if (slotIndex < 0 || slotIndex >= static_cast<int32_t>(capacity)) return;
     ChunkCullData emptyData{};
-    emptyData.hasOpaque = 0u;
-    emptyData.hasTransparent = 0u;
     m_indirectBatcher.updateChunkData(static_cast<uint32_t>(slotIndex), emptyData);
   });
 
@@ -63,17 +61,16 @@ void ChunkSyncer::sync(World& world) {
       cullData.max[1] = static_cast<float>(m_config.worldHeight);
       cullData.max[2] = cullData.min[2] + static_cast<float>(m_config.chunkSize);
       cullData.max[3] = 1.0f;
-      cullData.indexCount = chunk->indexCount;
-      cullData.firstIndex = static_cast<uint32_t>(alloc->iboOffsetBytes / sizeof(uint32_t));
+      const uint32_t firstIndex = static_cast<uint32_t>(alloc->iboOffsetBytes / sizeof(uint32_t));
+      cullData.opaqueIndexCount = chunk->opaqueIndexCount;
+      cullData.opaqueFirstIndex = firstIndex;
+      cullData.transparentIndexCount = chunk->transparentIndexCount;
+      cullData.transparentFirstIndex = firstIndex + chunk->opaqueIndexCount;
       cullData.baseVertex = static_cast<uint32_t>(alloc->baseVertex);
       cullData.slotIndex = static_cast<uint32_t>(slotIndex);
-      cullData.hasOpaque = static_cast<uint32_t>(chunk->hasOpaque);
-      cullData.hasTransparent = static_cast<uint32_t>(chunk->hasTransparent);
       m_indirectBatcher.updateChunkData(static_cast<uint32_t>(slotIndex), cullData);
     } else {
       ChunkCullData emptyData{};
-      emptyData.hasOpaque = 0u;
-      emptyData.hasTransparent = 0u;
       m_indirectBatcher.updateChunkData(static_cast<uint32_t>(slotIndex), emptyData);
     }
     world.markUploaded(*chunk);

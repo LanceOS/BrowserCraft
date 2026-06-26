@@ -6,13 +6,27 @@
 #include "content/flora/DefaultFlora.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <iostream>
 #include <new>
+#include <vector>
 #include <utility>
 #include <thread>
 
 namespace voxel {
 
 namespace {
+
+inline auto slotHasVoxelData(int32_t status) -> bool {
+  return status >= static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
+}
+
+struct MeshScratchBuffers {
+  std::vector<float> vertices;
+  std::vector<uint32_t> indices;
+};
+
+thread_local MeshScratchBuffers g_meshScratch;
 
 /// Concrete IChunkWorker that dispatches generation and meshing
 /// jobs to dedicated thread pools.
@@ -42,6 +56,8 @@ public:
       auto slot = m_pool.view(slotIndex);
       *slot.vertexCount = 0u;
       *slot.indexCount = 0u;
+      *slot.opaqueIndexCount = 0u;
+      *slot.transparentIndexCount = 0u;
       *slot.renderFlags = 0u;
 
       mesher::MesherConfig mcfg;
@@ -52,8 +68,45 @@ public:
       mcfg.maxIndices = m_config.maxIndicesPerChunk;
       mcfg.strideFloats = m_config.vertexStrideFloats;
 
-      auto capacityHint = mesher::estimateMeshCapacity(slot.voxels, m_blocks, mcfg);
-      if (capacityHint.vertexCount == 0u || capacityHint.indexCount == 0u) {
+      const int32_t chunkX = *slot.chunkX;
+      const int32_t chunkZ = *slot.chunkZ;
+      const auto neighbors = gatherNeighborVoxels(slotIndex, chunkX, chunkZ);
+
+      // Rebuild the packed light volume for every remesh so terrain edits and
+      // streamed-in chunks keep their smooth lighting in sync with geometry.
+      mesher::calculateLighting(slot.voxels, slot.light, m_blocks, mcfg);
+
+      const size_t scratchVertexFloats =
+          static_cast<size_t>(std::max(0, mcfg.maxVertices)) *
+          static_cast<size_t>(std::max(1, mcfg.strideFloats));
+      const size_t scratchIndices = static_cast<size_t>(std::max(0, mcfg.maxIndices));
+      if (g_meshScratch.vertices.size() < scratchVertexFloats) {
+        g_meshScratch.vertices.resize(scratchVertexFloats);
+      }
+      if (g_meshScratch.indices.size() < scratchIndices) {
+        g_meshScratch.indices.resize(scratchIndices);
+      }
+
+      uint32_t vc = 0, ic = 0;
+      uint32_t opaqueIc = 0, transparentIc = 0;
+      bool hasTransparent = false;
+      bool hasOpaque = false;
+      bool ok = mesher::greedyMesh(
+          slot.voxels, slot.light, m_blocks, mcfg,
+          g_meshScratch.vertices.data(),
+          g_meshScratch.indices.data(),
+          vc, ic, &hasTransparent, &hasOpaque, &opaqueIc, &transparentIc, neighbors);
+      if (!ok) {
+        std::cerr << "Chunk mesh build exceeded scratch limits for (" << chunkX << ", " << chunkZ
+                  << ") max " << mcfg.maxVertices << " verts / "
+                  << mcfg.maxIndices << " indices\n";
+        m_meshAllocator.releaseSlot(slotIndex);
+        *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+        m_controller.onMeshCompleted(slotIndex, false);
+        return;
+      }
+
+      if (vc == 0u || ic == 0u) {
         m_meshAllocator.releaseSlot(slotIndex);
         *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
         m_controller.onMeshCompleted(slotIndex, true);
@@ -62,37 +115,30 @@ public:
 
       auto allocation = m_meshAllocator.allocateForSlot(
           slotIndex,
-          static_cast<size_t>(capacityHint.vertexCount) * m_config.vertexStrideFloats * sizeof(float),
-          static_cast<size_t>(capacityHint.indexCount) * sizeof(uint32_t));
+          static_cast<size_t>(vc) * m_config.vertexStrideFloats * sizeof(float),
+          static_cast<size_t>(ic) * sizeof(uint32_t));
       if (!allocation || !allocation->valid()) {
+        std::cerr << "Chunk mesh allocation failed for (" << chunkX << ", " << chunkZ
+                  << ") requesting " << vc << " verts / "
+                  << ic << " indices\n";
         *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
         m_controller.onMeshCompleted(slotIndex, false);
         return;
       }
 
-      // Rebuild the packed light volume for every remesh so terrain edits and
-      // streamed-in chunks keep their smooth lighting in sync with geometry.
-      mesher::calculateLighting(slot.voxels, slot.light, m_blocks, mcfg);
-      mcfg.maxVertices = static_cast<int32_t>(capacityHint.vertexCount);
-      mcfg.maxIndices = static_cast<int32_t>(capacityHint.indexCount);
+      std::memcpy(allocation->vboPtr, g_meshScratch.vertices.data(),
+                  static_cast<size_t>(vc) * m_config.vertexStrideFloats * sizeof(float));
+      std::memcpy(allocation->iboPtr, g_meshScratch.indices.data(),
+                  static_cast<size_t>(ic) * sizeof(uint32_t));
 
-      uint32_t vc = 0, ic = 0;
-      bool hasTransparent = false;
-      bool hasOpaque = false;
-      bool ok = mesher::greedyMesh(
-          slot.voxels, slot.light, m_blocks, mcfg,
-          allocation->vboPtr,
-          allocation->iboPtr,
-          vc, ic, &hasTransparent, &hasOpaque);
       *slot.vertexCount = static_cast<uint32_t>(vc);
       *slot.indexCount = ic;
+      *slot.opaqueIndexCount = opaqueIc;
+      *slot.transparentIndexCount = transparentIc;
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
       if (hasTransparent) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
       if (hasOpaque) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
-      if (!ok || vc == 0u || ic == 0u) {
-        m_meshAllocator.releaseSlot(slotIndex);
-      }
-      m_controller.onMeshCompleted(slotIndex, ok);
+      m_controller.onMeshCompleted(slotIndex, true);
     });
   }
 
@@ -105,6 +151,36 @@ public:
   }
 
 private:
+  auto gatherNeighborVoxels(int32_t slotIndex, int32_t chunkX, int32_t chunkZ) const
+      -> mesher::NeighborVoxelViews {
+    mesher::NeighborVoxelViews neighbors{};
+
+    for (int32_t i = 0; i < m_pool.capacity(); ++i) {
+      if (i == slotIndex) continue;
+
+      auto candidate = m_pool.view(i);
+      if (!slotHasVoxelData(*candidate.status)) continue;
+
+      const int32_t cx = *candidate.chunkX;
+      const int32_t cz = *candidate.chunkZ;
+      if (cx == chunkX + 1 && cz == chunkZ) {
+        neighbors.px = candidate.voxels;
+      } else if (cx == chunkX - 1 && cz == chunkZ) {
+        neighbors.nx = candidate.voxels;
+      } else if (cx == chunkX && cz == chunkZ + 1) {
+        neighbors.pz = candidate.voxels;
+      } else if (cx == chunkX && cz == chunkZ - 1) {
+        neighbors.nz = candidate.voxels;
+      }
+
+      if (neighbors.px && neighbors.nx && neighbors.pz && neighbors.nz) {
+        break;
+      }
+    }
+
+    return neighbors;
+  }
+
   WorkerThreadPool& m_genPool;
   WorkerThreadPool& m_meshPool;
   SharedPool& m_pool;

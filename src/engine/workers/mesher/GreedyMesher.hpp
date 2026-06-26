@@ -23,12 +23,23 @@ struct MeshCapacityHint {
   uint32_t quadCount = 0;
 };
 
+/// Neighbor chunk voxel columns that can be sampled when meshing chunk borders.
+/// Only the four horizontal cardinal neighbors are needed to cull chunk-edge
+/// faces. Missing neighbors are treated as air.
+struct NeighborVoxelViews {
+  const uint8_t* px = nullptr;
+  const uint8_t* nx = nullptr;
+  const uint8_t* pz = nullptr;
+  const uint8_t* nz = nullptr;
+};
+
 /// Estimate the maximum mesh output needed for the current voxel volume.
 /// The result is an upper bound, not an exact count.
 [[nodiscard]] auto estimateMeshCapacity(
     const uint8_t* voxels,
     const BlockRegistry& blocks,
-    const MesherConfig& cfg) -> MeshCapacityHint;
+    const MesherConfig& cfg,
+    const NeighborVoxelViews& neighbors = {}) -> MeshCapacityHint;
 
 /// Perform greedy meshing on a chunk's voxel data.
 ///
@@ -43,6 +54,9 @@ struct MeshCapacityHint {
 /// (non-opaque) block face is included in the mesh.
 /// If hasOpaqueOut is non-null, it is set to true when any opaque block face
 /// is included in the mesh.
+/// If opaqueIndexCountOut / transparentIndexCountOut are non-null, they receive
+/// the number of indices emitted into each material range. The final index
+/// buffer layout is always opaque indices first, then transparent indices.
 /// @see notes/mesher-capacity-accounting.md
 bool greedyMesh(
     const uint8_t* voxels,
@@ -54,7 +68,10 @@ bool greedyMesh(
     uint32_t& vertexCountOut,
     uint32_t& indexCountOut,
     bool* hasTransparentOut = nullptr,
-    bool* hasOpaqueOut = nullptr);
+    bool* hasOpaqueOut = nullptr,
+    uint32_t* opaqueIndexCountOut = nullptr,
+    uint32_t* transparentIndexCountOut = nullptr,
+    const NeighborVoxelViews& neighbors = {});
 
 } // namespace mesher
 } // namespace voxel

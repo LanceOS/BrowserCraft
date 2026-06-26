@@ -2,6 +2,7 @@
 #include <catch2/catch_approx.hpp>
 #include "engine/core/InputState.hpp"
 #include "engine/core/Config.hpp"
+#include "engine/collision/EntityCollisions.hpp"
 #include "engine/ecs/EntityManager.hpp"
 #include "engine/ecs/ComponentStore.hpp"
 #include "engine/ecs/components/Components.hpp"
@@ -448,6 +449,45 @@ TEST_CASE("Player collides when inside terrain", "[world][collision]") {
   // At Y=65 — should not collide (one block above ground)
   glm::vec3 aboveSurface(0.0f, 65.0f, 0.0f);
   CHECK_FALSE(checkCollision(aboveSurface));
+}
+
+TEST_CASE("Player can descend below a higher ledge surface", "[world][collision][player]") {
+  auto cfg = makeTestConfig();
+  auto pool = SharedPool::create(16, makeDims(cfg));
+  BlockRegistry blocks(256);
+  registerTestBlocks(blocks);
+
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
+
+  world.update(glm::vec3(8.0f, 80.0f, 8.0f));
+  auto* chunk = world.getChunk(0, 0);
+  REQUIRE(chunk != nullptr);
+
+  auto slot = world.getChunkSlot(*chunk);
+  fillFlatTerrain(slot, cfg.chunkSize, cfg.worldHeight, cfg.chunkSize, 56);
+
+  for (int32_t y = 56; y < 64; ++y) {
+    for (int32_t z = 0; z < cfg.chunkSize; ++z) {
+      for (int32_t x = 0; x < 8; ++x) {
+        int32_t idx = (y * cfg.chunkSize + z) * cfg.chunkSize + x;
+        slot.voxels[idx] = 1;
+      }
+    }
+  }
+
+  EntityCollisions collisions(world, cfg);
+  cmp::Transform transform;
+  transform.position = glm::vec3(7.75f, 64.0f, 7.5f);
+
+  cmp::RigidBody body;
+  body.onGround = 1;
+
+  collisions.resolveMovement(0.15f, -0.8f, 0.0f, transform, body);
+
+  CHECK(transform.position.y < 64.0f);
+  CHECK(body.onGround == 0);
 }
 
 // ===========================================================================
