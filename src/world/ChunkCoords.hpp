@@ -10,6 +10,12 @@ inline auto worldToChunk(float coord, int32_t size) -> int32_t {
   return static_cast<int32_t>(std::floor(coord / static_cast<float>(size)));
 }
 
+/// Utility: integer coordinate → chunk coordinate using floor division.
+inline auto floorToChunk(int32_t coord, int32_t size) -> int32_t {
+  if (coord >= 0) return coord / size;
+  return -1 - ((-coord - 1) / size);
+}
+
 /// Utility: positive modulo.
 inline auto mod(int32_t value, int32_t size) -> int32_t {
   int32_t r = value % size;

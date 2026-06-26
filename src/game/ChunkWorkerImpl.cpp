@@ -27,11 +27,6 @@ struct MeshScratchBuffers {
 
 thread_local MeshScratchBuffers g_meshScratch;
 
-static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
-  return {cfg.chunkSize, cfg.worldHeight, cfg.chunkSize,
-          cfg.maxVertsPerChunk, cfg.maxIndicesPerChunk, cfg.vertexStrideFloats};
-}
-
 } // namespace
 
 ChunkWorkerImpl::ChunkWorkerImpl(WorkerThreadPool& genPool, WorkerThreadPool& meshPool,

@@ -1,5 +1,5 @@
 #include "World.hpp"
-#include "WorldCoords.hpp"
+#include "ChunkCoords.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstring>

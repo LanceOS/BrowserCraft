@@ -125,6 +125,7 @@ add_library(voxel_engine STATIC
   src/engine/ecs/EntityManager.cpp
   src/engine/ecs/SystemManager.cpp
   src/engine/collision/EntityCollisions.cpp
+  src/engine/collision/EntityCollisionsMovement.cpp
   src/engine/ecs/systems/PlayerControllerSystem.cpp
   src/engine/ecs/systems/PlayerSpawnSystem.cpp
   src/engine/assets/AssetManager.cpp
@@ -149,6 +150,7 @@ add_library(voxel_engine STATIC
   src/engine/render/Renderer.cpp
   src/engine/core/InputState.cpp
   src/engine/core/GameLoop.cpp
+  src/engine/core/InputCallbackBridge.cpp
   src/engine/audio/AudioEngine.cpp
   src/engine/threading/WorkerThreadPool.cpp
   src/engine/save/SaveManager.cpp

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "world/ChunkTypes.hpp"
 #include <vector>
 #include <cstdint>
 #include <cstddef>
@@ -9,30 +10,6 @@
 
 namespace voxel {
 
-enum class ChunkSlotStatus : int32_t {
-  FREE = 0,
-  GENERATING = 1,
-  VOXELS_READY = 2,
-  MESHING = 3,
-  MESH_READY = 4,
-  GPU_UPLOADED = 5,
-};
-
-/// Render metadata written by the mesher and consumed by the render path.
-/// Stored separately from the lifecycle status word so lifecycle code can
-/// remain unaware of render-specific state.
-inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_TRANSPARENT = 1u << 0;
-inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_OPAQUE = 1u << 1;
-
-struct ChunkDimensions {
-  int32_t sizeX;
-  int32_t sizeY;
-  int32_t sizeZ;
-  int32_t maxVertsPerChunk;
-  int32_t maxIndicesPerChunk;
-  int32_t vertexStrideFloats;
-};
-
 /// A view into one slot of the shared pool buffer.
 /// All pointers point into the shared buffer — no ownership.
 struct ChunkSlot {
@@ -40,7 +17,7 @@ struct ChunkSlot {
   uint8_t* buffer;       // base of the entire pool buffer
   size_t baseByteOffset; // offset to this slot
   int32_t* status;       // ChunkSlotStatus lifecycle state
-  uint32_t* renderFlags; // ChunkRenderFlags metadata
+  uint32_t* renderFlags; // render metadata
   uint32_t* vertexCount;
   uint32_t* indexCount;
   uint32_t* opaqueIndexCount;

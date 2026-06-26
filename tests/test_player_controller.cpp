@@ -8,7 +8,7 @@
 #include "engine/ecs/ComponentStore.hpp"
 #include "engine/ecs/components/Components.hpp"
 #include "engine/alloc/SharedPool.hpp"
-#include "world/WorldCoords.hpp"
+#include "world/ChunkCoords.hpp"
 #include "world/World.hpp"
 #include "world/BlockRegistry.hpp"
 #include "MockWorker.hpp"
@@ -658,9 +658,10 @@ TEST_CASE("Fluid blocks are not solid", "[block]") {
 // World coordinate utilities
 // ===========================================================================
 
-TEST_CASE("worldToChunk and mod helpers", "[world]") {
-  // These are inline functions in World.hpp
+TEST_CASE("chunk coordinate helpers", "[world]") {
+  // These are inline functions in ChunkCoords.hpp
   // worldToChunk(coord, size) = floor(coord / size)
+  // floorToChunk(value, size) = integer floor division
   // mod(value, size) = positive modulus
 
   // Standard chunk size = 16
@@ -676,6 +677,13 @@ TEST_CASE("worldToChunk and mod helpers", "[world]") {
   CHECK(worldToChunk(-0.1f, CS) == -1);
   CHECK(worldToChunk(-16.0f, CS) == -1);
   CHECK(worldToChunk(-16.1f, CS) == -2);
+
+  CHECK(floorToChunk(0, CS) == 0);
+  CHECK(floorToChunk(15, CS) == 0);
+  CHECK(floorToChunk(16, CS) == 1);
+  CHECK(floorToChunk(-1, CS) == -1);
+  CHECK(floorToChunk(-16, CS) == -1);
+  CHECK(floorToChunk(-17, CS) == -2);
 
   // Positive modulo
   CHECK(mod(0, CS) == 0);

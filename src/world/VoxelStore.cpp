@@ -1,9 +1,9 @@
 #include "VoxelStore.hpp"
+#include "ChunkCoords.hpp"
 #include "Chunk.hpp"
 #include "BlockRegistry.hpp"
 #include "engine/core/Config.hpp"
 #include "engine/alloc/SharedPool.hpp"
-#include <algorithm>
 #include <cmath>
 
 namespace voxel {
@@ -13,39 +13,18 @@ VoxelStore::VoxelStore(SharedPool& pool, const BlockRegistry& blocks,
   : m_pool(pool), m_blocks(blocks), m_chunks(chunks), m_config(config)
 {}
 
-// ---- Coordinate helpers ------------------------------------------------
-
-auto VoxelStore::worldToChunk(float coord) const -> int32_t {
-  return static_cast<int32_t>(
-      std::floor(coord / static_cast<float>(m_config.chunkSize)));
-}
-
-auto VoxelStore::mod(int32_t value) const -> int32_t {
-  int32_t r = value % m_config.chunkSize;
-  return r < 0 ? r + m_config.chunkSize : r;
-}
-
-auto VoxelStore::chunkSize() const -> int32_t { return m_config.chunkSize; }
-auto VoxelStore::worldHeight() const -> int32_t { return m_config.worldHeight; }
-
-// ---- Internal: resolve chunk + slot for a world coordinate --------------
-
-static inline auto slotVoxels(SharedPool& pool, int32_t slotIndex) -> ChunkSlot {
-  return pool.view(slotIndex);
-}
-
 // ---- Block IDs ---------------------------------------------------------
 
 auto VoxelStore::getBlockId(int32_t worldX, int32_t worldY,
                             int32_t worldZ) const -> uint8_t
 {
   if (worldY < 0 || worldY >= m_config.worldHeight) return 0;
-  int32_t cx = worldToChunk(static_cast<float>(worldX));
-  int32_t cz = worldToChunk(static_cast<float>(worldZ));
+  int32_t cx = worldToChunk(static_cast<float>(worldX), m_config.chunkSize);
+  int32_t cz = worldToChunk(static_cast<float>(worldZ), m_config.chunkSize);
   const auto* chunk = m_chunks.get(cx, cz);
   if (!chunk) return 0;
-  int32_t localX = mod(worldX);
-  int32_t localZ = mod(worldZ);
+  int32_t localX = mod(worldX, m_config.chunkSize);
+  int32_t localZ = mod(worldZ, m_config.chunkSize);
   auto slot = m_pool.view(chunk->slotIndex);
   return slot.voxels[(worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX];
 }
@@ -95,8 +74,8 @@ auto VoxelStore::isSolidInChunk(int32_t worldX, int32_t worldY,
 {
   if (worldY < 0 || worldY >= m_config.worldHeight) return false;
   auto slot = m_pool.view(chunk.slotIndex);
-  int32_t localX = mod(worldX);
-  int32_t localZ = mod(worldZ);
+  int32_t localX = mod(worldX, m_config.chunkSize);
+  int32_t localZ = mod(worldZ, m_config.chunkSize);
   uint8_t blockId = slot.voxels[(worldY * m_config.chunkSize + localZ) * m_config.chunkSize + localX];
   if (blockId == 0) return false;
   const auto* def = m_blocks.tryGet(blockId);
