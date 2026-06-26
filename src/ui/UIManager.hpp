@@ -1,11 +1,14 @@
 #pragma once
 
+#include "engine/save/WorldListEntry.hpp"
+#include "game/GameMode.hpp"
 #include <array>
-#include <string>
-#include <vector>
+#include <cstdint>
 #include <functional>
+#include <string>
+#include <utility>
+#include <vector>
 #include <GLFW/glfw3.h>
-#include "game/GameSession.hpp"
 
 namespace voxel {
 
@@ -16,15 +19,6 @@ enum class UIState {
   InGame,
   Paused,
   Inventory,
-};
-
-/// A lightweight representation of a saved world for UI rendering.
-struct WorldEntry {
-  std::string name;
-  std::string slug;
-  uint32_t seed = 0;
-  int32_t gameMode = 0; // 0 = Survival, 1 = Creative
-  int64_t lastPlayedTimestamp = 0;
 };
 
 /// ImGui-based UI manager for menus, HUD, and inventory.

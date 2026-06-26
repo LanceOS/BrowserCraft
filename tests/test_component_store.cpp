@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "engine/ecs/ComponentStore.hpp"
+#include "engine/ecs/TagStore.hpp"
 #include "engine/ecs/components/Components.hpp"
 
 TEST_CASE("ComponentStore add and get", "[ecs]") {

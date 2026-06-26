@@ -5,8 +5,8 @@
 #include "WorldListService.hpp"
 #include "SettingsRepository.hpp"
 #include "SaveManager.hpp"
-#include "ui/UIManager.hpp"
-#include "game/GameSession.hpp"
+#include "WorldListEntry.hpp"
+#include "game/GameMode.hpp"
 #include <string>
 #include <vector>
 #include <memory>
@@ -43,7 +43,7 @@ public:
   }
   void refreshWorldList() { m_worldList->refresh(); }
 
-  /// Convert internal metadata list to UI-friendly WorldEntry vector.
+  /// Convert internal metadata list to WorldEntry records shared with the UI.
   static auto buildWorldEntries(const std::vector<WorldMetadata>& worlds)
     -> std::vector<WorldEntry>;
 

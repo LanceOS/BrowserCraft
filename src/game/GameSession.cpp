@@ -1,4 +1,5 @@
 #include "GameSession.hpp"
+#include "engine/core/RenderDistanceLimits.hpp"
 #include <algorithm>
 
 namespace voxel {

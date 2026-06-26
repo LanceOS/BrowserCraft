@@ -1,5 +1,6 @@
 #include "game/GameOrchestrator.hpp"
 #include "game/ChunkWorkerImpl.hpp"
+#include "engine/core/RenderDistanceLimits.hpp"
 #include "engine/alloc/SharedPool.hpp"
 #include "world/blocks/VanillaBlockFactory.hpp"
 #include "content/flora/DefaultFlora.hpp"
