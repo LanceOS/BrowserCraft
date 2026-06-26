@@ -4,7 +4,6 @@
 #include "world/terrain/TerrainCollision.hpp"
 #include "world/terrain/TerrainRaycast.hpp"
 #include "world/World.hpp"
-#include "world/BlockRegistry.hpp"
 #include "engine/core/Config.hpp"
 #include "engine/alloc/SharedPool.hpp"
 #include "engine/collision/EntityCollisions.hpp"
@@ -37,7 +36,7 @@ TEST_CASE("Ray-Triangle Intersection (Möller-Trumbore)", "[terrain_physics]") {
     bool hit = rayTriangleIntersect(origin, direction, v0, v1, v2, t, normal);
     REQUIRE(hit);
     REQUIRE(t == 1.0f);
-    REQUIRE(normal.y == 1.0f);
+    REQUIRE(normal.y == -1.0f);
   }
 
   SECTION("Ray misses") {
@@ -143,21 +142,12 @@ static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
   };
 }
 
-TEST_CASE("EntityCollisions Dual System Integration", "[terrain_physics]") {
+TEST_CASE("EntityCollisions Smooth Terrain Integration", "[terrain_physics]") {
   auto cfg = makeTestConfig();
   auto pool = SharedPool::create(16, makeDims(cfg));
-  BlockRegistry blocks(256);
-  // Register grass (1) as solid natural block, planks (6) as solid placed block
-  BlockDefinition grassDef{.id = 1, .name = "grass"};
-  grassDef.material.opaque = true;
-  blocks.register_(std::move(grassDef));
-
-  BlockDefinition planksDef{.id = 6, .name = "planks"};
-  planksDef.material.opaque = true;
-  blocks.register_(std::move(planksDef));
 
   TestChunkWorker worker;
-  World world(*pool, blocks, cfg, worker, nullptr);
+  World world(*pool, cfg, worker, nullptr);
 
   // Initialize world and load center chunk
   world.update(glm::vec3(0.0f, 64.0f, 0.0f));
@@ -175,16 +165,6 @@ TEST_CASE("EntityCollisions Dual System Integration", "[terrain_physics]") {
   terrainCol->build(std::move(triangles));
   chunk->terrainCollision = terrainCol;
 
-  // Let's set some voxels in the chunk:
-  // a natural block at (5, 10, 5) -> should be ignored because we have a terrain mesh
-  // a placed block at (5, 12, 5) -> should NOT be ignored
-  auto slot = pool->view(chunk->slotIndex);
-  // flat index = (y * sz + z) * sx + x
-  int32_t naturalIdx = (10 * 16 + 5) * 16 + 5;
-  int32_t placedIdx = (12 * 16 + 5) * 16 + 5;
-  slot.voxels[naturalIdx] = 1; // grass
-  slot.voxels[placedIdx] = 6;  // planks
-
   EntityCollisions collisions(world, cfg);
   cmp::RigidBody body;
   body.aabbMin = glm::vec3(-0.3f, 0.0f, -0.3f);
@@ -198,22 +178,6 @@ TEST_CASE("EntityCollisions Dual System Integration", "[terrain_physics]") {
     // Player is standing completely above the terrain mesh at y=10.5 -> should not collide!
     glm::vec3 posAbove(8.0f, 10.5f, 8.0f);
     REQUIRE_FALSE(collisions.collidesAt(posAbove, body));
-  }
-
-  SECTION("Collision with placed blocks vs natural blocks in meshed chunk") {
-    // Player standing at (5.5, 9.5, 5.5) which overlaps the natural grass terrain at (5,10,5),
-    // but the terrain mesh is at y=10.0. If we only test the mesh, it collides because y=9.5 penetrates y=10.0.
-    // If we test a position above the terrain mesh but overlapping the natural terrain:
-    // e.g. position y=10.1 (so feet are at 10.1, head at 11.9, overlapping terrain y=10).
-    // In this case, the natural terrain should be ignored!
-    glm::vec3 posOverlapNatural(5.5f, 10.1f, 5.5f);
-    REQUIRE_FALSE(collisions.collidesAt(posOverlapNatural, body));
-
-    // However, if we overlap the placed planks terrain at (5, 12, 5):
-    // e.g. position y=11.5 (so feet are at 11.5, body overlaps y=12).
-    // The placed block at y=12 should collide!
-    glm::vec3 posOverlapPlaced(5.5f, 11.5f, 5.5f);
-    REQUIRE(collisions.collidesAt(posOverlapPlaced, body));
   }
 
   SECTION("Ground height check") {

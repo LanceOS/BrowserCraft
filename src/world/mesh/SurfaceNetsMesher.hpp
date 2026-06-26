@@ -32,7 +32,7 @@ struct DensitySampler {
 
 /// Extract a Surface Nets mesh from the scalar density field.
 ///
-/// The output layout matches the existing greedy mesher vertex format:
+/// The output layout matches the standard chunk mesher vertex format:
 /// position, normal, uv, texLayer, packedLight.
 [[nodiscard]] auto surfaceNetsMesh(
     const SurfaceNetsConfig& cfg,

@@ -11,7 +11,7 @@
 namespace fs = std::filesystem;
 
 TEST_CASE("WorldMetadata round-trip serialization", "[save][metadata]") {
-  auto tmpDir = fs::temp_directory_path() / "voxel_test_meta";
+  auto tmpDir = fs::temp_directory_path() / "terrain_test_meta";
   fs::remove_all(tmpDir);
   fs::create_directories(tmpDir);
   auto metaPath = tmpDir / "world.meta";
@@ -49,7 +49,7 @@ TEST_CASE("WorldMetadata round-trip serialization", "[save][metadata]") {
 }
 
 TEST_CASE("WorldMetadata invalid file returns nullopt", "[save][metadata]") {
-  auto tmpDir = fs::temp_directory_path() / "voxel_test_meta_bad";
+  auto tmpDir = fs::temp_directory_path() / "terrain_test_meta_bad";
   fs::remove_all(tmpDir);
   fs::create_directories(tmpDir);
   auto metaPath = tmpDir / "nonexistent.meta";
@@ -109,7 +109,7 @@ TEST_CASE("WorldNamingService name validation", "[save][naming]") {
 }
 
 TEST_CASE("WorldNamingService collision detection", "[save][naming]") {
-  auto tmpDir = fs::temp_directory_path() / "voxel_test_naming";
+  auto tmpDir = fs::temp_directory_path() / "terrain_test_naming";
   fs::remove_all(tmpDir);
   fs::create_directories(tmpDir);
 
@@ -149,7 +149,7 @@ TEST_CASE("WorldNamingService collision detection", "[save][naming]") {
 }
 
 TEST_CASE("WorldListService scans and sorts worlds", "[save][worldlist]") {
-  auto tmpDir = fs::temp_directory_path() / "voxel_test_list";
+  auto tmpDir = fs::temp_directory_path() / "terrain_test_list";
   fs::remove_all(tmpDir);
 
   // Create multiple world directories with metadata
@@ -194,7 +194,7 @@ TEST_CASE("WorldListService scans and sorts worlds", "[save][worldlist]") {
   }
 
   SECTION("empty directory") {
-    auto emptyDir = fs::temp_directory_path() / "voxel_test_list_empty";
+    auto emptyDir = fs::temp_directory_path() / "terrain_test_list_empty";
     fs::remove_all(emptyDir);
     fs::create_directories(emptyDir);
     terrain::WorldListService emptyService(emptyDir.string());
@@ -216,7 +216,7 @@ TEST_CASE("WorldListService scans and sorts worlds", "[save][worldlist]") {
 }
 
 TEST_CASE("SettingsRepository CRUD operations", "[save][settings]") {
-  auto tmpDir = fs::temp_directory_path() / "voxel_test_settings";
+  auto tmpDir = fs::temp_directory_path() / "terrain_test_settings";
   fs::remove_all(tmpDir);
   fs::create_directories(tmpDir);
   auto dbPath = tmpDir / "settings.db";
@@ -284,7 +284,7 @@ TEST_CASE("SettingsRepository CRUD operations", "[save][settings]") {
 }
 
 TEST_CASE("SettingsRepository persists across sessions", "[save][settings][persist]") {
-  auto tmpDir = fs::temp_directory_path() / "voxel_test_settings_persist";
+  auto tmpDir = fs::temp_directory_path() / "terrain_test_settings_persist";
   fs::remove_all(tmpDir);
   fs::create_directories(tmpDir);
   auto dbPath = tmpDir / "settings.db";
@@ -312,7 +312,7 @@ TEST_CASE("SettingsRepository persists across sessions", "[save][settings][persi
 }
 
 TEST_CASE("SaveOrchestrator clamps loaded render distance", "[save][orchestrator][settings]") {
-  auto tmpDir = fs::temp_directory_path() / "voxel_test_orch_settings";
+  auto tmpDir = fs::temp_directory_path() / "terrain_test_orch_settings";
   fs::remove_all(tmpDir);
   fs::create_directories(tmpDir);
 
@@ -363,7 +363,7 @@ TEST_CASE("SaveOrchestrator buildWorldEntries", "[save][orchestrator]") {
 }
 
 TEST_CASE("SaveOrchestrator new world preparation", "[save][orchestrator]") {
-  auto tmpDir = fs::temp_directory_path() / "voxel_test_orch_new";
+  auto tmpDir = fs::temp_directory_path() / "terrain_test_orch_new";
   fs::remove_all(tmpDir);
   fs::create_directories(tmpDir);
 
@@ -427,7 +427,7 @@ TEST_CASE("SaveOrchestrator new world preparation", "[save][orchestrator]") {
 }
 
 TEST_CASE("SaveOrchestrator load world preparation", "[save][orchestrator]") {
-  auto tmpDir = fs::temp_directory_path() / "voxel_test_orch_load";
+  auto tmpDir = fs::temp_directory_path() / "terrain_test_orch_load";
   fs::remove_all(tmpDir);
   fs::create_directories(tmpDir);
 

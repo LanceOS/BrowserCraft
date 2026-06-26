@@ -7,7 +7,7 @@
 namespace terrain {
 
 namespace {
-// Smooth terrain meshes are denser than the old greedy terrain surfaces, so the
+// Smooth terrain meshes are denser than the old blocky terrain surfaces, so the
 // shared arena needs a little more breathing room to avoid churn at runtime.
 constexpr float kMeshBudgetFactor = 0.40f;
 constexpr size_t kMinVboBudgetBytes = 1u << 20; // 1 MiB

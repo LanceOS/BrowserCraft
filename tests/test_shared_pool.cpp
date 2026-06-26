@@ -23,8 +23,8 @@ TEST_CASE("SharedPool create and acquire", "[alloc]") {
   REQUIRE(*slot->transparentIndexCount == 0);
 
   // Write terrain data and verify
-  slot->voxels[0] = 5;
-  REQUIRE(slot->voxels[0] == 5);
+  slot->density[0] = 5.0f;
+  REQUIRE(slot->density[0] == 5.0f);
 }
 
 TEST_CASE("SharedPool acquire all then release", "[alloc]") {
@@ -68,10 +68,10 @@ TEST_CASE("SharedPool multi-threaded view access", "[alloc]") {
 
   // view() works from any context (single SharedPool, no attach needed)
   auto slot = pool->view(0);
-  slot.voxels[5] = 42;
-  REQUIRE(slot.voxels[5] == 42);
+  slot.density[5] = 42.0f;
+  REQUIRE(slot.density[5] == 42.0f);
 
   // Same data visible through another view
   auto mainSlot = pool->view(0);
-  REQUIRE(mainSlot.voxels[5] == 42);
+  REQUIRE(mainSlot.density[5] == 42.0f);
 }
