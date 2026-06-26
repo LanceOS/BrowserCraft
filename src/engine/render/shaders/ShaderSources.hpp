@@ -135,6 +135,9 @@ void main() {
   float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
   float lightPresence = max(v_skyLight, v_blockLight);
 
+  // @see notes/chunk-shadow-banding.md
+  // Keep AO as an ambient term so the sun stays directional and nearby
+  // occluders read as soft shading instead of hard banded stripes.
   // Use the baked light field as the primary signal so adjacent faces blend
   // smoothly, then layer a softer directional sun over exposed surfaces.
   float ambient = mix(0.04, u_ambientIntensity * mix(0.16, 0.36, upward), lightPresence);
@@ -142,10 +145,10 @@ void main() {
   float overlap = 0.20 * skyLight + 0.30 * blockLight;
   float sunMask = smoothstep(0.05, 0.85, v_skyLight);
   float sunDiffuse = max(dot(normal, sunDir), 0.0) * u_sunIntensity * sunMask * 0.35;
-  float aoFactor = 1.0 - v_ao * 0.25;
+  float aoFactor = 0.75 + v_ao * 0.25;
 
   vec3 lighting = vec3(ambient + indirect * 0.50 + overlap * 0.20) * aoFactor
-                + u_sunColor * (sunDiffuse * aoFactor);
+                + u_sunColor * sunDiffuse;
   lighting = max(lighting, vec3(0.03));
 
   vec3 finalLighting = albedo.rgb * lighting;

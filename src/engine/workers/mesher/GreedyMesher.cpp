@@ -68,6 +68,7 @@ static inline auto getPackedLight(const uint8_t* light,
   return light[voxelIndex(x, y, z, cfg)];
 }
 
+// @see notes/chunk-shadow-banding.md
 /// Pack sky light, block light, and AO into a float.
 /// The shader does `uint(a_lightData + 0.5)` to recover the integer.
 static inline auto packLight(int32_t sky, int32_t block, int32_t ao) -> float {
@@ -95,7 +96,7 @@ static inline int32_t aoTop(const uint8_t* voxels,
                              int32_t bx, int32_t by, int32_t bz,
                              const MesherConfig& cfg,
                              const BlockRegistry& blocks) {
-  int32_t ly = faceY - 1; // blocks below the face
+  int32_t ly = faceY; // blocks at the face level (air side)
   bool s1 = isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz);
   bool s2 = isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz);
   bool c  = isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz);
@@ -107,7 +108,7 @@ static inline int32_t aoBottom(const uint8_t* voxels,
                                 int32_t bx, int32_t by, int32_t bz,
                                 const MesherConfig& cfg,
                                 const BlockRegistry& blocks) {
-  int32_t ly = faceY + 1; // blocks above the face
+  int32_t ly = faceY - 1; // blocks at the face level (air side)
   bool s1 = isSolidExcluding(voxels, cx-1, ly, cz,   cfg, blocks, bx, by, bz);
   bool s2 = isSolidExcluding(voxels, cx,   ly, cz-1, cfg, blocks, bx, by, bz);
   bool c  = isSolidExcluding(voxels, cx-1, ly, cz-1, cfg, blocks, bx, by, bz);
@@ -119,7 +120,7 @@ static inline int32_t aoRight(const uint8_t* voxels,
                                int32_t bx, int32_t by, int32_t bz,
                                const MesherConfig& cfg,
                                const BlockRegistry& blocks) {
-  int32_t lx = faceX - 1;
+  int32_t lx = faceX; // blocks at the face level (air side)
   bool s1 = isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz);
   bool s2 = isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz);
   bool c  = isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz);
@@ -131,7 +132,7 @@ static inline int32_t aoLeft(const uint8_t* voxels,
                               int32_t bx, int32_t by, int32_t bz,
                               const MesherConfig& cfg,
                               const BlockRegistry& blocks) {
-  int32_t lx = faceX + 1;
+  int32_t lx = faceX - 1; // blocks at the face level (air side)
   bool s1 = isSolidExcluding(voxels, lx, cy-1, cz,   cfg, blocks, bx, by, bz);
   bool s2 = isSolidExcluding(voxels, lx, cy,   cz-1, cfg, blocks, bx, by, bz);
   bool c  = isSolidExcluding(voxels, lx, cy-1, cz-1, cfg, blocks, bx, by, bz);
@@ -143,10 +144,10 @@ static inline int32_t aoFront(const uint8_t* voxels,
                                int32_t bx, int32_t by, int32_t bz,
                                const MesherConfig& cfg,
                                const BlockRegistry& blocks) {
-  int32_t lz = faceZ - 1;
-  bool s1 = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz);
+  int32_t lz = faceZ; // blocks at the face level (air side)
+  bool s1 = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz);
   bool s2 = isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz);
-  bool c  = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz);
+  bool c  = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz);
   return calculateAO(s1, s2, c);
 }
 
@@ -155,10 +156,10 @@ static inline int32_t aoBack(const uint8_t* voxels,
                               int32_t bx, int32_t by, int32_t bz,
                               const MesherConfig& cfg,
                               const BlockRegistry& blocks) {
-  int32_t lz = faceZ + 1;
-  bool s1 = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz);
+  int32_t lz = faceZ - 1; // blocks at the face level (air side)
+  bool s1 = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz);
   bool s2 = isSolidExcluding(voxels, cx,   cy-1, lz, cfg, blocks, bx, by, bz);
-  bool c  = isSolidExcluding(voxels, cx-1, cy,   lz, cfg, blocks, bx, by, bz);
+  bool c  = isSolidExcluding(voxels, cx-1, cy-1, lz, cfg, blocks, bx, by, bz);
   return calculateAO(s1, s2, c);
 }
 
@@ -242,9 +243,50 @@ static constexpr DirInfo kDirs[6] = {
   {{ 0, 0,-1}, 2, 0, 1, -1},  // Z- (back)   — uAxis=X, vAxis=Y ✓
 };
 
+// Pre-compute the packed AO key for a single 1x1 face.
+// Returns 8 bits: 4 corners × 2 bits each (AO values 0-3).
+static inline uint8_t computeFaceAOPacked(
+    const uint8_t* voxels, int32_t di, int32_t sl, int32_t u, int32_t v,
+    const DirInfo& info, const MesherConfig& cfg, const BlockRegistry& blocks)
+{
+  const int32_t axis  = info.axis;
+  const int32_t uAxis = info.uAxis;
+  const int32_t vAxis = info.vAxis;
+  const int32_t sign  = info.sign;
+  const int32_t fc = sl + (sign > 0 ? 1 : 0);
+
+  // Block position (self-exclusion target)
+  int32_t co[3]; co[axis] = sl; co[uAxis] = u; co[vAxis] = v;
+  const int32_t bx = co[0], by = co[1], bz = co[2];
+
+  // 4 corner positions: bl, br, tl, tr
+  int32_t corners[4][3];
+  corners[0][axis] = fc; corners[0][uAxis] = u;     corners[0][vAxis] = v;
+  corners[1][axis] = fc; corners[1][uAxis] = u + 1; corners[1][vAxis] = v;
+  corners[2][axis] = fc; corners[2][uAxis] = u;     corners[2][vAxis] = v + 1;
+  corners[3][axis] = fc; corners[3][uAxis] = u + 1; corners[3][vAxis] = v + 1;
+
+  uint8_t packed = 0;
+  for (int32_t ci = 0; ci < 4; ++ci) {
+    const int32_t cx = corners[ci][0], cy = corners[ci][1], cz = corners[ci][2];
+    int32_t ao;
+    switch (di) {
+      case 0: ao = aoRight (voxels, fc, cy, cz, bx, by, bz, cfg, blocks); break;
+      case 1: ao = aoLeft  (voxels, fc, cy, cz, bx, by, bz, cfg, blocks); break;
+      case 2: ao = aoTop   (voxels, cx, fc, cz, bx, by, bz, cfg, blocks); break;
+      case 3: ao = aoBottom(voxels, cx, fc, cz, bx, by, bz, cfg, blocks); break;
+      case 4: ao = aoFront (voxels, cx, cy, fc, bx, by, bz, cfg, blocks); break;
+      case 5: ao = aoBack  (voxels, cx, cy, fc, bx, by, bz, cfg, blocks); break;
+      default: ao = 3; break;
+    }
+    packed |= static_cast<uint8_t>((ao & 0x3) << (ci * 2));
+  }
+  return packed;
+}
+
 namespace {
 struct GreedyMeshScratch {
-  std::vector<uint8_t> mask;
+  std::vector<uint16_t> mask;
 };
 thread_local GreedyMeshScratch g_scratch;
 }
@@ -293,7 +335,7 @@ bool greedyMesh(
   if (g_scratch.mask.size() < neededScratch) {
     g_scratch.mask.resize(neededScratch);
   }
-  uint8_t* mask = g_scratch.mask.data();
+  uint16_t* mask = g_scratch.mask.data();
 
   for (int32_t di = 0; di < 6; ++di) {
     const auto& info = kDirs[di];
@@ -315,7 +357,7 @@ bool greedyMesh(
 
     for (int32_t sl = 0; sl < sliceCnt; ++sl) {
       // ---- Build mask ----
-      std::memset(mask, 0, needed);
+      std::memset(mask, 0, needed * sizeof(uint16_t));
 
       for (int32_t v = 0; v < vSz; ++v) {
         for (int32_t u = 0; u < uSz; ++u) {
@@ -334,15 +376,17 @@ bool greedyMesh(
             const auto* nd = blocks.tryGet(nid);
             if (nd && nd->material.opaque) continue;
           }
-          mask[v * uSz + u] = bid;
+          uint8_t aoKey = computeFaceAOPacked(voxels, di, sl, u, v, info, cfg, blocks);
+          mask[v * uSz + u] = static_cast<uint16_t>(bid) | (static_cast<uint16_t>(aoKey) << 8);
         }
       }
 
       // ---- Greedy rectangle packing ----
       for (int32_t v = 0; v < vSz; ++v) {
         for (int32_t u = 0; u < uSz; ++u) {
-          uint8_t bid = mask[v * uSz + u];
-          if (bid == 0) continue;
+          uint16_t maskVal = mask[v * uSz + u];
+          if (maskVal == 0) continue;
+          uint8_t bid = static_cast<uint8_t>(maskVal & 0xFF);
 
           const auto* def = blocks.tryGet(bid);
           if (!def) { mask[v * uSz + u] = 0; continue; }
@@ -365,14 +409,14 @@ bool greedyMesh(
           while (u + rw < uSz) {
             bool ok = true;
             for (int32_t vv = 0; vv < rh; ++vv)
-              if (mask[(v+vv)*uSz + u+rw] != bid) { ok = false; break; }
+              if (mask[(v+vv)*uSz + u+rw] != maskVal) { ok = false; break; }
             if (!ok) break;
             ++rw;
           }
           while (v + rh < vSz) {
             bool ok = true;
             for (int32_t uu = 0; uu < rw; ++uu)
-              if (mask[(v+rh)*uSz + u+uu] != bid) { ok = false; break; }
+              if (mask[(v+rh)*uSz + u+uu] != maskVal) { ok = false; break; }
             if (!ok) break;
             ++rh;
           }
@@ -406,22 +450,12 @@ bool greedyMesh(
             {static_cast<int32_t>(tr[0]), static_cast<int32_t>(tr[1]), static_cast<int32_t>(tr[2])},
           };
 
-          // First block in the rect (for self-exclusion in AO)
-          int32_t bx, by, bz;
-          { int32_t co[3] = {sl,0,0}; co[uAxis]=u; co[vAxis]=v; bx=co[0]; by=co[1]; bz=co[2]; }
-
-          // AO & light per corner
+          // Extract pre-computed AO from the mask key — all faces in this
+          // merged rect are guaranteed to share the same AO pattern.
+          uint8_t aoKey = static_cast<uint8_t>((maskVal >> 8) & 0xFF);
           int32_t ao[4], sky[4], block[4];
           for (int32_t ci = 0; ci < 4; ++ci) {
-            int32_t cx = c[ci][0], cy = c[ci][1], cz = c[ci][2];
-            switch (di) {
-              case 0: ao[ci]=aoRight(voxels,(int32_t)fc,cy,cz,bx,by,bz,cfg,blocks); break;
-              case 1: ao[ci]=aoLeft( voxels,(int32_t)fc,cy,cz,bx,by,bz,cfg,blocks); break;
-              case 2: ao[ci]=aoTop(  voxels,cx,(int32_t)fc,cz,bx,by,bz,cfg,blocks); break;
-              case 3: ao[ci]=aoBottom(voxels,cx,(int32_t)fc,cz,bx,by,bz,cfg,blocks); break;
-              case 4: ao[ci]=aoFront(voxels,cx,cy,(int32_t)fc,bx,by,bz,cfg,blocks); break;
-              case 5: ao[ci]=aoBack( voxels,cx,cy,(int32_t)fc,bx,by,bz,cfg,blocks); break;
-            }
+            ao[ci] = (aoKey >> (ci * 2)) & 0x3;
             AvgLight al = cornerLight(light, axis, sign, uAxis, vAxis, c[ci], cfg);
             sky[ci] = al.sky;
             block[ci] = al.block;
