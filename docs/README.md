@@ -31,6 +31,13 @@ These docs are intended to stay in sync with the source:
 - [`testing.md`](testing.md)
 - [`content-extension-guide.md`](content-extension-guide.md)
 
+## Active Proposals
+
+These docs describe systems that are not implemented yet, but are meant to be
+grounded in the current C++ codebase:
+
+- [`smooth-terrain-proposal.md`](smooth-terrain-proposal.md): hybrid smooth-terrain plan using a density field for natural terrain while preserving the existing voxel block layer for gameplay
+
 ## Older Subsystem Design Docs
 
 These files are still valuable for rationale, algorithms, and intended constraints, but validate them against code before making changes:
