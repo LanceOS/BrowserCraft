@@ -62,11 +62,12 @@ TEST_CASE("VanillaBlockFactory sets material properties correctly", "[world][blo
     CHECK(def->material.lightEmission == 0);
   }
 
-  SECTION("Lava is liquid, transparent") {
+  SECTION("Lava is liquid, transparent, and emissive") {
     auto* def = reg.tryGet(voxel::BlockId::LAVA);
     REQUIRE(def != nullptr);
     CHECK(def->material.liquid == true);
-    CHECK(def->material.lightEmission == 0);
+    CHECK(def->material.transparent == true);
+    CHECK(def->material.lightEmission == 15);
   }
 
   SECTION("Oak Leaves are foliage, transparent") {

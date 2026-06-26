@@ -74,13 +74,7 @@ public:
   void applyRenderDistance(int32_t newRd);
 
 private:
-  void initECS();
-  void initSystems();
-  void syncPlayerWithCamera();
-  void createPlayer();
-  [[nodiscard]] auto playerIndex() const -> int32_t;
-  void startWorld(GameMode mode, const std::string& slotId, bool startFresh);
-  void updateCamera();
+  friend class GameOrchestrator;
 
   GLFWwindow* m_window;
   GameConfig m_config;
