@@ -39,6 +39,7 @@ class NullPersistence final : public IChunkPersistence {
 public:
   void requestLoad(int32_t, int32_t) override {}
   void markDirty(int32_t, int32_t) override {}
+  void recordTerrainEdit(const TerrainBrush&) override {}
 };
 
 } // namespace voxel
