@@ -5,6 +5,8 @@
 #include "engine/core/Config.hpp"
 #include "engine/alloc/SharedPool.hpp"
 #include "MockWorker.hpp"
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -164,6 +166,33 @@ TEST_CASE("World getBlockIdAt returns 0 for unloaded chunks", "[world]") {
   voxel::World world(*pool, blocks, cfg, worker, nullptr);
 
   REQUIRE(world.getBlockIdAt(100, 64, 100) == 0);
+}
+
+TEST_CASE("World queues chunk generation from center outward", "[world]") {
+  auto cfg = makeTestConfig();
+  cfg.renderDistance = 2;
+
+  auto pool = voxel::SharedPool::create(32, makeDims(cfg));
+  voxel::BlockRegistry blocks(256);
+
+  std::vector<std::pair<int32_t, int32_t>> generatedChunks;
+  voxel::TestChunkWorker worker(
+      [&](int32_t, int32_t chunkX, int32_t chunkZ, uint32_t) {
+        generatedChunks.emplace_back(chunkX, chunkZ);
+      });
+  voxel::World world(*pool, blocks, cfg, worker, nullptr);
+
+  world.update(glm::vec3(0.0f, 64.0f, 0.0f));
+
+  REQUIRE_FALSE(generatedChunks.empty());
+  CHECK(generatedChunks.front() == std::pair<int32_t, int32_t>{0, 0});
+
+  int32_t previousDist2 = -1;
+  for (const auto& [chunkX, chunkZ] : generatedChunks) {
+    const int32_t dist2 = chunkX * chunkX + chunkZ * chunkZ;
+    CHECK(dist2 >= previousDist2);
+    previousDist2 = dist2;
+  }
 }
 
 TEST_CASE("World resolves large integer coordinates without float precision loss", "[world]") {

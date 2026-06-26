@@ -51,8 +51,9 @@ auto EntityCollisions::collidesAt(
           cachedCX = cx;
           cachedCZ = cz;
         }
-        // Treat unloaded chunks as solid
-        if (!cachedChunk) return true;
+        // Missing chunks behave like air so streaming boundaries do not create
+        // invisible walls or floors at the player's current height.
+        if (!cachedChunk) continue;
 
         if (m_world.isSolidInChunk(x, y, z, *cachedChunk)) return true;
       }

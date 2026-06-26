@@ -270,37 +270,62 @@ void World::onSaveLoadFailed(int32_t chunkX, int32_t chunkZ) {
 void World::ensureVisibleRadius(int32_t centerCX, int32_t centerCZ) {
   int32_t r = m_config.renderDistance;
   int32_t r2 = r * r;
-  // Iterate square bounding box, skip chunks outside the Euclidean circle.
-  // This reduces loaded chunks by ~21.5% vs a full square (cylindrical loading).
+  struct ChunkOffset {
+    int32_t dx;
+    int32_t dz;
+  };
+
+  std::vector<ChunkOffset> visibleOffsets;
+  visibleOffsets.reserve(static_cast<size_t>((r * 2 + 1) * (r * 2 + 1)));
+
+  // Discover visible chunks in a center-out order so world streaming feels
+  // natural and the terrain around the player appears before the outer ring.
   for (int32_t dz = -r; dz <= r; ++dz) {
     for (int32_t dx = -r; dx <= r; ++dx) {
       if (dx * dx + dz * dz > r2) continue;
+      visibleOffsets.push_back({dx, dz});
+    }
+  }
 
-      int32_t cx = centerCX + dx;
-      int32_t cz = centerCZ + dz;
-      if (m_chunks.has(cx, cz)) continue;
+  std::sort(visibleOffsets.begin(), visibleOffsets.end(),
+            [](const ChunkOffset& a, const ChunkOffset& b) {
+              const int32_t distA = a.dx * a.dx + a.dz * a.dz;
+              const int32_t distB = b.dx * b.dx + b.dz * b.dz;
+              if (distA != distB) return distA < distB;
 
-      auto slot = m_pool.acquire();
-      if (!slot) return;
+              const int32_t manhattanA = std::abs(a.dx) + std::abs(a.dz);
+              const int32_t manhattanB = std::abs(b.dx) + std::abs(b.dz);
+              if (manhattanA != manhattanB) return manhattanA < manhattanB;
 
-      Chunk chunk{cx, cz, slot->slotIndex};
-      *slot->chunkX = cx;
-      *slot->chunkZ = cz;
-      m_chunks.set(chunk);
+              if (a.dz != b.dz) return a.dz < b.dz;
+              return a.dx < b.dx;
+            });
 
-      // Store slot coordinates — map-backed chunks can rehash, so pointers are not stable.
-      auto* inserted = m_chunks.getMut(cx, cz);
-      if (inserted) {
-        m_slotToChunk[chunk.slotIndex] = {cx, cz};
-      }
+  for (const ChunkOffset& offset : visibleOffsets) {
+    int32_t cx = centerCX + offset.dx;
+    int32_t cz = centerCZ + offset.dz;
+    if (m_chunks.has(cx, cz)) continue;
 
-      if (m_persistence) {
-        inserted->state = ChunkState::LoadingFromDisk;
-        m_persistence->requestLoad(cx, cz);
-      } else {
-        inserted->state = ChunkState::QueuedGen;
-        m_jobQueue.pushGen(inserted->slotIndex, inserted->chunkX, inserted->chunkZ);
-      }
+    auto slot = m_pool.acquire();
+    if (!slot) return;
+
+    Chunk chunk{cx, cz, slot->slotIndex};
+    *slot->chunkX = cx;
+    *slot->chunkZ = cz;
+    m_chunks.set(chunk);
+
+    // Store slot coordinates — map-backed chunks can rehash, so pointers are not stable.
+    auto* inserted = m_chunks.getMut(cx, cz);
+    if (inserted) {
+      m_slotToChunk[chunk.slotIndex] = {cx, cz};
+    }
+
+    if (m_persistence) {
+      inserted->state = ChunkState::LoadingFromDisk;
+      m_persistence->requestLoad(cx, cz);
+    } else {
+      inserted->state = ChunkState::QueuedGen;
+      m_jobQueue.pushGen(inserted->slotIndex, inserted->chunkX, inserted->chunkZ);
     }
   }
 }

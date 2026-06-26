@@ -533,6 +533,101 @@ TEST_CASE("Player spawn centers on the selected surface column", "[world][spawn]
   CHECK_FALSE(collisions.collidesAt(transform.position, body));
 }
 
+TEST_CASE("Player can descend below the spawn pillar height after spawning",
+          "[world][spawn][collision][player]") {
+  auto cfg = makeTestConfig();
+  auto pool = SharedPool::create(16, makeDims(cfg));
+  BlockRegistry blocks(256);
+  registerTestBlocks(blocks);
+
+  SharedPool* poolPtr = pool.get();
+  TestChunkWorker worker(
+    [poolPtr](int32_t slotIndex, int32_t, int32_t, uint32_t) {
+      auto slot = poolPtr->view(slotIndex);
+      constexpr int32_t sx = 16;
+      constexpr int32_t sz = 16;
+      for (int32_t z = 0; z < sz; ++z) {
+        for (int32_t x = 0; x < sx; ++x) {
+          slot.voxels[(0 * sz + z) * sx + x] = 2;
+        }
+      }
+    },
+    {});
+  World world(*pool, blocks, cfg, worker, nullptr);
+
+  world.update(glm::vec3(0.0f, 80.0f, 0.0f));
+  auto* chunk = world.getChunk(0, 0);
+  REQUIRE(chunk != nullptr);
+  world.onWorldGenDone(chunk->slotIndex);
+
+  auto slot = world.getChunkSlot(*chunk);
+  fillFlatTerrain(slot, cfg.chunkSize, cfg.worldHeight, cfg.chunkSize, 10);
+  for (int32_t y = 10; y <= 19; ++y) {
+    int32_t idx = (y * cfg.chunkSize + 0) * cfg.chunkSize + 1;
+    slot.voxels[idx] = 1;
+  }
+
+  for (int32_t cz = -1; cz <= 1; ++cz) {
+    for (int32_t cx = -1; cx <= 1; ++cx) {
+      auto* readyChunk = world.getChunk(cx, cz);
+      REQUIRE(readyChunk != nullptr);
+      world.onWorldGenDone(readyChunk->slotIndex);
+      CHECK(readyChunk->state >= ChunkState::VoxelsReady);
+    }
+  }
+  CHECK(world.hasTerrain());
+
+  EntityManager em(8);
+  ComponentStore<cmp::Transform> transforms(8);
+  ComponentStore<cmp::RigidBody> bodies(8);
+  int32_t entityId = em.allocate();
+  int32_t entityIndex = EntityManager::indexOf(entityId);
+  transforms.add(entityIndex);
+  bodies.add(entityIndex);
+
+  auto& transform = transforms.get(entityIndex);
+  transform.position = glm::vec3(0.0f, 80.0f, 0.0f);
+  auto& body = bodies.get(entityIndex);
+
+  bool spawned = false;
+  bool cameraDirty = false;
+  EntityCollisions collisions(world, cfg);
+  PlayerSpawnSystem spawnSystem(
+      transforms, bodies, world, cfg, spawned, cameraDirty, &collisions);
+
+  struct Fake { int value = 0; };
+  Fake fakeInput;
+  Fake fakeCamera;
+  Fake fakeUI;
+  Fake fakeSession;
+  TickContext ctx{
+    .input = reinterpret_cast<InputState&>(fakeInput),
+    .world = world,
+    .camera = reinterpret_cast<CameraView&>(fakeCamera),
+    .ui = reinterpret_cast<UIManager&>(fakeUI),
+    .session = reinterpret_cast<GameSession&>(fakeSession),
+    .playerEntityId = entityId,
+    .cameraDirty = cameraDirty,
+    .dt = 0.0f,
+  };
+
+  spawnSystem.update(ctx);
+
+  REQUIRE(spawned);
+  REQUIRE(transform.position.x == Approx(1.5f));
+  REQUIRE(transform.position.y == Approx(22.0f));
+  REQUIRE(transform.position.z == Approx(0.5f));
+  REQUIRE(body.onGround == 0);
+
+  for (int32_t i = 0; i < 16; ++i) {
+    collisions.resolveMovement(0.08f, -0.25f, 0.0f, transform, body);
+  }
+
+  CHECK(transform.position.x > 2.2f);
+  CHECK(transform.position.y < 20.0f);
+  CHECK_FALSE(collisions.collidesAt(transform.position, body));
+}
+
 // ===========================================================================
 // Player push-out-of-blocks safety
 // ===========================================================================
@@ -672,6 +767,96 @@ TEST_CASE("Player can walk fully off a ledge without hitting an invisible lip",
 
   CHECK(transform.position.x > 8.3f);
   CHECK(transform.position.y < 64.0f);
+}
+
+TEST_CASE("Player can descend onto lower terrain after starting airborne above a ledge",
+          "[world][collision][player]") {
+  auto cfg = makeTestConfig();
+  auto pool = SharedPool::create(16, makeDims(cfg));
+  BlockRegistry blocks(256);
+  registerTestBlocks(blocks);
+
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
+
+  world.update(glm::vec3(8.0f, 80.0f, 8.0f));
+  auto* chunk = world.getChunk(0, 0);
+  REQUIRE(chunk != nullptr);
+
+  auto slot = world.getChunkSlot(*chunk);
+  fillFlatTerrain(slot, cfg.chunkSize, cfg.worldHeight, cfg.chunkSize, 56);
+
+  for (int32_t y = 56; y < 64; ++y) {
+    for (int32_t z = 0; z < cfg.chunkSize; ++z) {
+      for (int32_t x = 0; x < 8; ++x) {
+        int32_t idx = (y * cfg.chunkSize + z) * cfg.chunkSize + x;
+        slot.voxels[idx] = 1;
+      }
+    }
+  }
+
+  EntityCollisions collisions(world, cfg);
+  cmp::Transform transform;
+  transform.position = glm::vec3(7.75f, 67.0f, 7.5f);
+
+  cmp::RigidBody body;
+  body.onGround = 0;
+
+  for (int32_t i = 0; i < 24; ++i) {
+    collisions.resolveMovement(0.08f, -0.25f, 0.0f, transform, body);
+  }
+
+  CHECK(transform.position.x > 8.5f);
+  CHECK(transform.position.y < 64.0f);
+  CHECK(transform.position.y > 56.0f);
+}
+
+TEST_CASE("Player movement does not collide with missing neighbor chunks",
+          "[world][collision][player]") {
+  auto cfg = makeTestConfig();
+  cfg.renderDistance = 0;
+
+  auto pool = SharedPool::create(16, makeDims(cfg));
+  BlockRegistry blocks(256);
+  registerTestBlocks(blocks);
+
+  SharedPool* poolPtr = pool.get();
+  TestChunkWorker worker(
+    [poolPtr](int32_t slotIndex, int32_t, int32_t, uint32_t) {
+      auto slot = poolPtr->view(slotIndex);
+      constexpr int32_t sx = 16;
+      constexpr int32_t sz = 16;
+      for (int32_t z = 0; z < sz; ++z) {
+        for (int32_t x = 0; x < sx; ++x) {
+          slot.voxels[(0 * sz + z) * sx + x] = 2;
+        }
+      }
+    },
+    {});
+  World world(*pool, blocks, cfg, worker, nullptr);
+
+  world.update(glm::vec3(8.0f, 80.0f, 8.0f));
+  auto* chunk = world.getChunk(0, 0);
+  REQUIRE(chunk != nullptr);
+  world.onWorldGenDone(chunk->slotIndex);
+
+  auto slot = world.getChunkSlot(*chunk);
+  fillFlatTerrain(slot, cfg.chunkSize, cfg.worldHeight, cfg.chunkSize, 56);
+
+  REQUIRE(world.getChunk(1, 0) == nullptr);
+
+  EntityCollisions collisions(world, cfg);
+  cmp::Transform transform;
+  transform.position = glm::vec3(15.2f, 56.0f, 8.0f);
+
+  cmp::RigidBody body;
+  body.onGround = 1;
+
+  collisions.resolveMovement(1.2f, -0.6f, 0.0f, transform, body);
+
+  CHECK(transform.position.x > 16.2f);
+  CHECK(transform.position.y < 56.0f);
 }
 
 // ===========================================================================
