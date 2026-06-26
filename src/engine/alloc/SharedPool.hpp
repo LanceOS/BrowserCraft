@@ -25,9 +25,11 @@ struct ChunkSlot {
   int32_t* chunkX;
   int32_t* chunkZ;
   uint32_t* genSeed;
+  int32_t* densityInitialized;
   uint8_t* voxels;
   uint8_t* light;
   uint8_t* redstone;
+  float* density;
 };
 
 /// Shared memory pool for chunk data, accessible from multiple threads.
@@ -66,10 +68,11 @@ private:
   int32_t m_capacity;
   ChunkDimensions m_dims;
 
-  size_t m_headerBytes = 36;
+  size_t m_headerBytes = 40;
   size_t m_voxelsBytes = 0;
   size_t m_lightBytes = 0;
   size_t m_redstoneBytes = 0;
+  size_t m_densityBytes = 0;
   size_t m_vertsBytes = 0;
   size_t m_indicesBytes = 0;
   size_t m_slotByteSize = 0;
