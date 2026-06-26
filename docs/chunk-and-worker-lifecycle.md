@@ -21,7 +21,7 @@ The main moving pieces are:
 2. `World.update()` decides which chunks should exist around the camera.
 3. Each new chunk either loads from disk or queues for procedural generation.
 4. Generated or loaded voxel data is queued for meshing.
-5. The mesher computes lighting, builds vertex/index data, and marks the chunk mesh-ready.
+5. The mesher builds vertex/index data and marks the chunk mesh-ready.
 6. The renderer uploads finished buffers to the GPU and marks the chunk uploaded.
 7. Chunks that move outside the visible radius are released back to the shared pool.
 
@@ -180,13 +180,15 @@ When finished, the worker posts `generated`.
 3. set `chunk.state = "meshing"`
 4. send a `mesh` message with `slotIndex`
 
-Inside the mesher (see [`ChunkMesh`](../cpp-voxel/src/engine/render/ChunkMesh.hpp)):
+Inside `src/game/ChunkWorkerImpl.cpp`, the worker chooses a meshing path based
+on `GameConfig::useSurfaceNets`:
 
-1. lighting is recalculated into the slot's `light` array
-2. redstone state is consulted for dynamic emitters like the redstone lamp
-3. `greedyMeshChunk()` writes interleaved vertex data and indices into the shared slot
-4. the worker stores `MESH_READY` into the atomic status
-5. the worker posts `meshed` with `success`, `vertexCount`, and `indexCount`
+1. the greedy voxel path recalculates lighting into the slot's `light` array
+2. the greedy path consults redstone state for dynamic emitters like the redstone lamp
+3. the greedy path calls `mesher::greedyMesh()` and writes interleaved vertex data and indices into the shared slot
+4. the smooth path builds a `mesh::DensitySampler` and calls `mesh::surfaceNetsMesh()`
+5. both paths store `MESH_READY` into the atomic status
+6. the worker posts `meshed` with `success`, `vertexCount`, and `indexCount`
 
 On the main thread, `World.onMeshDone()`:
 
@@ -274,6 +276,9 @@ Inbound messages:
 - `init`
 - `generate`
 - `mesh`
+
+The `mesh` message is still the single entry point; `ChunkWorkerImpl.cpp` now
+fans out to greedy voxel meshing or Surface Nets internally.
 
 Outbound messages:
 
