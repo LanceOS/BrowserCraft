@@ -1,11 +1,21 @@
 # Smooth Terrain Proposal
 
-> Status: proposed architecture, not implemented
+> Status: proposed architecture with a Surface Nets prototype in code
 
 This document proposes a smooth-terrain system for the current C++ engine.
 The goal is to make natural terrain render as a smooth triangle surface while
 preserving the existing voxel/block layer for placed blocks and other discrete
 gameplay systems.
+
+A first implementation prototype already exists in:
+
+- [`src/game/ChunkWorkerImpl.cpp`](../src/game/ChunkWorkerImpl.cpp)
+- [`src/world/mesh/SurfaceNetsMesher.hpp`](../src/world/mesh/SurfaceNetsMesher.hpp)
+- [`src/world/mesh/SurfaceNetsMesher.cpp`](../src/world/mesh/SurfaceNetsMesher.cpp)
+
+It is gated by `GameConfig::useSurfaceNets` and still feeds the current chunk
+upload path; the broader terrain renderer, collision, and persistence split
+described below remain future work.
 
 The intended result is:
 
@@ -174,6 +184,11 @@ For each cell in the density lattice:
 4. place one surface vertex inside the active cell
 5. connect neighboring active cells into quads or triangle pairs
 
+The current C++ prototype follows this shape directly: the chunk worker passes
+a `sampleDensity` callback into the Surface Nets mesher, which emits vertex and
+index buffers plus per-vertex normals on the same mesh layout used by the rest
+of the renderer.
+
 ### Normals
 
 Surface normals should be derived from the density gradient using central
@@ -190,18 +205,21 @@ This avoids duplicate geometry while keeping seams closed.
 
 ## Rendering Plan
 
-Do not overload the existing greedy voxel mesh path in the first milestone.
-
-Instead, add a separate terrain render path:
+The long-term target is still a separate terrain render path:
 
 - `TerrainMeshAllocator`
 - `TerrainChunkSyncer`
 - terrain shader and terrain material inputs
 
+The current prototype keeps the Surface Nets branch inside
+[`src/game/ChunkWorkerImpl.cpp`](../src/game/ChunkWorkerImpl.cpp) and publishes
+through the existing chunk mesh allocator and syncer so we can validate density
+sampling, seam handling, and buffer budgets before splitting the render path.
 The existing allocator and syncer in
 [`src/engine/render/ChunkSyncer.cpp`](../src/engine/render/ChunkSyncer.cpp)
-assume block-oriented mesh metadata and block shader behavior. Terrain should be
-published separately until the representation settles.
+still assume block-oriented mesh metadata and block shader behavior, so that
+separate terrain path should land before this graduates from prototype to
+production terrain.
 
 ## Terrain Materials
 
@@ -319,6 +337,22 @@ Untouched terrain should continue to regenerate from the world seed.
 
 - define placement rules for cubes on smooth surfaces
 - define overlap or replacement rules between terrain and block geometry
+
+## Current Prototype
+
+A first slice is already in the tree:
+
+- `GameConfig::useSurfaceNets` toggles the branch in
+  [`src/game/ChunkWorkerImpl.cpp`](../src/game/ChunkWorkerImpl.cpp)
+- [`src/world/mesh/SurfaceNetsMesher.hpp`](../src/world/mesh/SurfaceNetsMesher.hpp)
+  and [`src/world/mesh/SurfaceNetsMesher.cpp`](../src/world/mesh/SurfaceNetsMesher.cpp)
+  extract the isosurface from the scalar density field
+- [`src/engine/render/ChunkSyncer.cpp`](../src/engine/render/ChunkSyncer.cpp)
+  still uploads the result through the current chunk path, with a slightly
+  larger border pad for smooth meshes
+
+The separate terrain renderer, material stack, collision, and persistence work
+below are still future milestones.
 
 ## Risks And Design Watchpoints
 

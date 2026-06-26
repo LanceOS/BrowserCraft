@@ -2,8 +2,9 @@
 
 > **Note:** The engine has been converted from TypeScript to C++.
 > The C++ source lives in [`../cpp-voxel/src/`](../cpp-voxel/src/).
-> All documentation below references the original TypeScript for design concepts;
-> see the C++ headers and source files in `cpp-voxel/src/` for the current implementation.
+> Some of the documentation below was originally derived from the TypeScript
+> version for design concepts, while the C++ headers and source files in
+> `cpp-voxel/src/` are authoritative for the current implementation.
 
 This directory now contains two kinds of documentation:
 
@@ -33,10 +34,10 @@ These docs are intended to stay in sync with the source:
 
 ## Active Proposals
 
-These docs describe systems that are not implemented yet, but are meant to be
-grounded in the current C++ codebase:
+These docs describe systems that are not fully implemented yet, but are meant
+to be grounded in the current C++ codebase:
 
-- [`smooth-terrain-proposal.md`](smooth-terrain-proposal.md): hybrid smooth-terrain plan using a density field for natural terrain while preserving the existing voxel block layer for gameplay
+- [`smooth-terrain-proposal.md`](smooth-terrain-proposal.md): hybrid smooth-terrain plan using a density field for natural terrain while preserving the existing voxel block layer for gameplay; a Surface Nets prototype is already wired into `src/game/ChunkWorkerImpl.cpp` behind `GameConfig::useSurfaceNets`
 
 ## Older Subsystem Design Docs
 
