@@ -156,6 +156,9 @@ void World::onMeshDone(int32_t slotIndex, uint32_t vertexCount, uint32_t indexCo
   if (chunk->state != ChunkState::Meshing) return;
   chunk->vertexCount = vertexCount;
   chunk->indexCount = indexCount;
+  auto slot = m_pool.view(slotIndex);
+  chunk->opaqueIndexCount = *slot.opaqueIndexCount;
+  chunk->transparentIndexCount = *slot.transparentIndexCount;
   if (success) {
     chunk->meshRestartRetries = 0;
     chunk->state = ChunkState::MeshReady;

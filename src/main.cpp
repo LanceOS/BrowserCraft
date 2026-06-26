@@ -22,17 +22,18 @@ auto main() -> int {
   terrain::gl::loadGLFunctions();
   std::cout << "OpenGL loaded\n";
 
-  // Create and run game
-  auto config = terrain::makeDefaultGameConfig();
-  terrain::Game game(window, config, {.initialState = terrain::GameState::MainMenu});
-  auto& input = game.input();
+  {
+    auto config = terrain::makeDefaultGameConfig();
+    terrain::Game game(window, config, {.initialState = terrain::GameState::MainMenu});
+    auto& input = game.input();
 
-  // @see notes/imGui-manual-callback-forwarding.md
-  // ImGui and game input are both wired through explicit callbacks after ImGui context creation.
-  terrain::setupInputCallbacks(window, input);
+    // @see notes/imGui-manual-callback-forwarding.md
+    // ImGui and game input are both wired through explicit callbacks after ImGui context creation.
+    terrain::setupInputCallbacks(window, input);
 
-  game.run();
-  terrain::clearInputCallbacks();
+    game.run();
+    terrain::clearInputCallbacks();
+  }
 
   glfwDestroyWindow(window);
   glfwTerminate();
