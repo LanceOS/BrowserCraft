@@ -16,6 +16,7 @@
 namespace voxel {
 
 class BlockRegistry;
+class TerrainChunkCollision;
 
 /// Manages world lifecycle: creation, save/load, and completion-job processing.
 /// Owns the World instance and SaveManager, along with the completion queues
@@ -44,9 +45,9 @@ public:
   }
 
   /// Called by worker thread callbacks when meshing is done.
-  void onMeshCompleted(int32_t slotIndex, bool success) {
+  void onMeshCompleted(int32_t slotIndex, bool success, std::shared_ptr<TerrainChunkCollision> terrainCollision = nullptr) {
     std::lock_guard lock(m_completionMutex);
-    m_completedMeshSlots.push(CompletedMeshJob{slotIndex, success});
+    m_completedMeshSlots.push(CompletedMeshJob{slotIndex, success, std::move(terrainCollision)});
   }
 
   [[nodiscard]] auto world() -> World& { return *m_world; }
@@ -60,6 +61,7 @@ private:
   struct CompletedMeshJob {
     int32_t slotIndex;
     bool success;
+    std::shared_ptr<TerrainChunkCollision> terrainCollision;
   };
 
   SharedPool& m_pool;

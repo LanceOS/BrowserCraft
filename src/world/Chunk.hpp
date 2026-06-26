@@ -2,8 +2,12 @@
 
 #include <cstdint>
 
+#include <memory>
+
 // @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
+
+class TerrainChunkCollision;
 
 /// Lifecycle state of a chunk.
 enum class ChunkState {
@@ -51,6 +55,8 @@ struct Chunk {
   bool hasTransparent = false; // whether mesh contains alpha-blended geometry
   int32_t genRetries = 0; // number of times generation has been attempted
   int32_t meshRestartRetries = 0; // number of full chunk restarts after mesh failure
+
+  std::shared_ptr<TerrainChunkCollision> terrainCollision;
 
   [[nodiscard]] auto key() const -> int64_t {
     return chunkKey(chunkX, chunkZ);

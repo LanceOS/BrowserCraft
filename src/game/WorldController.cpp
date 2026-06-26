@@ -65,6 +65,7 @@ void WorldController::processGenJobs() {
       chunk->transparentIndexCount = *slot.transparentIndexCount;
       chunk->hasOpaque = (renderFlags & CHUNK_RENDER_FLAG_HAS_OPAQUE) != 0u;
       chunk->hasTransparent = (renderFlags & CHUNK_RENDER_FLAG_HAS_TRANSPARENT) != 0u;
+      chunk->terrainCollision = std::move(job.terrainCollision);
       m_world->onMeshDone(i, *slot.vertexCount, *slot.indexCount, job.success);
     }
   }
