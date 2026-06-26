@@ -8,8 +8,8 @@ namespace voxel {
 
 constexpr int32_t MIN_RENDER_DISTANCE = 2;
 // The current chunk pool and persistent GPU buffers scale quadratically with
-// render distance, so keep the practical ceiling conservative.
-constexpr int32_t MAX_RENDER_DISTANCE = 16;
+// render distance, so keep the practical ceiling conservative but usable.
+constexpr int32_t MAX_RENDER_DISTANCE = 24;
 
 enum class GameMode {
   Survival,
