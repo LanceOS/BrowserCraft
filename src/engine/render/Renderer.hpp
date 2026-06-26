@@ -3,7 +3,7 @@
 #include "ShaderProgram.hpp"
 #include "UniformBuffer.hpp"
 #include "Texture2DArray.hpp"
-#include "PersistentBuffer.hpp"
+#include "ChunkMeshAllocator.hpp"
 #include "IndirectBatcher.hpp"
 #include "ChunkSyncer.hpp"
 #include "DrawDispatcher.hpp"
@@ -28,9 +28,10 @@ class Renderer {
 public:
   static constexpr int32_t VERTEX_STRIDE_FLOATS = 10;
   static constexpr int32_t CAMERA_BLOCK_FLOATS = 80;
-  static constexpr int32_t TIME_BLOCK_FLOATS = 12;
+  static constexpr int32_t TIME_BLOCK_FLOATS = 20;
 
-  Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config);
+  Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config,
+           ChunkMeshAllocator& meshAllocator);
   ~Renderer();
 
   Renderer(const Renderer&) = delete;
@@ -46,10 +47,10 @@ public:
   void dispose();
 
   /// Accessors for GPU buffer targets (used by ChunkWorker for direct mesh output).
-  [[nodiscard]] auto vboPtr() const -> float* { return static_cast<float*>(m_masterVbo->mappedPtr()); }
-  [[nodiscard]] auto vboBytes() const -> size_t { return m_masterVbo->capacity(); }
-  [[nodiscard]] auto iboPtr() const -> uint32_t* { return static_cast<uint32_t*>(m_masterIbo->mappedPtr()); }
-  [[nodiscard]] auto iboBytes() const -> size_t { return m_masterIbo->capacity(); }
+  [[nodiscard]] auto vboPtr() const -> float* { return m_meshAllocator.vboPtr(); }
+  [[nodiscard]] auto vboBytes() const -> size_t { return m_meshAllocator.vboCapacityBytes(); }
+  [[nodiscard]] auto iboPtr() const -> uint32_t* { return m_meshAllocator.iboPtr(); }
+  [[nodiscard]] auto iboBytes() const -> size_t { return m_meshAllocator.iboCapacityBytes(); }
 
 private:
   void uploadCameraBlock(const CameraView& camera, float timeSeconds,
@@ -64,6 +65,7 @@ private:
   UniformBuffer m_cameraUbo;
   UniformBuffer m_timeUbo;
   Texture2DArray m_textures;
+  ChunkMeshAllocator& m_meshAllocator;
 
   Frustum m_frustum;
   std::array<float, CAMERA_BLOCK_FLOATS> m_cameraBlock{};
@@ -72,10 +74,8 @@ private:
   uint32_t m_skyVao = 0;
   uint32_t m_skyVbo = 0;
 
-  // Master VAO and persistently mapped buffers for all chunks
+  // Master VAO for chunk rendering
   uint32_t m_masterVao = 0;
-  std::unique_ptr<PersistentBuffer> m_masterVbo;
-  std::unique_ptr<PersistentBuffer> m_masterIbo;
   std::unique_ptr<IndirectBatcher> m_indirectBatcher;
 
   ChunkSyncer m_chunkSyncer;

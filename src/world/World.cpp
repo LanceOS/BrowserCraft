@@ -202,9 +202,16 @@ void World::onMeshDone(int32_t slotIndex, uint32_t vertexCount, uint32_t indexCo
   if (chunk->state != ChunkState::Meshing) return;
   chunk->vertexCount = vertexCount;
   chunk->indexCount = indexCount;
-  chunk->state = success ? ChunkState::MeshReady : ChunkState::MeshFailed;
   if (success) {
+    chunk->meshRestartRetries = 0;
+    chunk->state = ChunkState::MeshReady;
     m_pendingUploadSlots.push_back(slotIndex);
+  } else if (chunk->meshRestartRetries < MAX_CHUNK_MESH_RESTART_RETRIES) {
+    ++chunk->meshRestartRetries;
+    restartChunkFromScratch(*chunk);
+    return;
+  } else {
+    chunk->state = ChunkState::MeshFailed;
   }
   if (chunk->needsRemesh) {
     chunk->needsRemesh = false;
@@ -304,6 +311,30 @@ void World::unloadFarChunks(int32_t centerCX, int32_t centerCZ) {
     m_slotToChunk.erase(chunk->slotIndex);
     m_chunks.remove(chunk->chunkX, chunk->chunkZ);
     m_pool.release(m_pool.view(chunk->slotIndex));
+  }
+}
+
+void World::restartChunkFromScratch(Chunk& chunk) {
+  auto slot = m_pool.view(chunk.slotIndex);
+  *slot.vertexCount = 0u;
+  *slot.indexCount = 0u;
+  *slot.renderFlags = 0u;
+  *slot.opaqueIndexCount = 0u;
+  *slot.transparentIndexCount = 0u;
+  chunk.vertexCount = 0u;
+  chunk.indexCount = 0u;
+  chunk.opaqueIndexCount = 0u;
+  chunk.transparentIndexCount = 0u;
+  chunk.hasOpaque = false;
+  chunk.hasTransparent = false;
+  chunk.needsRemesh = false;
+
+  if (m_persistence) {
+    chunk.state = ChunkState::LoadingFromDisk;
+    m_persistence->requestLoad(chunk.chunkX, chunk.chunkZ);
+  } else {
+    chunk.state = ChunkState::QueuedGen;
+    m_jobQueue.pushGen(chunk.slotIndex, chunk.chunkX, chunk.chunkZ);
   }
 }
 

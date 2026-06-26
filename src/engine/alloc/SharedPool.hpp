@@ -43,6 +43,8 @@ struct ChunkSlot {
   uint32_t* renderFlags; // ChunkRenderFlags metadata
   uint32_t* vertexCount;
   uint32_t* indexCount;
+  uint32_t* opaqueIndexCount;
+  uint32_t* transparentIndexCount;
   int32_t* chunkX;
   int32_t* chunkZ;
   uint32_t* genSeed;
@@ -87,7 +89,7 @@ private:
   int32_t m_capacity;
   ChunkDimensions m_dims;
 
-  size_t m_headerBytes = 32;
+  size_t m_headerBytes = 36;
   size_t m_voxelsBytes = 0;
   size_t m_lightBytes = 0;
   size_t m_redstoneBytes = 0;

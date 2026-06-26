@@ -41,6 +41,7 @@ auto computeSunDirection(float timeSeconds, float dayLengthSeconds) -> glm::vec3
   return glm::normalize(glm::vec3(sx, sy, sz));
 }
 
+// @see notes/daynight-sun-tint.md
 auto computeSunColor(float timeSeconds, float dayLengthSeconds) -> glm::vec3 {
   if (dayLengthSeconds <= 0.0f) return glm::vec3(1.0f);
   float angle = computeAngle(timeSeconds, dayLengthSeconds);
@@ -53,8 +54,10 @@ auto computeSunColor(float timeSeconds, float dayLengthSeconds) -> glm::vec3 {
   float horizonFactor = std::max(0.0f, 1.0f - elevation * 2.0f); // 1 at horizon, 0 at 45° up
   horizonFactor = horizonFactor * horizonFactor; // sharper transition
 
-  glm::vec3 dayColor(1.0f, 0.95f, 0.85f);       // warm white at noon
-  glm::vec3 duskColor(1.0f, 0.55f, 0.2f);        // orange at horizon
+  // Keep the noon sun close to white so it reads like a bright light source,
+  // while still allowing a gentle warm tint near the horizon.
+  glm::vec3 dayColor(1.0f, 0.985f, 0.95f);      // neutral white at noon
+  glm::vec3 duskColor(1.0f, 0.82f, 0.58f);      // soft gold at the horizon
 
   // Blend between day and dusk/sunset colors based on elevation
   glm::vec3 color = glm::mix(dayColor, duskColor, horizonFactor);

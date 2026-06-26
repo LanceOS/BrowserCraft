@@ -1,20 +1,40 @@
 #include "ChunkSyncer.hpp"
-#include "PersistentBuffer.hpp"
 #include "IndirectBatcher.hpp"
 #include "gl_core.hpp"
+#include <algorithm>
 #include <cstring>
 
 namespace voxel {
 
-ChunkSyncer::ChunkSyncer(PersistentBuffer* masterVbo, PersistentBuffer* masterIbo,
-                          IndirectBatcher* indirectBatcher, const GameConfig& config)
-  : m_masterVbo(masterVbo), m_masterIbo(masterIbo),
-    m_indirectBatcher(indirectBatcher), m_config(config)
+ChunkSyncer::ChunkSyncer(ChunkMeshAllocator& meshAllocator,
+                         IndirectBatcher& indirectBatcher,
+                         const GameConfig& config)
+  : m_meshAllocator(meshAllocator),
+    m_indirectBatcher(indirectBatcher),
+    m_config(config)
 {}
 
 void ChunkSyncer::sync(World& world) {
-  const uint32_t capacity = m_indirectBatcher->capacity();
+  const uint32_t capacity = m_indirectBatcher.capacity();
   bool uploadedAny = false;
+
+  if (m_liveSlots.size() != static_cast<size_t>(m_meshAllocator.maxSlots())) {
+    m_liveSlots.assign(static_cast<size_t>(m_meshAllocator.maxSlots()), 0u);
+  } else {
+    std::fill(m_liveSlots.begin(), m_liveSlots.end(), 0u);
+  }
+
+  world.forEachEntry([&](int64_t, const Chunk& chunk) {
+    if (chunk.slotIndex >= 0 && chunk.slotIndex < static_cast<int32_t>(m_liveSlots.size())) {
+      m_liveSlots[static_cast<size_t>(chunk.slotIndex)] = 1u;
+    }
+  });
+
+  m_meshAllocator.releaseMissing(m_liveSlots, [&](int32_t slotIndex) {
+    if (slotIndex < 0 || slotIndex >= static_cast<int32_t>(capacity)) return;
+    ChunkCullData emptyData{};
+    m_indirectBatcher.updateChunkData(static_cast<uint32_t>(slotIndex), emptyData);
+  });
 
   // Upload newly-meshed chunks from the pending queue (avoids full chunk scan).
   std::vector<int32_t> pendingSlots = world.drainPendingUploadSlots();
@@ -22,21 +42,15 @@ void ChunkSyncer::sync(World& world) {
     auto* chunk = world.getChunkBySlotIndex(slotIndex);
     if (!chunk) continue;
     if (chunk->state != ChunkState::MeshReady) continue;
-    auto slot = world.getChunkSlot(*chunk);
-    if (slot.slotIndex < 0 || slot.slotIndex >= static_cast<int32_t>(capacity)) {
+    if (slotIndex < 0 || slotIndex >= static_cast<int32_t>(capacity)) {
       continue;
     }
 
     if (chunk->indexCount > 0 && chunk->vertexCount > 0) {
-      const int32_t stride = m_config.vertexStrideFloats;
-
-      size_t vboOffset = static_cast<size_t>(slot.slotIndex) * m_config.maxVertsPerChunk * stride * sizeof(float);
-      size_t iboOffset = static_cast<size_t>(slot.slotIndex) * m_config.maxIndicesPerChunk * sizeof(uint32_t);
-      int32_t baseVertex = slot.slotIndex * m_config.maxVertsPerChunk;
-
-      // Vertex/index data was already written directly to the GPU VBO/IBO
-      // by the mesher on the worker thread. No CPU-side copy needed.
-      gl::MemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
+      auto alloc = m_meshAllocator.allocationForSlot(slotIndex);
+      if (!alloc || !alloc->valid()) {
+        continue;
+      }
 
       ChunkCullData cullData{};
       cullData.min[0] = static_cast<float>(chunk->chunkX * m_config.chunkSize);
@@ -47,18 +61,17 @@ void ChunkSyncer::sync(World& world) {
       cullData.max[1] = static_cast<float>(m_config.worldHeight);
       cullData.max[2] = cullData.min[2] + static_cast<float>(m_config.chunkSize);
       cullData.max[3] = 1.0f;
-      cullData.indexCount = chunk->indexCount;
-      cullData.firstIndex = static_cast<uint32_t>(iboOffset / sizeof(uint32_t));
-      cullData.baseVertex = static_cast<uint32_t>(baseVertex);
-      cullData.slotIndex = static_cast<uint32_t>(slot.slotIndex);
-      cullData.hasOpaque = static_cast<uint32_t>(chunk->hasOpaque);
-      cullData.hasTransparent = static_cast<uint32_t>(chunk->hasTransparent);
-      m_indirectBatcher->updateChunkData(slot.slotIndex, cullData);
+      const uint32_t firstIndex = static_cast<uint32_t>(alloc->iboOffsetBytes / sizeof(uint32_t));
+      cullData.opaqueIndexCount = chunk->opaqueIndexCount;
+      cullData.opaqueFirstIndex = firstIndex;
+      cullData.transparentIndexCount = chunk->transparentIndexCount;
+      cullData.transparentFirstIndex = firstIndex + chunk->opaqueIndexCount;
+      cullData.baseVertex = static_cast<uint32_t>(alloc->baseVertex);
+      cullData.slotIndex = static_cast<uint32_t>(slotIndex);
+      m_indirectBatcher.updateChunkData(static_cast<uint32_t>(slotIndex), cullData);
     } else {
       ChunkCullData emptyData{};
-      emptyData.hasOpaque = 0u;
-      emptyData.hasTransparent = 0u;
-      m_indirectBatcher->updateChunkData(slot.slotIndex, emptyData);
+      m_indirectBatcher.updateChunkData(static_cast<uint32_t>(slotIndex), emptyData);
     }
     world.markUploaded(*chunk);
     uploadedAny = true;
@@ -67,8 +80,6 @@ void ChunkSyncer::sync(World& world) {
   if (uploadedAny) {
     gl::MemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT);
   }
-
-  return;
 }
 
 } // namespace voxel

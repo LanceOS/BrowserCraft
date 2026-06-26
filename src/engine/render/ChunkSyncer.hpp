@@ -2,30 +2,31 @@
 
 #include "../../world/World.hpp"
 #include "../../engine/core/Config.hpp"
+#include "ChunkMeshAllocator.hpp"
 #include <cstdint>
 #include <vector>
 
 namespace voxel {
 
-class PersistentBuffer;
 class IndirectBatcher;
 
 /// Handles CPU→GPU synchronization of chunk mesh data.
-/// Iterates all chunks, copies vertex/index data into persistently-mapped
-/// GPU buffers, and updates the indirect-batcher's per-chunk cull data.
+/// Iterates all chunks, reconciles compact mesh allocations, and updates the
+/// indirect-batcher's per-chunk cull data.
 class ChunkSyncer {
 public:
-  ChunkSyncer(PersistentBuffer* masterVbo, PersistentBuffer* masterIbo,
-              IndirectBatcher* indirectBatcher, const GameConfig& config);
+  ChunkSyncer(ChunkMeshAllocator& meshAllocator,
+              IndirectBatcher& indirectBatcher,
+              const GameConfig& config);
 
-  /// Sync all chunks that have new meshes and upload them into mapped GPU buffers.
+  /// Sync all chunks that have new meshes and publish their draw metadata.
   void sync(World& world);
 
 private:
-  PersistentBuffer* m_masterVbo;
-  PersistentBuffer* m_masterIbo;
-  IndirectBatcher* m_indirectBatcher;
+  ChunkMeshAllocator& m_meshAllocator;
+  IndirectBatcher& m_indirectBatcher;
   GameConfig m_config;
+  std::vector<uint8_t> m_liveSlots;
 };
 
 } // namespace voxel

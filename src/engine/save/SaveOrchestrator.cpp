@@ -21,7 +21,9 @@ void SaveOrchestrator::saveSettings(int32_t renderDistance, bool showFps) {
 
 auto SaveOrchestrator::loadSettings() -> LoadedSettings {
   LoadedSettings s;
-  s.renderDistance = m_settings->getInt("renderDistance", s.renderDistance);
+  s.renderDistance = std::clamp(
+      m_settings->getInt("renderDistance", s.renderDistance),
+      MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
   s.showFps = m_settings->getBool("showFps", s.showFps);
   return s;
 }

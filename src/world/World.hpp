@@ -143,6 +143,7 @@ public:
 private:
   void ensureVisibleRadius(int32_t centerCX, int32_t centerCZ);
   void unloadFarChunks(int32_t centerCX, int32_t centerCZ);
+  void restartChunkFromScratch(Chunk& chunk);
   void requestRemesh(Chunk& chunk);
   void markChunkDirty(int32_t cx, int32_t cz);
   void requestNeighborRemeshes(const Chunk& chunk);

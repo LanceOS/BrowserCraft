@@ -32,6 +32,8 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
   m_indirectBatcher.buildIndirectCommands(frustum);
 
   gl::BindVertexArray(m_masterVao);
+  gl::Enable(GL_CULL_FACE);
+  ::glCullFace(GL_BACK);
 
   const uint32_t opaqueCount = m_indirectBatcher.opaqueCommandCount();
   const uint32_t transparentCount = m_indirectBatcher.transparentCommandCount();
@@ -55,6 +57,7 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
   }
 
   gl::BindVertexArray(0);
+  gl::Disable(GL_CULL_FACE);
   gl::Disable(GL_BLEND);
   gl::DepthMask(GL_TRUE);
   gl::DepthFunc(GL_LESS);

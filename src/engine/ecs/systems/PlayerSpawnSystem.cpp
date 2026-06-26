@@ -4,6 +4,7 @@
 #include "engine/ecs/EntityManager.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace voxel {
 
@@ -52,6 +53,9 @@ void PlayerSpawnSystem::update(TickContext& ctx) {
   int32_t gx = static_cast<int32_t>(std::floor(transform.position.x));
   int32_t gz = static_cast<int32_t>(std::floor(transform.position.z));
   int32_t highestGroundY = -1;
+  int32_t bestGroundX = gx;
+  int32_t bestGroundZ = gz;
+  float bestDist2 = std::numeric_limits<float>::max();
 
   for (int32_t dz = -1; dz <= 1; ++dz) {
     for (int32_t dx = -1; dx <= 1; ++dx) {
@@ -59,7 +63,18 @@ void PlayerSpawnSystem::update(TickContext& ctx) {
       int32_t sz = gz + dz;
       for (int32_t y = m_config.worldHeight - 1; y >= 0; --y) {
         if (m_world.isSolid(sx, y, sz)) {
-          if (y > highestGroundY) highestGroundY = y;
+          const float centerX = static_cast<float>(sx) + 0.5f;
+          const float centerZ = static_cast<float>(sz) + 0.5f;
+          const float distX = centerX - transform.position.x;
+          const float distZ = centerZ - transform.position.z;
+          const float dist2 = distX * distX + distZ * distZ;
+          if (y > highestGroundY ||
+              (y == highestGroundY && dist2 < bestDist2)) {
+            highestGroundY = y;
+            bestGroundX = sx;
+            bestGroundZ = sz;
+            bestDist2 = dist2;
+          }
           break;
         }
       }
@@ -71,7 +86,9 @@ void PlayerSpawnSystem::update(TickContext& ctx) {
     // so they always spawn in clear space, even when the surface is
     // uneven or there's a cave shaft at their exact coordinates.
     constexpr float kSpawnHeightOffset = 3.0f;
+    transform.position.x = static_cast<float>(bestGroundX) + 0.5f;
     transform.position.y = static_cast<float>(highestGroundY) + kSpawnHeightOffset;
+    transform.position.z = static_cast<float>(bestGroundZ) + 0.5f;
 
     // Verify the player is not colliding; push upward in small steps if
     // they somehow ended up inside geometry (e.g. partial blocks,

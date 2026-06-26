@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include "engine/workers/mesher/GreedyMesher.hpp"
+#include "engine/workers/mesher/LightPropagator.hpp"
 #include "world/BlockRegistry.hpp"
 #include "world/BlockDefinition.hpp"
 #include "world/BlockIds.hpp"
@@ -17,7 +18,8 @@ static auto registerTestBlock(BlockRegistry& reg, uint8_t id,
                                uint8_t texTop,
                                uint8_t texBottom,
                                uint8_t texSide,
-                               bool opaque = true) -> void {
+                               bool opaque = true,
+                               uint8_t lightEmission = 0) -> void {
   BlockDefinition def;
   def.id = id;
   def.name = name;
@@ -25,6 +27,10 @@ static auto registerTestBlock(BlockRegistry& reg, uint8_t id,
   def.textures.bottom = texBottom;
   def.textures.side = texSide;
   def.material.opaque = opaque;
+  if (!opaque) {
+    def.material.transparent = true;
+  }
+  def.material.lightEmission = lightEmission;
   reg.register_(std::move(def));
 }
 
@@ -168,6 +174,106 @@ TEST_CASE("GreedyMesher maxVertices is counted in vertices, not floats",
   CHECK(indexCount == 36);
 }
 
+TEST_CASE("Mesh capacity estimate matches a single exposed block",
+          "[mesher][capacity]") {
+  BlockRegistry reg(256);
+  registerTestBlock(reg, 1, "TestBlock", 11, 22, 33);
+
+  constexpr int32_t SX = 3, SY = 3, SZ = 3;
+  std::vector<uint8_t> voxels(SX * SY * SZ, 0);
+  std::vector<uint8_t> light(SX * SY * SZ, 0);
+  voxels[(1 * SZ + 1) * SX + 1] = 1;
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = SX;
+  cfg.sizeY = SY;
+  cfg.sizeZ = SZ;
+
+  auto hint = mesher::estimateMeshCapacity(voxels.data(), reg, cfg);
+  CHECK(hint.quadCount == 6);
+  CHECK(hint.vertexCount == 24);
+  CHECK(hint.indexCount == 36);
+}
+
+TEST_CASE("LightPropagator fills open columns with sky light",
+          "[mesher][light]") {
+  BlockRegistry reg(256);
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = 1;
+  cfg.sizeY = 4;
+  cfg.sizeZ = 1;
+
+  std::vector<uint8_t> voxels(4, 0);
+  std::vector<uint8_t> light(4, 0);
+
+  mesher::calculateLighting(voxels.data(), light.data(), reg, cfg);
+
+  for (uint8_t packed : light) {
+    CHECK(mesher::skyLightNibble(packed) == 15);
+    CHECK(mesher::blockLightNibble(packed) == 0);
+  }
+}
+
+TEST_CASE("LightPropagator propagates emitted block light",
+          "[mesher][light]") {
+  BlockRegistry reg(256);
+  registerTestBlock(reg, 1, "Glow", 0, 0, 0, false, 15);
+
+  constexpr int32_t SX = 5, SY = 5, SZ = 5;
+  std::vector<uint8_t> voxels(SX * SY * SZ, 0);
+  std::vector<uint8_t> light(SX * SY * SZ, 0);
+  voxels[(2 * SZ + 2) * SX + 2] = 1;
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = SX;
+  cfg.sizeY = SY;
+  cfg.sizeZ = SZ;
+
+  mesher::calculateLighting(voxels.data(), light.data(), reg, cfg);
+
+  CHECK(mesher::blockLightNibble(light[(2 * SZ + 2) * SX + 2]) == 15);
+  CHECK(mesher::blockLightNibble(light[(2 * SZ + 2) * SX + 3]) == 14);
+  CHECK(mesher::blockLightNibble(light[(2 * SZ + 2) * SX + 4]) == 13);
+}
+
+TEST_CASE("GreedyMesher keeps border faces fully lit when chunk light is uniform",
+          "[mesher][light][border]") {
+  BlockRegistry reg(256);
+  registerTestBlock(reg, 1, "TestBlock", 11, 22, 33);
+
+  constexpr int32_t SX = 2, SY = 2, SZ = 2;
+  std::vector<uint8_t> voxels(SX * SY * SZ, 0);
+  std::vector<uint8_t> light(SX * SY * SZ, mesher::packVoxelLight(15, 0));
+  voxels[(0 * SZ + 0) * SX + 0] = 1;
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = SX;
+  cfg.sizeY = SY;
+  cfg.sizeZ = SZ;
+  cfg.maxVertices = 5000;
+  cfg.maxIndices = 10000;
+  cfg.strideFloats = VP_STRIDE;
+
+  std::vector<float> vertices(cfg.maxVertices * cfg.strideFloats, 0.0f);
+  std::vector<uint32_t> indices(cfg.maxIndices, 0);
+  uint32_t vertexCount = 0;
+  uint32_t indexCount = 0;
+
+  bool ok = mesher::greedyMesh(voxels.data(), light.data(), reg, cfg,
+                                vertices.data(), indices.data(),
+                                vertexCount, indexCount);
+  REQUIRE(ok);
+  REQUIRE(vertexCount > 0);
+
+  for (uint32_t vi = 0; vi < vertexCount; vi += VP_STRIDE) {
+    const uint32_t packed = static_cast<uint32_t>(vertices[vi + OFF_LIGHT] + 0.5f);
+    CAPTURE(vi, packed);
+    CHECK((packed & 0x0Fu) == 15u);
+    CHECK(((packed >> 4u) & 0x0Fu) == 0u);
+  }
+}
+
 // ======================================================================
 // Test: UV V coordinate maps to world Y on all side faces
 // ======================================================================
@@ -254,6 +360,67 @@ TEST_CASE("GreedyMesher UV V maps to world Y on side faces",
     // (for a single block, V goes from 0 to 1)
     CHECK(tl_y - bl_y == tl_v - bl_v);
   }
+}
+
+TEST_CASE("GreedyMesher side faces interpolate light across world Y",
+          "[mesher][light][uv]") {
+  BlockRegistry reg(256);
+  registerTestBlock(reg, 1, "TestBlock", 11, 22, 33);
+
+  constexpr int32_t SX = 3, SY = 4, SZ = 3;
+  std::vector<uint8_t> voxels(SX * SY * SZ, 0);
+  std::vector<uint8_t> light(SX * SY * SZ, 0);
+  voxels[(1 * SZ + 1) * SX + 1] = 1;
+
+  for (int32_t y = 0; y < SY; ++y) {
+    for (int32_t z = 0; z < SZ; ++z) {
+      for (int32_t x = 0; x < SX; ++x) {
+        light[(y * SZ + z) * SX + x] = mesher::packVoxelLight(static_cast<uint8_t>(y), 0);
+      }
+    }
+  }
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = SX;
+  cfg.sizeY = SY;
+  cfg.sizeZ = SZ;
+  cfg.maxVertices = 5000;
+  cfg.maxIndices = 10000;
+  cfg.strideFloats = VP_STRIDE;
+
+  std::vector<float> vertices(cfg.maxVertices * cfg.strideFloats, 0.0f);
+  std::vector<uint32_t> indices(cfg.maxIndices, 0);
+  uint32_t vertexCount = 0, indexCount = 0;
+
+  bool ok = mesher::greedyMesh(voxels.data(), light.data(), reg, cfg,
+                                vertices.data(), indices.data(),
+                                vertexCount, indexCount);
+  REQUIRE(ok);
+
+  bool checkedSideFace = false;
+  const uint32_t numQuads = vertexCount / 4;
+  for (uint32_t qi = 0; qi < numQuads; ++qi) {
+    const float* v = &vertices[qi * 4 * VP_STRIDE];
+    float ny = v[OFF_NRM_Y];
+    if (std::abs(ny) > 0.5f) continue;
+
+    const uint32_t blPacked = static_cast<uint32_t>(v[OFF_LIGHT] + 0.5f);
+    const uint32_t brPacked = static_cast<uint32_t>(v[1 * VP_STRIDE + OFF_LIGHT] + 0.5f);
+    const uint32_t tlPacked = static_cast<uint32_t>(v[2 * VP_STRIDE + OFF_LIGHT] + 0.5f);
+    const uint32_t trPacked = static_cast<uint32_t>(v[3 * VP_STRIDE + OFF_LIGHT] + 0.5f);
+
+    const int blSky = static_cast<int>(blPacked & 0x0Fu);
+    const int brSky = static_cast<int>(brPacked & 0x0Fu);
+    const int tlSky = static_cast<int>(tlPacked & 0x0Fu);
+    const int trSky = static_cast<int>(trPacked & 0x0Fu);
+
+    CAPTURE(qi, blSky, brSky, tlSky, trSky);
+    CHECK(tlSky > blSky);
+    CHECK(trSky > brSky);
+    checkedSideFace = true;
+  }
+
+  CHECK(checkedSideFace);
 }
 
 // ======================================================================
@@ -419,6 +586,51 @@ TEST_CASE("GreedyMesher reports opaque and transparent geometry independently",
   CHECK(hasOpaque == false);
 }
 
+TEST_CASE("GreedyMesher groups opaque indices before transparent indices",
+          "[mesher][face][transparent]") {
+  BlockRegistry reg(256);
+  registerTestBlock(reg, 1, "Opaque", 0, 0, 0, true);
+  registerTestBlock(reg, 2, "Transparent", 1, 1, 1, false);
+
+  constexpr int32_t SX = 4, SY = 3, SZ = 3;
+  std::vector<uint8_t> voxels(SX * SY * SZ, 0);
+  std::vector<uint8_t> light(SX * SY * SZ, 0);
+
+  voxels[(1 * SZ + 1) * SX + 1] = 1;
+  voxels[(1 * SZ + 1) * SX + 2] = 2;
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = SX;
+  cfg.sizeY = SY;
+  cfg.sizeZ = SZ;
+  cfg.maxVertices = 5000;
+  cfg.maxIndices = 10000;
+  cfg.strideFloats = VP_STRIDE;
+
+  std::vector<float> vertices(cfg.maxVertices * cfg.strideFloats, 0.0f);
+  std::vector<uint32_t> indices(cfg.maxIndices, 0);
+  uint32_t vertexCount = 0;
+  uint32_t indexCount = 0;
+  uint32_t opaqueIndexCount = 0;
+  uint32_t transparentIndexCount = 0;
+  bool hasTransparent = false;
+  bool hasOpaque = false;
+
+  bool ok = mesher::greedyMesh(
+      voxels.data(), light.data(), reg, cfg,
+      vertices.data(), indices.data(),
+      vertexCount, indexCount,
+      &hasTransparent, &hasOpaque,
+      &opaqueIndexCount, &transparentIndexCount);
+
+  REQUIRE(ok);
+  CHECK(hasOpaque);
+  CHECK(hasTransparent);
+  CHECK(indexCount == opaqueIndexCount + transparentIndexCount);
+  CHECK(opaqueIndexCount > 0);
+  CHECK(transparentIndexCount > 0);
+}
+
 // ======================================================================
 // Test: Face culling — opaque blocks don't produce faces between them
 // ======================================================================
@@ -459,6 +671,47 @@ TEST_CASE("GreedyMesher culls faces between adjacent opaque blocks",
   const uint32_t numVerts = vertexCount;
   const uint32_t expectedFaces = 10;
   CHECK(numVerts / 4 == expectedFaces);
+}
+
+TEST_CASE("GreedyMesher culls faces against opaque neighbor chunks",
+          "[mesher][face][chunk-border]") {
+  BlockRegistry reg(256);
+  registerTestBlock(reg, 1, "Stone", 7, 7, 7, true);
+
+  constexpr int32_t SX = 2, SY = 2, SZ = 2;
+  std::vector<uint8_t> voxels(SX * SY * SZ, 0);
+  std::vector<uint8_t> light(SX * SY * SZ, 0);
+  std::vector<uint8_t> plusXNeighbor(SX * SY * SZ, 0);
+
+  // A boundary block on the +X edge of the chunk.
+  voxels[(0 * SZ + 0) * SX + (SX - 1)] = 1;
+  // Matching opaque neighbor block at x=0 in the adjacent +X chunk.
+  plusXNeighbor[(0 * SZ + 0) * SX + 0] = 1;
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = SX;
+  cfg.sizeY = SY;
+  cfg.sizeZ = SZ;
+  cfg.maxVertices = 5000;
+  cfg.maxIndices = 10000;
+  cfg.strideFloats = VP_STRIDE;
+
+  std::vector<float> vertices(cfg.maxVertices * cfg.strideFloats, 0.0f);
+  std::vector<uint32_t> indices(cfg.maxIndices, 0);
+  uint32_t vertexCount = 0;
+  uint32_t indexCount = 0;
+
+  mesher::NeighborVoxelViews neighbors{};
+  neighbors.px = plusXNeighbor.data();
+
+  bool ok = mesher::greedyMesh(
+      voxels.data(), light.data(), reg, cfg,
+      vertices.data(), indices.data(),
+      vertexCount, indexCount, nullptr, nullptr, nullptr, nullptr, neighbors);
+
+  REQUIRE(ok);
+  CHECK(vertexCount / 4 == 5);
+  CHECK(indexCount / 6 == 5);
 }
 
 // ======================================================================

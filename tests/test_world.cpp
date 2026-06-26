@@ -81,6 +81,79 @@ TEST_CASE("World basic chunk lifecycle", "[world]") {
   REQUIRE(meshCount > meshBefore);
 }
 
+TEST_CASE("World restarts failed chunk meshes from scratch with a retry cap", "[world]") {
+  auto cfg = makeTestConfig();
+  auto pool = voxel::SharedPool::create(16, makeDims(cfg));
+  voxel::BlockRegistry blocks(256);
+  blocks.register_(voxel::BlockDefinition{.id = 1, .name = "stone"});
+
+  int genCount = 0;
+  int meshCount = 0;
+  voxel::SharedPool* poolPtr = pool.get();
+  voxel::TestChunkWorker worker(
+    [&, poolPtr](int32_t slotIndex, int32_t, int32_t, uint32_t) {
+      ++genCount;
+      auto slot = poolPtr->view(slotIndex);
+      constexpr int32_t sx = 16, sz = 16;
+      for (int32_t z = 0; z < sz; ++z) {
+        for (int32_t x = 0; x < sx; ++x) {
+          slot.voxels[(0 * sz + z) * sx + x] = 7;
+          slot.voxels[(1 * sz + z) * sx + x] = 1;
+        }
+      }
+    },
+    [&](int32_t) { ++meshCount; }
+  );
+
+  voxel::World world(*pool, blocks, cfg, worker, nullptr);
+  world.update(glm::vec3(0.0f, 64.0f, 0.0f));
+  const int genAfterInitialLoad = genCount;
+
+  const auto* centerChunk = world.getChunk(0, 0);
+  REQUIRE(centerChunk != nullptr);
+  const int32_t centerSlot = centerChunk->slotIndex;
+
+  world.onWorldGenDone(centerSlot);
+  world.update(glm::vec3(0.0f, 64.0f, 0.0f));
+  const int meshAfterFirstDispatch = meshCount;
+  REQUIRE(meshAfterFirstDispatch > 0);
+
+  world.onMeshDone(centerSlot, 0, 0, false);
+  REQUIRE(world.getChunk(0, 0)->state == voxel::ChunkState::QueuedGen);
+  REQUIRE(world.getChunk(0, 0)->meshRestartRetries == 1);
+
+  world.update(glm::vec3(0.0f, 64.0f, 0.0f));
+  REQUIRE(genCount > genAfterInitialLoad);
+
+  world.onWorldGenDone(centerSlot);
+  world.update(glm::vec3(0.0f, 64.0f, 0.0f));
+  const int meshAfterSecondDispatch = meshCount;
+  REQUIRE(meshAfterSecondDispatch > meshAfterFirstDispatch);
+
+  world.onMeshDone(centerSlot, 0, 0, false);
+  REQUIRE(world.getChunk(0, 0)->state == voxel::ChunkState::QueuedGen);
+  REQUIRE(world.getChunk(0, 0)->meshRestartRetries == 2);
+
+  const int genAfterSecondRestart = genCount;
+  world.update(glm::vec3(0.0f, 64.0f, 0.0f));
+  REQUIRE(genCount > genAfterSecondRestart);
+
+  world.onWorldGenDone(centerSlot);
+  world.update(glm::vec3(0.0f, 64.0f, 0.0f));
+  const int meshAfterThirdDispatch = meshCount;
+  REQUIRE(meshAfterThirdDispatch > meshAfterSecondDispatch);
+
+  world.onMeshDone(centerSlot, 0, 0, false);
+  REQUIRE(world.getChunk(0, 0)->state == voxel::ChunkState::MeshFailed);
+  REQUIRE(world.getChunk(0, 0)->meshRestartRetries == voxel::MAX_CHUNK_MESH_RESTART_RETRIES);
+
+  const int genAfterFailureCap = genCount;
+  const int meshAfterFailureCap = meshCount;
+  world.update(glm::vec3(0.0f, 64.0f, 0.0f));
+  REQUIRE(genCount == genAfterFailureCap);
+  REQUIRE(meshCount == meshAfterFailureCap);
+}
+
 TEST_CASE("World getBlockIdAt returns 0 for unloaded chunks", "[world]") {
   auto cfg = makeTestConfig();
   auto pool = voxel::SharedPool::create(16, makeDims(cfg));

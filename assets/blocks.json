@@ -130,7 +130,7 @@
             "name": "Lava",
             "is_opaque": false,
             "is_liquid": true,
-            "light_emission": 0,
+            "light_emission": 15,
             "hardness": 100.0,
             "blast_resistance": 100.0,
             "faces": {
