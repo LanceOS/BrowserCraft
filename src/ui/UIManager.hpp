@@ -1,11 +1,14 @@
 #pragma once
 
+#include "engine/save/WorldListEntry.hpp"
+#include "game/GameMode.hpp"
 #include <array>
-#include <string>
-#include <vector>
+#include <cstdint>
 #include <functional>
+#include <string>
+#include <utility>
+#include <vector>
 #include <GLFW/glfw3.h>
-#include "game/GameSession.hpp"
 
 namespace voxel {
 
@@ -16,15 +19,6 @@ enum class UIState {
   InGame,
   Paused,
   Inventory,
-};
-
-/// A lightweight representation of a saved world for UI rendering.
-struct WorldEntry {
-  std::string name;
-  std::string slug;
-  uint32_t seed = 0;
-  int32_t gameMode = 0; // 0 = Survival, 1 = Creative
-  int64_t lastPlayedTimestamp = 0;
 };
 
 /// ImGui-based UI manager for menus, HUD, and inventory.
@@ -74,6 +68,9 @@ public:
   /// Render the hotbar HUD at the bottom of the screen.
   void renderHotbar(int32_t selectedSlot);
 
+  /// Set the currently selected hotbar slot for the HUD.
+  void setSelectedHotbarSlot(int32_t slot);
+
   /// Render inventory panel.
   void renderInventory(bool open);
 
@@ -120,6 +117,7 @@ private:
   Callbacks m_callbacks;
   UIState m_state = UIState::MainMenu;
   bool m_inventoryOpen = false;
+  int32_t m_selectedHotbarSlot = -1;
   // FPS counter
   double m_fpsLastSampleTime = 0.0;
   int m_fpsFrameCount = 0;

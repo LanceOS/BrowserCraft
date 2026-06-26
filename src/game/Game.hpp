@@ -10,11 +10,13 @@
 #include "engine/core/GameLoop.hpp"
 #include "engine/core/InputState.hpp"
 #include "engine/core/GameState.hpp"
+#include "game/GameMode.hpp"
 #include "engine/core/TickContext.hpp"
 #include "engine/alloc/SharedPool.hpp"
 #include "engine/render/ChunkMeshAllocator.hpp"
 #include "engine/ecs/EntityManager.hpp"
 #include "engine/ecs/ComponentStore.hpp"
+#include "engine/ecs/TagStore.hpp"
 #include "engine/ecs/SystemManager.hpp"
 #include "engine/ecs/components/Components.hpp"
 #include "engine/ecs/components/AudioEmitter.hpp"
@@ -125,7 +127,7 @@ private:
   PlayerControllerSystem* m_playerController = nullptr;
   bool m_spawnedToSurface = false;
   bool m_cameraDirty = true;
-  int32_t m_playerEntityId = 0;
+  int32_t m_playerEntityId = -1;
 };
 
 } // namespace voxel

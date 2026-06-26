@@ -53,6 +53,8 @@ public:
 
   [[nodiscard]] auto isPressed(int32_t idx) const -> bool { return m_keys[idx] == 1; }
   [[nodiscard]] auto isHeld(int32_t idx) const -> bool { return m_keys[idx] > 0; }
+  [[nodiscard]] auto isMousePressed(int32_t btn) const -> bool { return m_mouseButtons[btn] == 1; }
+  [[nodiscard]] auto isMouseHeld(int32_t btn) const -> bool { return m_mouseButtons[btn] > 0; }
 
   [[nodiscard]] auto mouseDX() const -> float { return m_mouseDelta[0]; }
   [[nodiscard]] auto mouseDY() const -> float { return m_mouseDelta[1]; }

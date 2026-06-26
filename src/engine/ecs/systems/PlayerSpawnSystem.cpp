@@ -1,5 +1,6 @@
 #include "PlayerSpawnSystem.hpp"
 #include "engine/core/TickContext.hpp"
+#include "world/ChunkCoords.hpp"
 #include "world/World.hpp"
 #include "engine/ecs/EntityManager.hpp"
 #include <algorithm>
@@ -52,6 +53,22 @@ void PlayerSpawnSystem::update(TickContext& ctx) {
   // exact coordinate causing them to spawn underground.
   int32_t gx = static_cast<int32_t>(std::floor(transform.position.x));
   int32_t gz = static_cast<int32_t>(std::floor(transform.position.z));
+
+  // Wait until the entire 3x3 search window has voxel data, otherwise we can
+  // accidentally spawn against a temporary low column while a taller neighbor
+  // is still loading.
+  auto isReadyColumn = [&](int32_t worldX, int32_t worldZ) -> bool {
+    int32_t cx = floorToChunk(worldX, m_config.chunkSize);
+    int32_t cz = floorToChunk(worldZ, m_config.chunkSize);
+    const Chunk* chunk = m_world.getChunk(cx, cz);
+    return chunk && chunk->state >= ChunkState::VoxelsReady;
+  };
+  for (int32_t dz = -1; dz <= 1; ++dz) {
+    for (int32_t dx = -1; dx <= 1; ++dx) {
+      if (!isReadyColumn(gx + dx, gz + dz)) return;
+    }
+  }
+
   int32_t highestGroundY = -1;
   int32_t bestGroundX = gx;
   int32_t bestGroundZ = gz;

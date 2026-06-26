@@ -8,6 +8,8 @@
 #include "engine/ecs/ComponentStore.hpp"
 #include "engine/ecs/components/Components.hpp"
 #include "engine/alloc/SharedPool.hpp"
+#include "world/ChunkCoords.hpp"
+#include "world/BlockRaycast.hpp"
 #include "world/World.hpp"
 #include "world/BlockRegistry.hpp"
 #include "MockWorker.hpp"
@@ -158,6 +160,23 @@ TEST_CASE("InputState mouse delta accumulate and clear", "[input]") {
   REQUIRE(input.mouseDY() == Approx(0.0f));
 }
 
+TEST_CASE("InputState mouse buttons distinguish pressed from held", "[input]") {
+  InputState input;
+
+  input.setMouseButton(GLFW_MOUSE_BUTTON_LEFT, true);
+  REQUIRE(input.isMousePressed(GLFW_MOUSE_BUTTON_LEFT));
+  REQUIRE(input.isMouseHeld(GLFW_MOUSE_BUTTON_LEFT));
+
+  input.clearFrameState();
+  REQUIRE_FALSE(input.isMousePressed(GLFW_MOUSE_BUTTON_LEFT));
+  REQUIRE(input.isMouseHeld(GLFW_MOUSE_BUTTON_LEFT));
+  REQUIRE(input.mouseButton(GLFW_MOUSE_BUTTON_LEFT) == 2);
+
+  input.setMouseButton(GLFW_MOUSE_BUTTON_LEFT, false);
+  REQUIRE_FALSE(input.isMousePressed(GLFW_MOUSE_BUTTON_LEFT));
+  REQUIRE_FALSE(input.isMouseHeld(GLFW_MOUSE_BUTTON_LEFT));
+}
+
 TEST_CASE("InputState setKeyByCode maps GLFW keys correctly", "[input]") {
   InputState input;
 
@@ -171,12 +190,16 @@ TEST_CASE("InputState setKeyByCode maps GLFW keys correctly", "[input]") {
   input.setKeyByCode(GLFW_KEY_SPACE, true);
   REQUIRE(input.isHeld(InputState::KEY_SPACE));
 
+  input.setKeyByCode(GLFW_KEY_RIGHT_CONTROL, true);
+  REQUIRE(input.isHeld(InputState::KEY_CTRL));
+
   // Unknown key should be ignored — W and E remain unchanged
   input.clearFrameState(); // demote W/E from pressed to held
   input.setKeyByCode(GLFW_KEY_F1, true);
   CHECK(input.isHeld(InputState::KEY_W));   // still held (F1 didn't unpress it)
   CHECK(input.isHeld(InputState::KEY_E));   // still held
   CHECK(input.isHeld(InputState::KEY_SPACE)); // still held
+  CHECK(input.isHeld(InputState::KEY_CTRL)); // right control maps too
 }
 
 // ===========================================================================
@@ -302,6 +325,35 @@ TEST_CASE("isSolidInChunk reads correct block data", "[world][collision]") {
   CHECK(world.isSolidInChunk(3, 5, 7, *chunk)); // slab has partial volume
 }
 
+TEST_CASE("Block raycast returns hit block and previous air cell", "[world][interaction]") {
+  auto cfg = makeTestConfig();
+  auto pool = SharedPool::create(16, makeDims(cfg));
+  BlockRegistry blocks(256);
+  registerTestBlocks(blocks);
+
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
+
+  world.update(glm::vec3(8.0f, 40.0f, 8.0f));
+  REQUIRE(world.setBlockIdAt(3, 5, 3, 1));
+
+  const BlockRaycastHit hit = raycastFirstBlock(
+      world,
+      glm::vec3(3.5f, 5.5f, 0.5f),
+      glm::vec3(0.0f, 0.0f, 1.0f),
+      10.0f);
+
+  REQUIRE(hit.hit);
+  CHECK(hit.block.x == 3);
+  CHECK(hit.block.y == 5);
+  CHECK(hit.block.z == 3);
+  CHECK(hit.previous.x == 3);
+  CHECK(hit.previous.y == 5);
+  CHECK(hit.previous.z == 2);
+  CHECK(hit.blockId == 1);
+}
+
 // ===========================================================================
 // Ground height scan logic
 // ===========================================================================
@@ -425,6 +477,18 @@ TEST_CASE("Player spawn centers on the selected surface column", "[world][spawn]
     slot.voxels[idx] = 1;
   }
 
+  // Finalize the full 3x3 spawn neighborhood so the spawn system can safely
+  // wait for all nearby columns before choosing the best surface.
+  for (int32_t cz = -1; cz <= 1; ++cz) {
+    for (int32_t cx = -1; cx <= 1; ++cx) {
+      auto* readyChunk = world.getChunk(cx, cz);
+      REQUIRE(readyChunk != nullptr);
+      world.onWorldGenDone(readyChunk->slotIndex);
+      CHECK(readyChunk->state >= ChunkState::VoxelsReady);
+    }
+  }
+  CHECK(world.hasTerrain());
+
   EntityManager em(8);
   ComponentStore<cmp::Transform> transforms(8);
   ComponentStore<cmp::RigidBody> bodies(8);
@@ -466,6 +530,101 @@ TEST_CASE("Player spawn centers on the selected surface column", "[world][spawn]
   CHECK(transform.position.x == Approx(1.5f));
   CHECK(transform.position.y == Approx(22.0f));
   CHECK(transform.position.z == Approx(0.5f));
+  CHECK_FALSE(collisions.collidesAt(transform.position, body));
+}
+
+TEST_CASE("Player can descend below the spawn pillar height after spawning",
+          "[world][spawn][collision][player]") {
+  auto cfg = makeTestConfig();
+  auto pool = SharedPool::create(16, makeDims(cfg));
+  BlockRegistry blocks(256);
+  registerTestBlocks(blocks);
+
+  SharedPool* poolPtr = pool.get();
+  TestChunkWorker worker(
+    [poolPtr](int32_t slotIndex, int32_t, int32_t, uint32_t) {
+      auto slot = poolPtr->view(slotIndex);
+      constexpr int32_t sx = 16;
+      constexpr int32_t sz = 16;
+      for (int32_t z = 0; z < sz; ++z) {
+        for (int32_t x = 0; x < sx; ++x) {
+          slot.voxels[(0 * sz + z) * sx + x] = 2;
+        }
+      }
+    },
+    {});
+  World world(*pool, blocks, cfg, worker, nullptr);
+
+  world.update(glm::vec3(0.0f, 80.0f, 0.0f));
+  auto* chunk = world.getChunk(0, 0);
+  REQUIRE(chunk != nullptr);
+  world.onWorldGenDone(chunk->slotIndex);
+
+  auto slot = world.getChunkSlot(*chunk);
+  fillFlatTerrain(slot, cfg.chunkSize, cfg.worldHeight, cfg.chunkSize, 10);
+  for (int32_t y = 10; y <= 19; ++y) {
+    int32_t idx = (y * cfg.chunkSize + 0) * cfg.chunkSize + 1;
+    slot.voxels[idx] = 1;
+  }
+
+  for (int32_t cz = -1; cz <= 1; ++cz) {
+    for (int32_t cx = -1; cx <= 1; ++cx) {
+      auto* readyChunk = world.getChunk(cx, cz);
+      REQUIRE(readyChunk != nullptr);
+      world.onWorldGenDone(readyChunk->slotIndex);
+      CHECK(readyChunk->state >= ChunkState::VoxelsReady);
+    }
+  }
+  CHECK(world.hasTerrain());
+
+  EntityManager em(8);
+  ComponentStore<cmp::Transform> transforms(8);
+  ComponentStore<cmp::RigidBody> bodies(8);
+  int32_t entityId = em.allocate();
+  int32_t entityIndex = EntityManager::indexOf(entityId);
+  transforms.add(entityIndex);
+  bodies.add(entityIndex);
+
+  auto& transform = transforms.get(entityIndex);
+  transform.position = glm::vec3(0.0f, 80.0f, 0.0f);
+  auto& body = bodies.get(entityIndex);
+
+  bool spawned = false;
+  bool cameraDirty = false;
+  EntityCollisions collisions(world, cfg);
+  PlayerSpawnSystem spawnSystem(
+      transforms, bodies, world, cfg, spawned, cameraDirty, &collisions);
+
+  struct Fake { int value = 0; };
+  Fake fakeInput;
+  Fake fakeCamera;
+  Fake fakeUI;
+  Fake fakeSession;
+  TickContext ctx{
+    .input = reinterpret_cast<InputState&>(fakeInput),
+    .world = world,
+    .camera = reinterpret_cast<CameraView&>(fakeCamera),
+    .ui = reinterpret_cast<UIManager&>(fakeUI),
+    .session = reinterpret_cast<GameSession&>(fakeSession),
+    .playerEntityId = entityId,
+    .cameraDirty = cameraDirty,
+    .dt = 0.0f,
+  };
+
+  spawnSystem.update(ctx);
+
+  REQUIRE(spawned);
+  REQUIRE(transform.position.x == Approx(1.5f));
+  REQUIRE(transform.position.y == Approx(22.0f));
+  REQUIRE(transform.position.z == Approx(0.5f));
+  REQUIRE(body.onGround == 0);
+
+  for (int32_t i = 0; i < 16; ++i) {
+    collisions.resolveMovement(0.08f, -0.25f, 0.0f, transform, body);
+  }
+
+  CHECK(transform.position.x > 2.2f);
+  CHECK(transform.position.y < 20.0f);
   CHECK_FALSE(collisions.collidesAt(transform.position, body));
 }
 
@@ -610,6 +769,96 @@ TEST_CASE("Player can walk fully off a ledge without hitting an invisible lip",
   CHECK(transform.position.y < 64.0f);
 }
 
+TEST_CASE("Player can descend onto lower terrain after starting airborne above a ledge",
+          "[world][collision][player]") {
+  auto cfg = makeTestConfig();
+  auto pool = SharedPool::create(16, makeDims(cfg));
+  BlockRegistry blocks(256);
+  registerTestBlocks(blocks);
+
+  TestChunkWorker worker;
+  NullPersistence nullPersistence;
+  World world(*pool, blocks, cfg, worker, &nullPersistence);
+
+  world.update(glm::vec3(8.0f, 80.0f, 8.0f));
+  auto* chunk = world.getChunk(0, 0);
+  REQUIRE(chunk != nullptr);
+
+  auto slot = world.getChunkSlot(*chunk);
+  fillFlatTerrain(slot, cfg.chunkSize, cfg.worldHeight, cfg.chunkSize, 56);
+
+  for (int32_t y = 56; y < 64; ++y) {
+    for (int32_t z = 0; z < cfg.chunkSize; ++z) {
+      for (int32_t x = 0; x < 8; ++x) {
+        int32_t idx = (y * cfg.chunkSize + z) * cfg.chunkSize + x;
+        slot.voxels[idx] = 1;
+      }
+    }
+  }
+
+  EntityCollisions collisions(world, cfg);
+  cmp::Transform transform;
+  transform.position = glm::vec3(7.75f, 67.0f, 7.5f);
+
+  cmp::RigidBody body;
+  body.onGround = 0;
+
+  for (int32_t i = 0; i < 24; ++i) {
+    collisions.resolveMovement(0.08f, -0.25f, 0.0f, transform, body);
+  }
+
+  CHECK(transform.position.x > 8.5f);
+  CHECK(transform.position.y < 64.0f);
+  CHECK(transform.position.y > 56.0f);
+}
+
+TEST_CASE("Player movement does not collide with missing neighbor chunks",
+          "[world][collision][player]") {
+  auto cfg = makeTestConfig();
+  cfg.renderDistance = 0;
+
+  auto pool = SharedPool::create(16, makeDims(cfg));
+  BlockRegistry blocks(256);
+  registerTestBlocks(blocks);
+
+  SharedPool* poolPtr = pool.get();
+  TestChunkWorker worker(
+    [poolPtr](int32_t slotIndex, int32_t, int32_t, uint32_t) {
+      auto slot = poolPtr->view(slotIndex);
+      constexpr int32_t sx = 16;
+      constexpr int32_t sz = 16;
+      for (int32_t z = 0; z < sz; ++z) {
+        for (int32_t x = 0; x < sx; ++x) {
+          slot.voxels[(0 * sz + z) * sx + x] = 2;
+        }
+      }
+    },
+    {});
+  World world(*pool, blocks, cfg, worker, nullptr);
+
+  world.update(glm::vec3(8.0f, 80.0f, 8.0f));
+  auto* chunk = world.getChunk(0, 0);
+  REQUIRE(chunk != nullptr);
+  world.onWorldGenDone(chunk->slotIndex);
+
+  auto slot = world.getChunkSlot(*chunk);
+  fillFlatTerrain(slot, cfg.chunkSize, cfg.worldHeight, cfg.chunkSize, 56);
+
+  REQUIRE(world.getChunk(1, 0) == nullptr);
+
+  EntityCollisions collisions(world, cfg);
+  cmp::Transform transform;
+  transform.position = glm::vec3(15.2f, 56.0f, 8.0f);
+
+  cmp::RigidBody body;
+  body.onGround = 1;
+
+  collisions.resolveMovement(1.2f, -0.6f, 0.0f, transform, body);
+
+  CHECK(transform.position.x > 16.2f);
+  CHECK(transform.position.y < 56.0f);
+}
+
 // ===========================================================================
 // Block registry collision definitions
 // ===========================================================================
@@ -657,9 +906,10 @@ TEST_CASE("Fluid blocks are not solid", "[block]") {
 // World coordinate utilities
 // ===========================================================================
 
-TEST_CASE("worldToChunk and mod helpers", "[world]") {
-  // These are inline functions in World.hpp
+TEST_CASE("chunk coordinate helpers", "[world]") {
+  // These are inline functions in ChunkCoords.hpp
   // worldToChunk(coord, size) = floor(coord / size)
+  // floorToChunk(value, size) = integer floor division
   // mod(value, size) = positive modulus
 
   // Standard chunk size = 16
@@ -675,6 +925,13 @@ TEST_CASE("worldToChunk and mod helpers", "[world]") {
   CHECK(worldToChunk(-0.1f, CS) == -1);
   CHECK(worldToChunk(-16.0f, CS) == -1);
   CHECK(worldToChunk(-16.1f, CS) == -2);
+
+  CHECK(floorToChunk(0, CS) == 0);
+  CHECK(floorToChunk(15, CS) == 0);
+  CHECK(floorToChunk(16, CS) == 1);
+  CHECK(floorToChunk(-1, CS) == -1);
+  CHECK(floorToChunk(-16, CS) == -1);
+  CHECK(floorToChunk(-17, CS) == -2);
 
   // Positive modulo
   CHECK(mod(0, CS) == 0);

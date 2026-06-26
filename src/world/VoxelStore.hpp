@@ -40,12 +40,6 @@ public:
   [[nodiscard]] auto isFluid(int32_t worldX, int32_t worldY,
                               int32_t worldZ) const -> bool;
 
-  // ---- Helpers ----------------------------------------------------------
-  [[nodiscard]] auto worldToChunk(float coord) const -> int32_t;
-  [[nodiscard]] auto mod(int32_t value) const -> int32_t;
-  [[nodiscard]] auto chunkSize() const -> int32_t;
-  [[nodiscard]] auto worldHeight() const -> int32_t;
-
 private:
   SharedPool& m_pool;
   const BlockRegistry& m_blocks;

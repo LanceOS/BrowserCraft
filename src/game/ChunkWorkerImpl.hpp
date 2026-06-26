@@ -1,0 +1,47 @@
+#pragma once
+
+#include "engine/core/Config.hpp"
+#include "world/IChunkWorker.hpp"
+#include <cstddef>
+#include <cstdint>
+
+namespace voxel {
+
+class BlockRegistry;
+class ChunkMeshAllocator;
+class SharedPool;
+class WorkerThreadPool;
+class WorldController;
+class WorldGenPipeline;
+
+namespace mesher {
+struct NeighborVoxelViews;
+}
+
+class ChunkWorkerImpl final : public IChunkWorker {
+public:
+  ChunkWorkerImpl(WorkerThreadPool& genPool, WorkerThreadPool& meshPool,
+                  SharedPool& pool, WorldGenPipeline& pipeline,
+                  const GameConfig& config, WorldController& controller,
+                  BlockRegistry& blocks, ChunkMeshAllocator& meshAllocator);
+
+  void generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t seed) override;
+  void mesh(int32_t slotIndex) override;
+  void setGpuTargets(float* vboPtr, size_t vboMaxBytes,
+                     uint32_t* iboPtr, size_t iboMaxBytes) override;
+
+private:
+  auto gatherNeighborVoxels(int32_t slotIndex, int32_t chunkX, int32_t chunkZ) const
+      -> mesher::NeighborVoxelViews;
+
+  WorkerThreadPool& m_genPool;
+  WorkerThreadPool& m_meshPool;
+  SharedPool& m_pool;
+  WorldGenPipeline& m_pipeline;
+  const GameConfig& m_config;
+  WorldController& m_controller;
+  BlockRegistry& m_blocks;
+  ChunkMeshAllocator& m_meshAllocator;
+};
+
+} // namespace voxel

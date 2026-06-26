@@ -4,6 +4,7 @@
 #include "engine/save/WorldListService.hpp"
 #include "engine/save/SettingsRepository.hpp"
 #include "engine/save/SaveOrchestrator.hpp"
+#include "engine/core/RenderDistanceLimits.hpp"
 #include <filesystem>
 #include <cstdio>
 
