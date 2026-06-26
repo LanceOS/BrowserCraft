@@ -53,13 +53,14 @@ void ChunkSyncer::sync(World& world) {
       }
 
       ChunkCullData cullData{};
-      cullData.min[0] = static_cast<float>(chunk->chunkX * m_config.chunkSize);
+      const float borderPad = m_config.useSurfaceNets ? 1.0f : 0.0f;
+      cullData.min[0] = static_cast<float>(chunk->chunkX * m_config.chunkSize) - borderPad;
       cullData.min[1] = 0.0f;
-      cullData.min[2] = static_cast<float>(chunk->chunkZ * m_config.chunkSize);
+      cullData.min[2] = static_cast<float>(chunk->chunkZ * m_config.chunkSize) - borderPad;
       cullData.min[3] = 1.0f;
-      cullData.max[0] = cullData.min[0] + static_cast<float>(m_config.chunkSize);
+      cullData.max[0] = static_cast<float>(chunk->chunkX * m_config.chunkSize + m_config.chunkSize) + borderPad;
       cullData.max[1] = static_cast<float>(m_config.worldHeight);
-      cullData.max[2] = cullData.min[2] + static_cast<float>(m_config.chunkSize);
+      cullData.max[2] = static_cast<float>(chunk->chunkZ * m_config.chunkSize + m_config.chunkSize) + borderPad;
       cullData.max[3] = 1.0f;
       const uint32_t firstIndex = static_cast<uint32_t>(alloc->iboOffsetBytes / sizeof(uint32_t));
       cullData.opaqueIndexCount = chunk->opaqueIndexCount;
