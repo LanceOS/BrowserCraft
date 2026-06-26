@@ -1,6 +1,8 @@
 #include "World.hpp"
-#include <cstring>
+#include "WorldCoords.hpp"
 #include <algorithm>
+#include <cmath>
+#include <cstring>
 
 namespace voxel {
 
@@ -26,7 +28,12 @@ void World::update(glm::vec3 cameraPos) {
   ensureVisibleRadius(cx, cz);
   unloadFarChunks(cx, cz);
   m_jobQueue.pump(m_chunks, m_pool, m_slotToChunk, m_config.worldSeed);
-  flushDeferredRemeshes();
+  m_remeshScheduler.flush([this](int32_t chunkX, int32_t chunkZ) {
+    auto* chunk = m_chunks.getMut(chunkX, chunkZ);
+    if (!chunk) return;
+    requestBoundaryNeighborRemeshes(*chunk, 0, 0);
+    requestBoundaryNeighborRemeshes(*chunk, m_config.chunkSize - 1, m_config.chunkSize - 1);
+  });
 }
 
 auto World::isReady() const -> bool {
@@ -92,10 +99,10 @@ auto World::setBlockIdAt(int32_t worldX, int32_t worldY, int32_t worldZ, uint8_t
   auto* mutChunk = m_chunks.getMut(ref->chunk->chunkX, ref->chunk->chunkZ);
   if (mutChunk) {
     requestRemesh(*mutChunk);
-    // Defer boundary neighbor remeshes — flushed in flushDeferredRemeshes()
+    // Defer boundary neighbor remeshes — flushed at end of update()
     if (ref->localX == 0 || ref->localX == m_config.chunkSize - 1 ||
         ref->localZ == 0 || ref->localZ == m_config.chunkSize - 1) {
-      m_deferredBoundaryEdits.emplace_back(ref->chunk->chunkX, ref->chunk->chunkZ);
+      m_remeshScheduler.noteBoundaryEdit(ref->chunk->chunkX, ref->chunk->chunkZ);
     }
   }
   return true;
@@ -121,7 +128,7 @@ auto World::setRedstonePackedAt(int32_t worldX, int32_t worldY, int32_t worldZ, 
     // Defer boundary neighbor remeshes
     if (ref->localX == 0 || ref->localX == m_config.chunkSize - 1 ||
         ref->localZ == 0 || ref->localZ == m_config.chunkSize - 1) {
-      m_deferredBoundaryEdits.emplace_back(ref->chunk->chunkX, ref->chunk->chunkZ);
+      m_remeshScheduler.noteBoundaryEdit(ref->chunk->chunkX, ref->chunk->chunkZ);
     }
   }
   return true;
@@ -159,6 +166,7 @@ void World::clear() {
   m_slotToChunk.clear();
   m_jobQueue.clear();
   m_pendingUploadSlots.clear();
+  m_remeshScheduler.clear();
   m_hasCenter = false;
 }
 
@@ -384,22 +392,6 @@ void World::requestBoundaryNeighborRemeshes(const Chunk& chunk, int32_t localX, 
   if (localX == m_config.chunkSize - 1) requestNeighborRemesh(chunk, 1, 0);
   if (localZ == 0) requestNeighborRemesh(chunk, 0, -1);
   if (localZ == m_config.chunkSize - 1) requestNeighborRemesh(chunk, 0, 1);
-}
-
-void World::flushDeferredRemeshes() {
-  // Deduplicate by chunk coordinates using a local set
-  // Since the vector is typically small (< 81 entries at render dist 4),
-  // a simple O(n) dedup is fine.
-  std::sort(m_deferredBoundaryEdits.begin(), m_deferredBoundaryEdits.end());
-  auto last = std::unique(m_deferredBoundaryEdits.begin(), m_deferredBoundaryEdits.end());
-  
-  for (auto it = m_deferredBoundaryEdits.begin(); it != last; ++it) {
-    auto* chunk = m_chunks.getMut(it->first, it->second);
-    if (!chunk) continue;
-    requestBoundaryNeighborRemeshes(*chunk, 0, 0); // localX=0 triggers both X edges
-    requestBoundaryNeighborRemeshes(*chunk, m_config.chunkSize - 1, m_config.chunkSize - 1);
-  }
-  m_deferredBoundaryEdits.clear();
 }
 
 void World::requestNeighborRemesh(const Chunk& chunk, int32_t dx, int32_t dz) {

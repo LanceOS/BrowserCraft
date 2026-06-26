@@ -168,6 +168,7 @@ add_library(voxel_engine STATIC
   src/content/flora/GrassFactory.cpp
   src/content/flora/DefaultFlora.cpp
   src/game/GameOrchestrator.cpp
+  src/game/ChunkWorkerImpl.cpp
   src/game/GameSession.cpp
   src/game/WorldController.cpp
   src/game/Game.cpp

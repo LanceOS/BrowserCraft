@@ -8,6 +8,7 @@
 #include "engine/ecs/ComponentStore.hpp"
 #include "engine/ecs/components/Components.hpp"
 #include "engine/alloc/SharedPool.hpp"
+#include "world/WorldCoords.hpp"
 #include "world/World.hpp"
 #include "world/BlockRegistry.hpp"
 #include "MockWorker.hpp"

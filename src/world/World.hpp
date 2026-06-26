@@ -6,6 +6,7 @@
 #include "IChunkWorker.hpp"
 #include "IChunkPersistence.hpp"
 #include "BlockRegistry.hpp"
+#include "RemeshScheduler.hpp"
 #include "VoxelStore.hpp"
 #include "engine/core/Config.hpp"
 #include "engine/alloc/SharedPool.hpp"
@@ -13,24 +14,12 @@
 #include <vector>
 #include <deque>
 #include <unordered_map>
-#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <functional>
 #include <utility>
 
 namespace voxel {
-
-/// Utility: world coordinate → chunk coordinate.
-inline auto worldToChunk(float coord, int32_t size) -> int32_t {
-  return static_cast<int32_t>(std::floor(coord / static_cast<float>(size)));
-}
-
-/// Utility: positive modulo.
-inline auto mod(int32_t value, int32_t size) -> int32_t {
-  int32_t r = value % size;
-  return r < 0 ? r + size : r;
-}
 
 struct WorldBlockRef {
   const Chunk* chunk;
@@ -149,7 +138,6 @@ private:
   void requestNeighborRemeshes(const Chunk& chunk);
   void requestBoundaryNeighborRemeshes(const Chunk& chunk, int32_t localX, int32_t localZ);
   void requestNeighborRemesh(const Chunk& chunk, int32_t dx, int32_t dz);
-  void flushDeferredRemeshes();
 
   [[nodiscard]] auto chunkHasVoxelData(const Chunk& chunk) const -> bool;
   [[nodiscard]] auto chunkHasMeshes(const Chunk& chunk) const -> bool;
@@ -169,7 +157,7 @@ private:
   IChunkPersistence* m_persistence = nullptr;
   std::vector<int32_t> m_pendingUploadSlots;
   // Boundary edits collected during a frame — flushed at end of update()
-  std::vector<std::pair<int32_t, int32_t>> m_deferredBoundaryEdits;
+  RemeshScheduler m_remeshScheduler;
 
   int32_t m_centerChunkX = 0;
   int32_t m_centerChunkZ = 0;
