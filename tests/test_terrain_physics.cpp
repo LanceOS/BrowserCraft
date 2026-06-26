@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <glm/glm.hpp>
 #include "world/terrain/TerrainCollision.hpp"
 #include "world/terrain/TerrainRaycast.hpp"
@@ -7,6 +8,7 @@
 #include "engine/core/Config.hpp"
 #include "engine/alloc/SharedPool.hpp"
 #include "engine/collision/EntityCollisions.hpp"
+#include "engine/ecs/components/Components.hpp"
 #include "MockWorker.hpp"
 #include <memory>
 #include <vector>

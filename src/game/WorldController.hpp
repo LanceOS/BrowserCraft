@@ -16,6 +16,7 @@
 namespace voxel {
 
 class BlockRegistry;
+class TerrainChunkCollision;
 
 /// Manages world lifecycle: creation, save/load, and completion-job processing.
 /// Owns the World instance and SaveManager, along with the completion queues
@@ -57,8 +58,6 @@ public:
   void clearWorld() { if (m_world) m_world->clear(); }
 
 private:
-  class TerrainChunkCollision;
-
   struct CompletedMeshJob {
     int32_t slotIndex;
     bool success;
