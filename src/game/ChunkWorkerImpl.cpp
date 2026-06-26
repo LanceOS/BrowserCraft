@@ -4,11 +4,15 @@
 #include "engine/threading/WorkerThreadPool.hpp"
 #include "engine/workers/mesher/GreedyMesher.hpp"
 #include "engine/workers/mesher/LightPropagator.hpp"
+#include "engine/workers/mesher/LightSampling.hpp"
 #include "engine/workers/mesher/SmoothTerrainMesher.hpp"
 #include "game/WorldController.hpp"
+#include "world/BlockIds.hpp"
 #include "world/BlockRegistry.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
+#include "world/mesh/SurfaceNetsMesher.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -57,6 +61,82 @@ auto gatherNeighborVoxels(const SharedPool& pool, int32_t slotIndex,
   }
 
   return neighbors;
+}
+
+struct TerrainTexturePalette {
+  uint16_t grassTop = 0;
+  uint16_t grassBottom = 0;
+  uint16_t grassSide = 0;
+  uint16_t dirt = 0;
+  uint16_t stone = 0;
+  uint16_t sand = 0;
+};
+
+auto loadTerrainPalette(const BlockRegistry& blocks) -> TerrainTexturePalette {
+  TerrainTexturePalette palette{};
+
+  if (const auto* grass = blocks.tryGet(BlockId::GRASS)) {
+    palette.grassTop = grass->textures.top;
+    palette.grassBottom = grass->textures.bottom;
+    palette.grassSide = grass->textures.side;
+  }
+  if (const auto* dirt = blocks.tryGet(BlockId::DIRT)) {
+    palette.dirt = dirt->textures.top;
+  }
+  if (const auto* stone = blocks.tryGet(BlockId::STONE)) {
+    palette.stone = stone->textures.top;
+  }
+  if (const auto* sand = blocks.tryGet(BlockId::SAND)) {
+    palette.sand = sand->textures.top;
+  }
+
+  return palette;
+}
+
+auto pickTerrainLayer(MaterialId material, float nx, float ny, float nz,
+                      const TerrainTexturePalette& palette) -> uint16_t {
+  const float ax = std::fabs(nx);
+  const float ay = std::fabs(ny);
+  const float az = std::fabs(nz);
+
+  switch (material) {
+    case MaterialId::Grass:
+      if (ay >= ax && ay >= az) {
+        return ny >= 0.0f ? palette.grassTop : palette.grassBottom;
+      }
+      return palette.grassSide;
+    case MaterialId::Dirt:
+      return palette.dirt != 0u ? palette.dirt : palette.stone;
+    case MaterialId::Sand:
+      return palette.sand != 0u ? palette.sand : palette.dirt;
+    case MaterialId::Stone:
+    default:
+      return palette.stone != 0u ? palette.stone : palette.dirt;
+  }
+}
+
+auto surfaceDensitySample(void* userData, float worldX, float worldY, float worldZ) -> float {
+  auto* pipeline = static_cast<WorldGenPipeline*>(userData);
+  return pipeline->sampleDensity(worldX, worldY, worldZ);
+}
+
+void annotateSurfaceNetsVertices(const WorldGenPipeline& pipeline,
+                                 const TerrainTexturePalette& palette,
+                                 const mesh::SurfaceNetsConfig& cfg,
+                                 float* vertexOut,
+                                 uint32_t vertexCount) {
+  if (!vertexOut) return;
+
+  for (uint32_t i = 0; i < vertexCount; ++i) {
+    float* v = vertexOut + static_cast<size_t>(i) * static_cast<size_t>(cfg.strideFloats);
+    const float worldX = cfg.originX + v[0];
+    const float worldY = cfg.originY + v[1];
+    const float worldZ = cfg.originZ + v[2];
+    const MaterialId material = pipeline.sampleMaterial(worldX, worldY, worldZ);
+    const uint16_t texLayer = pickTerrainLayer(material, v[3], v[4], v[5], palette);
+    v[8] = static_cast<float>(texLayer);
+    v[9] = mesher::packLight(15, 0, 0);
+  }
 }
 
 } // namespace
@@ -115,48 +195,82 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
 
     uint32_t vc = 0, ic = 0;
     uint32_t opaqueIc = 0, transparentIc = 0;
-    bool ok = mesher::smoothTerrainMesh(
-        m_pipeline, m_blocks, mcfg, chunkX, chunkZ,
-        g_meshScratch.vertices.data(),
-        g_meshScratch.indices.data(),
-        vc, ic, &opaqueIc, &transparentIc);
-    if (!ok) {
-      std::cerr << "Chunk mesh build exceeded scratch limits for (" << chunkX << ", " << chunkZ
-                << ") max " << mcfg.maxVertices << " verts / "
-                << mcfg.maxIndices << " indices\n";
-      m_meshAllocator.releaseSlot(slotIndex);
-      *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-      m_controller.onMeshCompleted(slotIndex, false);
-      return;
-    }
-
-    const uint32_t smoothVertexCount = vc;
-    const uint32_t smoothOpaqueIndexCount = ic;
-
-    ok = mesher::overlayGreedyMesh(
-        slot.voxels, slot.light, m_blocks, mcfg,
-        smoothVertexCount, smoothOpaqueIndexCount,
-        g_meshScratch.vertices.data(),
-        g_meshScratch.indices.data(),
-        vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
-    if (!ok) {
-      // The smooth surface can still be dense on cave-heavy terrain.
-      // If the overlay layer blows the scratch budget, fall back to the
-      // existing greedy voxel mesh instead of dropping the chunk.
-      ok = mesher::greedyMesh(
+    bool usedGreedyFallback = false;
+    const auto buildGreedyMesh = [&]() -> bool {
+      return mesher::greedyMesh(
           slot.voxels, slot.light, m_blocks, mcfg,
           g_meshScratch.vertices.data(),
           g_meshScratch.indices.data(),
           vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
-      if (!ok) {
-        std::cerr << "Chunk overlay build exceeded scratch limits for (" << chunkX << ", "
-                  << chunkZ << ") max " << mcfg.maxVertices << " verts / "
-                  << mcfg.maxIndices << " indices\n";
-        m_meshAllocator.releaseSlot(slotIndex);
-        *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-        m_controller.onMeshCompleted(slotIndex, false);
-        return;
+    };
+
+    bool ok = false;
+    if (m_config.useSurfaceNets) {
+      mesh::SurfaceNetsConfig scfg;
+      scfg.sizeX = m_config.chunkSize;
+      scfg.sizeY = m_config.worldHeight;
+      scfg.sizeZ = m_config.chunkSize;
+      scfg.maxVertices = m_config.maxVertsPerChunk;
+      scfg.maxIndices = m_config.maxIndicesPerChunk;
+      scfg.strideFloats = m_config.vertexStrideFloats;
+      scfg.originX = static_cast<float>(chunkX * m_config.chunkSize);
+      scfg.originY = 0.0f;
+      scfg.originZ = static_cast<float>(chunkZ * m_config.chunkSize);
+
+      mesh::DensitySampler sampler{};
+      sampler.userData = &m_pipeline;
+      sampler.sample = &surfaceDensitySample;
+
+      ok = mesh::surfaceNetsMesh(
+          scfg, sampler,
+          g_meshScratch.vertices.data(),
+          g_meshScratch.indices.data(),
+          vc, ic);
+      if (ok) {
+        annotateSurfaceNetsVertices(m_pipeline, loadTerrainPalette(m_blocks), scfg,
+                                    g_meshScratch.vertices.data(), vc);
+        opaqueIc = ic;
+        transparentIc = 0u;
+      } else {
+        usedGreedyFallback = true;
+        ok = buildGreedyMesh();
       }
+    } else {
+      ok = mesher::smoothTerrainMesh(
+          m_pipeline, m_blocks, mcfg, chunkX, chunkZ,
+          g_meshScratch.vertices.data(),
+          g_meshScratch.indices.data(),
+          vc, ic, &opaqueIc, &transparentIc);
+      if (!ok) {
+        usedGreedyFallback = true;
+        ok = buildGreedyMesh();
+      } else {
+        const uint32_t smoothVertexCount = vc;
+        const uint32_t smoothOpaqueIndexCount = ic;
+
+        ok = mesher::overlayGreedyMesh(
+            slot.voxels, slot.light, m_blocks, mcfg,
+            smoothVertexCount, smoothOpaqueIndexCount,
+            g_meshScratch.vertices.data(),
+            g_meshScratch.indices.data(),
+            vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
+        if (!ok) {
+          // The smooth surface can still be dense on cave-heavy terrain.
+          // If the overlay layer blows the scratch budget, fall back to the
+          // existing greedy voxel mesh instead of dropping the chunk.
+          usedGreedyFallback = true;
+          ok = buildGreedyMesh();
+        }
+      }
+    }
+
+    if (!ok) {
+      std::cerr << "Chunk mesh build failed for (" << chunkX << ", " << chunkZ
+                << ")" << (usedGreedyFallback ? " after greedy fallback" : "") << "\n";
+      m_meshAllocator.releaseSlot(slotIndex);
+      *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+      m_controller.onMeshCompleted(slotIndex, false);
+      return;
     }
 
     if (vc == 0u || ic == 0u) {
@@ -171,32 +285,26 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
         static_cast<size_t>(vc) * m_config.vertexStrideFloats * sizeof(float),
         static_cast<size_t>(ic) * sizeof(uint32_t));
     if (!allocation || !allocation->valid()) {
-      // Smooth terrain can be a lot denser than the legacy greedy mesh.
-      // If the combined surface + overlay mesh does not fit, fall back to
-      // the existing greedy voxel path rather than dropping the chunk.
-      ok = mesher::greedyMesh(
-          slot.voxels, slot.light, m_blocks, mcfg,
-          g_meshScratch.vertices.data(),
-          g_meshScratch.indices.data(),
-          vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
-      if (!ok) {
-        std::cerr << "Chunk mesh allocation failed for (" << chunkX << ", " << chunkZ
-                  << ") requesting " << vc << " verts / "
-                  << ic << " indices after greedy fallback\n";
-        *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-        m_controller.onMeshCompleted(slotIndex, false);
-        return;
+      if (!usedGreedyFallback) {
+        usedGreedyFallback = true;
+        ok = buildGreedyMesh();
+        if (ok) {
+          allocation = m_meshAllocator.allocateForSlot(
+              slotIndex,
+              static_cast<size_t>(vc) * m_config.vertexStrideFloats * sizeof(float),
+              static_cast<size_t>(ic) * sizeof(uint32_t));
+        }
       }
-
-      allocation = m_meshAllocator.allocateForSlot(
-          slotIndex,
-          static_cast<size_t>(vc) * m_config.vertexStrideFloats * sizeof(float),
-          static_cast<size_t>(ic) * sizeof(uint32_t));
     }
     if (!allocation || !allocation->valid()) {
-      std::cerr << "Chunk mesh allocation failed for (" << chunkX << ", " << chunkZ
-                << ") requesting " << vc << " verts / "
-                << ic << " indices\n";
+      if (!ok) {
+        std::cerr << "Chunk mesh build failed for (" << chunkX << ", " << chunkZ
+                  << ")" << (usedGreedyFallback ? " after greedy fallback" : "") << "\n";
+      } else {
+        std::cerr << "Chunk mesh allocation failed for (" << chunkX << ", " << chunkZ
+                  << ") requesting " << vc << " verts / " << ic << " indices"
+                  << (usedGreedyFallback ? " after greedy fallback" : "") << "\n";
+      }
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
       m_controller.onMeshCompleted(slotIndex, false);
       return;
