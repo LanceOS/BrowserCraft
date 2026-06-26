@@ -16,7 +16,7 @@
 #include <glm/glm.hpp>
 #include <cmath>
 
-using namespace voxel;
+using namespace terrain;
 using Catch::Approx;
 
 // ---------------------------------------------------------------------------
@@ -351,7 +351,7 @@ TEST_CASE("Block raycast returns hit block and previous air cell", "[world][inte
   CHECK(hit.previous.x == 3);
   CHECK(hit.previous.y == 5);
   CHECK(hit.previous.z == 2);
-  CHECK(hit.blockId == 1);
+  CHECK(hit.materialId == 1);
 }
 
 // ===========================================================================

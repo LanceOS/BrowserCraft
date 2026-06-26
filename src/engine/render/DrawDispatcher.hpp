@@ -7,7 +7,7 @@
 #include "gl_core.hpp"
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
 class IndirectBatcher;
 
@@ -15,7 +15,7 @@ class IndirectBatcher;
 /// Owns sky rendering, indirect command building, and opaque/transparent draw passes.
 class DrawDispatcher {
 public:
-  DrawDispatcher(ShaderProgram& terrainShader, ShaderProgram& chunkShader, ShaderProgram& skyShader,
+  DrawDispatcher(ShaderProgram& terrainShader, ShaderProgram& skyShader,
                  Texture2DArray& textures, IndirectBatcher& indirectBatcher,
                  uint32_t& masterVao, uint32_t& skyVao);
 
@@ -28,7 +28,6 @@ public:
 
 private:
   ShaderProgram& m_terrainShader;
-  ShaderProgram& m_chunkShader;
   ShaderProgram& m_skyShader;
   Texture2DArray& m_textures;
   IndirectBatcher& m_indirectBatcher;
@@ -36,4 +35,4 @@ private:
   uint32_t& m_skyVao;
 };
 
-} // namespace voxel
+} // namespace terrain

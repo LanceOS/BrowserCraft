@@ -2,12 +2,12 @@
 #include "IndirectBatcher.hpp"
 #include "gl_core.hpp"
 
-namespace voxel {
+namespace terrain {
 
-DrawDispatcher::DrawDispatcher(ShaderProgram& terrainShader, ShaderProgram& chunkShader, ShaderProgram& skyShader,
+DrawDispatcher::DrawDispatcher(ShaderProgram& terrainShader, ShaderProgram& skyShader,
                                Texture2DArray& textures, IndirectBatcher& indirectBatcher,
                                uint32_t& masterVao, uint32_t& skyVao)
-  : m_terrainShader(terrainShader), m_chunkShader(chunkShader), m_skyShader(skyShader),
+  : m_terrainShader(terrainShader), m_skyShader(skyShader),
     m_textures(textures), m_indirectBatcher(indirectBatcher),
     m_masterVao(masterVao), m_skyVao(skyVao)
 {}
@@ -34,8 +34,6 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
 
   const uint32_t terrainOpaqueCount = m_indirectBatcher.terrainOpaqueCommandCount();
   const uint32_t terrainTransparentCount = m_indirectBatcher.terrainTransparentCommandCount();
-  const uint32_t blockOpaqueCount = m_indirectBatcher.blockOpaqueCommandCount();
-  const uint32_t blockTransparentCount = m_indirectBatcher.blockTransparentCommandCount();
 
   m_terrainShader.use();
   gl::Uniform1i(m_terrainShader.uniform("u_terrainTextures"), 0);
@@ -58,26 +56,6 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
     m_indirectBatcher.drawIndirect(terrainTransparentCount, m_indirectBatcher.terrainTransparentCommandBase());
   }
 
-  m_chunkShader.use();
-  gl::Uniform1i(m_chunkShader.uniform("u_blockTextures"), 0);
-
-  // Legacy block pass: opaque geometry first, then transparent materials.
-  if (blockOpaqueCount > 0u) {
-    gl::Disable(GL_BLEND);
-    gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 1);
-    gl::DepthMask(GL_TRUE);
-    gl::DepthFunc(GL_LESS);
-    m_indirectBatcher.drawIndirect(blockOpaqueCount, m_indirectBatcher.blockOpaqueCommandBase());
-  }
-
-  if (blockTransparentCount > 0u) {
-    gl::Enable(GL_BLEND);
-    gl::Uniform1i(m_chunkShader.uniform("u_opaquePass"), 0);
-    gl::DepthMask(GL_FALSE);
-    gl::DepthFunc(GL_LEQUAL);
-    m_indirectBatcher.drawIndirect(blockTransparentCount, m_indirectBatcher.blockTransparentCommandBase());
-  }
-
   gl::BindVertexArray(0);
   gl::Disable(GL_CULL_FACE);
   gl::Disable(GL_BLEND);
@@ -85,4 +63,4 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
   gl::DepthFunc(GL_LESS);
 }
 
-} // namespace voxel
+} // namespace terrain

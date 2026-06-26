@@ -2,7 +2,7 @@
 
 struct GLFWwindow;
 
-namespace voxel {
+namespace terrain {
 
 class InputState;
 
@@ -12,4 +12,4 @@ void setupInputCallbacks(GLFWwindow* window, InputState& input);
 /// Clear the callback bridge's cached input pointer.
 void clearInputCallbacks();
 
-} // namespace voxel
+} // namespace terrain

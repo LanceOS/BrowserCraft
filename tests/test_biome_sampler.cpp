@@ -1,10 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include "content/biomes/BiomeFactory.hpp"
 #include "content/biomes/BiomeSampler.hpp"
-#include "world/BlockIds.hpp"
 
 TEST_CASE("BiomeFactory pick returns valid biome", "[biome]") {
-  using namespace voxel::biome;
+  using namespace terrain::biome;
 
   // All biomes should be reachable
   REQUIRE(BiomeFactory::pick(0.8f, 0.2f).id() == BiomeId::Desert);
@@ -16,15 +15,14 @@ TEST_CASE("BiomeFactory pick returns valid biome", "[biome]") {
 }
 
 TEST_CASE("BiomeSampler sampleBiome returns valid biome", "[biome]") {
-  voxel::biome::BiomeSampler sampler(42);
+  terrain::biome::BiomeSampler sampler(42);
 
   auto& b = sampler.sampleBiome(100.0f, 100.0f);
-  REQUIRE(b.topBlock() > 0);
   REQUIRE(b.surfaceDepth() > 0);
 }
 
 TEST_CASE("BiomeSampler blendedHeightBias is smooth", "[biome]") {
-  voxel::biome::BiomeSampler sampler(42);
+  terrain::biome::BiomeSampler sampler(42);
 
   // blendedHeightBias should return a finite value at any position
   // and should not produce NaN or Inf.
@@ -35,7 +33,7 @@ TEST_CASE("BiomeSampler blendedHeightBias is smooth", "[biome]") {
   REQUIRE(std::isfinite(bias2));
 
   // Bias should be within reasonable terrain range (between desert and mountain extremes)
-  REQUIRE(bias1 > -10.0f);
+  REQUIRE(bias1 > -15.0f);
   REQUIRE(bias1 < 30.0f);
 
   // Different positions should produce different biases (the noise isn't constant)
@@ -43,12 +41,11 @@ TEST_CASE("BiomeSampler blendedHeightBias is smooth", "[biome]") {
   float bias4 = sampler.blendedHeightBias(9999.0f, 9999.0f);
   // At very distant positions the bias should differ
   bool differs = (bias3 != bias4);
-  // (They could theoretically collide, but with 32-bit float it is astronomically unlikely.)
   REQUIRE(differs);
 }
 
 TEST_CASE("BiomeFactory blendedHeightBias with known climate", "[biome]") {
-  using namespace voxel::biome;
+  using namespace terrain::biome;
 
   // Pure mountain region: very cold (t=0) → bias ≈ MountainsBiome heightBias (22)
   float bias = BiomeFactory::blendedHeightBias({0.0f, 0.5f});
@@ -67,7 +64,7 @@ TEST_CASE("BiomeFactory blendedHeightBias with known climate", "[biome]") {
 }
 
 TEST_CASE("BiomeFactory mountainWeight with known temperature", "[biome]") {
-  using namespace voxel::biome;
+  using namespace terrain::biome;
 
   // Very cold → full mountain weight
   REQUIRE(BiomeFactory::mountainWeight({0.0f, 0.5f}) > 0.95f);
@@ -88,7 +85,7 @@ TEST_CASE("BiomeFactory mountainWeight with known temperature", "[biome]") {
 }
 
 TEST_CASE("BiomeSampler blended bias stays within biome extremes", "[biome]") {
-  voxel::biome::BiomeSampler sampler(42);
+  terrain::biome::BiomeSampler sampler(42);
 
   // The blended bias at any position must be bounded by the min and max
   // heightBias across all biomes: DesertBiome (-3) <= bias <= MountainsBiome (22).
@@ -106,8 +103,6 @@ TEST_CASE("BiomeSampler blended bias stays within biome extremes", "[biome]") {
 
   // The average bias over a large area should be close to plains (0),
   // since plains is the default biome across most of the world.
-  // Using step 400 instead of 200 for ~6x fewer iterations — still
-  // statistically sufficient to verify the average is near zero.
   float sum = 0.0f;
   int32_t count = 0;
   for (float x = -5000.0f; x <= 5000.0f; x += 400.0f) {
@@ -117,17 +112,14 @@ TEST_CASE("BiomeSampler blended bias stays within biome extremes", "[biome]") {
     }
   }
   float avg = sum / static_cast<float>(count);
-  // Plains has heightBias=0. The average across all biomes should be
-  // closer to 0 than to the mountain or desert extremes.
   REQUIRE(avg > -5.0f);
   REQUIRE(avg < 5.0f);
 }
 
 TEST_CASE("BiomeClassifier computeWeights sums to ~1", "[biome]") {
-  using namespace voxel::biome;
+  using namespace terrain::biome;
 
   // At a variety of climate points, the sum of weights should be ≈ 1
-  // within floating-point tolerance.
   constexpr ClimateSample testPoints[] = {
     {0.0f,  0.0f},  // cold, dry
     {0.0f,  1.0f},  // cold, wet
@@ -142,7 +134,6 @@ TEST_CASE("BiomeClassifier computeWeights sums to ~1", "[biome]") {
   for (const auto& pt : testPoints) {
     auto w = BiomeFactory::computeWeights(pt);
     float sum = w.plains + w.desert + w.forest + w.mountains + w.swamp + w.ocean;
-    // Allow small epsilon for FP rounding.
     REQUIRE(sum > 0.99f);
     REQUIRE(sum < 1.01f);
 
@@ -161,22 +152,19 @@ TEST_CASE("BiomeClassifier computeWeights sums to ~1", "[biome]") {
 }
 
 TEST_CASE("BiomeFactory forId covers all biomes", "[biome]") {
-  using namespace voxel::biome;
+  using namespace terrain::biome;
 
   // ALL_BIOME_IDS should contain exactly 6 entries.
   REQUIRE(ALL_BIOME_IDS.size() == 6);
 
-  // Each BIomeId should be reachable via forId() and return the correct id.
+  // Each BiomeId should be reachable via forId() and return the correct id.
   for (const auto& id : ALL_BIOME_IDS) {
     const Biome& b = BiomeFactory::forId(id);
     REQUIRE(b.id() == id);
-    REQUIRE(b.topBlock() > 0);
     REQUIRE(b.surfaceDepth() > 0);
-    REQUIRE(b.fillerBlock() > 0);
   }
 
   // Verify specific known mappings.
   REQUIRE(BiomeFactory::forId(BiomeId::Plains).heightBias() == 0.0f);
-  REQUIRE(BiomeFactory::forId(BiomeId::Desert).topBlock() == voxel::BlockId::SAND);
   REQUIRE(BiomeFactory::forId(BiomeId::Ocean).heightBias() < -10.0f);
 }

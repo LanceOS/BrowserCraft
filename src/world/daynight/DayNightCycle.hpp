@@ -3,8 +3,8 @@
 #include <cmath>
 #include <glm/glm.hpp>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 namespace daynight {
 
 // 1 hour real-time = 1 full day/night cycle (60 ticks/s × 3600s = 216,000 ticks)
@@ -62,4 +62,4 @@ private:
 };
 
 } // namespace daynight
-} // namespace voxel
+} // namespace terrain

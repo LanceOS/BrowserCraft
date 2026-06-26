@@ -2,7 +2,7 @@
 
 #include <glm/glm.hpp>
 
-namespace voxel {
+namespace terrain {
 
 class World;
 
@@ -19,4 +19,4 @@ auto raycastTerrain(
     const glm::vec3& direction,
     float maxDistance) -> TerrainRaycastHit;
 
-} // namespace voxel
+} // namespace terrain

@@ -5,12 +5,11 @@
 #include "engine/core/Config.hpp"
 #include "engine/ecs/components/Components.hpp"
 #include "world/terrain/TerrainCollision.hpp"
-#include "world/BlockIds.hpp"
 #include <algorithm>
 #include <cmath>
 #include <utility>
 
-namespace voxel {
+namespace terrain {
 namespace {
 
 struct MovementSolver {
@@ -39,7 +38,7 @@ struct MovementSolver {
     const Chunk* chunk = world.getChunk(cx, cz);
     if (!chunk) return -1.0f;
 
-    // 1. Check smooth terrain mesh first
+    // Check smooth terrain mesh
     if (chunk->terrainCollision && !chunk->terrainCollision->empty()) {
       glm::vec3 origin(worldX, startY + 1.0f, worldZ);
       glm::vec3 direction(0.0f, -1.0f, 0.0f);
@@ -50,16 +49,6 @@ struct MovementSolver {
 
       if (chunk->terrainCollision->raycast(origin, direction, maxDist, hitPos, hitNormal, hitDist)) {
         return hitPos.y;
-      }
-    }
-
-    // 2. Fall back to block grid
-    const int32_t x = static_cast<int32_t>(std::floor(worldX));
-    const int32_t z = static_cast<int32_t>(std::floor(worldZ));
-    int32_t y = std::clamp(static_cast<int32_t>(std::floor(startY)), 0, config.worldHeight - 1);
-    for (; y >= 0; --y) {
-      if (world.isSolidInChunk(x, y, z, *chunk)) {
-        return static_cast<float>(y + 1);
       }
     }
     return -1.0f;
@@ -177,4 +166,4 @@ void EntityCollisions::resolveMovement(
   solver.resolve(dx, dy, dz, transform);
 }
 
-} // namespace voxel
+} // namespace terrain

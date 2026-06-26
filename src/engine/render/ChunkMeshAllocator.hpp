@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace voxel {
+namespace terrain {
 
 /// Compact allocator for chunk mesh GPU memory.
 ///
@@ -115,4 +115,4 @@ private:
   mutable std::mutex m_mutex;
 };
 
-} // namespace voxel
+} // namespace terrain

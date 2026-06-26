@@ -5,8 +5,8 @@
 #include <cmath>
 #include <algorithm>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 /// 3D Simplex noise implementation for terrain generation.
 class SimplexNoise {
@@ -35,4 +35,4 @@ private:
   };
 };
 
-} // namespace voxel
+} // namespace terrain

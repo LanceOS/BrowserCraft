@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel::mesh {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain::mesh {
 
 /// Configuration for the Surface Nets terrain mesher.
 struct SurfaceNetsConfig {
@@ -42,4 +42,4 @@ struct DensitySampler {
     uint32_t& vertexCountOut,
     uint32_t& indexCountOut) -> bool;
 
-} // namespace voxel::mesh
+} // namespace terrain::mesh

@@ -1,7 +1,4 @@
 #include "SmoothTerrainMesher.hpp"
-
-#include "LightSampling.hpp"
-#include "world/BlockRegistry.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
 
 #include <algorithm>
@@ -15,8 +12,8 @@
 
 #include <glm/glm.hpp>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 namespace mesher {
 namespace {
 
@@ -269,7 +266,6 @@ auto emitTetra(const std::array<CornerVertex, 4>& corners,
 } // namespace
 
 bool smoothTerrainMesh(const WorldGenPipeline& pipeline,
-                       const BlockRegistry& blocks,
                        const MesherConfig& cfg,
                        int32_t chunkX,
                        int32_t chunkZ,
@@ -317,7 +313,6 @@ bool smoothTerrainMesh(const WorldGenPipeline& pipeline,
     }
   }
 
-  (void)blocks;
 
   for (int32_t y = 0; y < cfg.sizeY; ++y) {
     for (int32_t z = 0; z < cfg.sizeZ; ++z) {
@@ -367,4 +362,4 @@ bool smoothTerrainMesh(const WorldGenPipeline& pipeline,
 }
 
 } // namespace mesher
-} // namespace voxel
+} // namespace terrain

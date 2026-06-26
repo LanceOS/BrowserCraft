@@ -1,7 +1,7 @@
 #include "VertexBuffer.hpp"
 #include <stdexcept>
 
-namespace voxel {
+namespace terrain {
 
 VertexBuffer::VertexBuffer(uint32_t target) : m_target(target) {
   gl::GenBuffers(1, &m_buffer);
@@ -31,4 +31,4 @@ void VertexBuffer::upload(const void* data, size_t size, uint32_t usage) const {
   gl::BufferData(m_target, static_cast<GLsizeiptr>(size), data, usage);
 }
 
-} // namespace voxel
+} // namespace terrain

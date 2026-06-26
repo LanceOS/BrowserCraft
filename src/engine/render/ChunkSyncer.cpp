@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cstring>
 
-namespace voxel {
+namespace terrain {
 
 ChunkSyncer::ChunkSyncer(ChunkMeshAllocator& meshAllocator,
                          IndirectBatcher& indirectBatcher,
@@ -85,4 +85,4 @@ void ChunkSyncer::sync(World& world) {
   }
 }
 
-} // namespace voxel
+} // namespace terrain

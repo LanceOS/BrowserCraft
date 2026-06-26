@@ -2,7 +2,7 @@
 
 #include "BiomeData.hpp"
 
-namespace voxel::biome {
+namespace terrain::biome {
 
 /// Result of classifying a climate sample.
 /// Kept separate from BiomeFactory so climate rules can evolve independently
@@ -26,4 +26,4 @@ public:
   [[nodiscard]] static float blendedHeightBias(const ClimateSample& c);
 };
 
-} // namespace voxel::biome
+} // namespace terrain::biome

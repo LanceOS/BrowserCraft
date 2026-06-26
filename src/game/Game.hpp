@@ -25,7 +25,6 @@
 #include "engine/audio/AudioEngine.hpp"
 #include "engine/threading/WorkerThreadPool.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
-#include "world/BlockRegistry.hpp"
 #include "world/IChunkWorker.hpp"
 #include "engine/render/Renderer.hpp"
 #include "engine/render/CameraView.hpp"
@@ -33,11 +32,9 @@
 #include "ui/UIManager.hpp"
 #include "game/GameSession.hpp"
 #include "game/WorldController.hpp"
-#include "game/BlockInteractionAudio.hpp"
-#include "content/flora/FloraRegistry.hpp"
 #include "engine/save/SaveOrchestrator.hpp"
 
-namespace voxel {
+namespace terrain {
 
 class Game {
 public:
@@ -65,7 +62,6 @@ public:
   auto worldController() -> WorldController& { return *m_worldController; }
   auto renderer() -> Renderer& { return *m_renderer; }
   auto camera() -> CameraView& { return m_camera; }
-  auto blockRegistry() -> BlockRegistry& { return m_blocks; }
   auto audioEngine() -> audio::AudioEngine& { return m_audioEngine; }
   auto audioRegistry() -> audio::AudioRegistry& { return m_audioRegistry; }
 
@@ -85,8 +81,6 @@ private:
   bool m_running = true;
 
   InputState m_input;
-  BlockRegistry m_blocks;
-  std::unique_ptr<flora::FloraRegistry> m_flora;
   std::unique_ptr<SharedPool> m_pool;
   std::unique_ptr<ChunkMeshAllocator> m_meshAllocator;
   std::unique_ptr<WorldController> m_worldController;
@@ -97,7 +91,6 @@ private:
 
   audio::AudioEngine m_audioEngine;
   audio::AudioRegistry m_audioRegistry;
-  std::unique_ptr<BlockInteractionAudio> m_blockAudio;
 
   // Threading
   std::unique_ptr<WorkerThreadPool> m_genPool;
@@ -130,4 +123,4 @@ private:
   int32_t m_playerEntityId = -1;
 };
 
-} // namespace voxel
+} // namespace terrain

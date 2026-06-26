@@ -4,23 +4,20 @@
 #include <cmath>
 #include <cstring>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+namespace terrain {
 namespace {
 
-inline auto voxelIndex(int32_t worldY, int32_t localX, int32_t localZ, int32_t chunkSize) -> int32_t {
+inline auto redstoneIndex(int32_t worldY, int32_t localX, int32_t localZ, int32_t chunkSize) -> int32_t {
   return (worldY * chunkSize + localZ) * chunkSize + localX;
 }
 
 } // namespace
 
 World::World(SharedPool& pool,
-             BlockRegistry& blocks,
              const GameConfig& config,
              IChunkWorker& worker,
              IChunkPersistence* persistence)
-  : m_pool(pool), m_blocks(blocks), m_config(config),
-    m_store(pool, blocks, m_chunks, config),
+  : m_pool(pool), m_config(config),
     m_jobQueue(worker),
     m_persistence(persistence)
 {}
@@ -53,7 +50,7 @@ auto World::isReady() const -> bool {
 auto World::hasTerrain() const -> bool {
   if (!m_hasCenter) return false;
   auto* center = m_chunks.get(m_centerChunkX, m_centerChunkZ);
-  return center && chunkHasVoxelData(*center);
+  return center && chunkHasTerrainData(*center);
 }
 
 auto World::getChunk(int32_t cx, int32_t cz) const -> const Chunk* {
@@ -80,82 +77,41 @@ auto World::getChunkSlot(const Chunk& chunk) -> ChunkSlot {
   return m_pool.view(chunk.slotIndex);
 }
 
-auto World::resolveBlock(int32_t worldX, int32_t worldY, int32_t worldZ) const -> std::optional<WorldBlockRef> {
-  if (worldY < 0 || worldY >= m_config.worldHeight) return std::nullopt;
+auto World::getRedstonePackedAt(int32_t worldX, int32_t worldY, int32_t worldZ) const -> uint8_t {
+  if (worldY < 0 || worldY >= m_config.worldHeight) return 0;
   int32_t cx = floorToChunk(worldX, m_config.chunkSize);
   int32_t cz = floorToChunk(worldZ, m_config.chunkSize);
-  auto* chunk = m_chunks.get(cx, cz);
-  if (!chunk) return std::nullopt;
+  const auto* chunk = m_chunks.get(cx, cz);
+  if (!chunk) return 0;
   int32_t localX = mod(worldX, m_config.chunkSize);
   int32_t localZ = mod(worldZ, m_config.chunkSize);
-  int32_t idx = voxelIndex(worldY, localX, localZ, m_config.chunkSize);
-  return WorldBlockRef{chunk, localX, localZ, idx};
-}
-
-auto World::getBlockIdAt(int32_t worldX, int32_t worldY, int32_t worldZ) const -> uint8_t {
-  return m_store.getBlockId(worldX, worldY, worldZ);
-}
-
-auto World::getBlockId(int32_t worldX, int32_t worldY, int32_t worldZ) const -> uint8_t {
-  return m_store.getBlockId(worldX, worldY, worldZ);
-}
-
-auto World::setBlockIdAt(int32_t worldX, int32_t worldY, int32_t worldZ, uint8_t blockId) -> bool {
-  auto ref = resolveBlock(worldX, worldY, worldZ);
-  if (!ref) return false;
-  auto slot = m_pool.view(ref->chunk->slotIndex);
-  if (slot.voxels[ref->index] == blockId) return false;
-  m_store.setBlockId(*ref->chunk, worldY, ref->localX, ref->localZ, blockId);
-  slot.redstone[ref->index] = 0;
-  markChunkDirty(ref->chunk->chunkX, ref->chunk->chunkZ);
-  auto* mutChunk = m_chunks.getMut(ref->chunk->chunkX, ref->chunk->chunkZ);
-  if (mutChunk) {
-    requestRemesh(*mutChunk);
-    // Defer boundary neighbor remeshes — flushed at end of update()
-    if (ref->localX == 0 || ref->localX == m_config.chunkSize - 1 ||
-        ref->localZ == 0 || ref->localZ == m_config.chunkSize - 1) {
-      m_remeshScheduler.noteBoundaryEdit(ref->chunk->chunkX, ref->chunk->chunkZ);
-    }
-  }
-  return true;
-}
-
-auto World::getRedstonePackedAt(int32_t worldX, int32_t worldY, int32_t worldZ) const -> uint8_t {
-  auto ref = resolveBlock(worldX, worldY, worldZ);
-  if (!ref) return 0;
-  auto slot = m_pool.view(ref->chunk->slotIndex);
-  return slot.redstone[ref->index];
+  auto slot = m_pool.view(chunk->slotIndex);
+  return slot.redstone[redstoneIndex(worldY, localX, localZ, m_config.chunkSize)];
 }
 
 auto World::setRedstonePackedAt(int32_t worldX, int32_t worldY, int32_t worldZ, uint8_t packed) -> bool {
-  auto ref = resolveBlock(worldX, worldY, worldZ);
-  if (!ref) return false;
-  auto slot = m_pool.view(ref->chunk->slotIndex);
-  if (slot.redstone[ref->index] == packed) return false;
-  slot.redstone[ref->index] = packed;
-  markChunkDirty(ref->chunk->chunkX, ref->chunk->chunkZ);
-  auto* mutChunk = m_chunks.getMut(ref->chunk->chunkX, ref->chunk->chunkZ);
-  if (mutChunk) {
-    requestRemesh(*mutChunk);
-    // Defer boundary neighbor remeshes
-    if (ref->localX == 0 || ref->localX == m_config.chunkSize - 1 ||
-        ref->localZ == 0 || ref->localZ == m_config.chunkSize - 1) {
-      m_remeshScheduler.noteBoundaryEdit(ref->chunk->chunkX, ref->chunk->chunkZ);
-    }
+  if (worldY < 0 || worldY >= m_config.worldHeight) return false;
+  int32_t cx = floorToChunk(worldX, m_config.chunkSize);
+  int32_t cz = floorToChunk(worldZ, m_config.chunkSize);
+  auto* chunk = m_chunks.getMut(cx, cz);
+  if (!chunk) return false;
+
+  int32_t localX = mod(worldX, m_config.chunkSize);
+  int32_t localZ = mod(worldZ, m_config.chunkSize);
+  auto slot = m_pool.view(chunk->slotIndex);
+  int32_t idx = redstoneIndex(worldY, localX, localZ, m_config.chunkSize);
+
+  if (slot.redstone[idx] == packed) return false;
+  slot.redstone[idx] = packed;
+  markChunkDirty(chunk->chunkX, chunk->chunkZ);
+  requestRemesh(*chunk);
+
+  // Defer boundary neighbor remeshes
+  if (localX == 0 || localX == m_config.chunkSize - 1 ||
+      localZ == 0 || localZ == m_config.chunkSize - 1) {
+    m_remeshScheduler.noteBoundaryEdit(chunk->chunkX, chunk->chunkZ);
   }
   return true;
-}
-
-auto World::isSolidInChunk(int32_t worldX, int32_t worldY, int32_t worldZ, const Chunk& chunk) const -> bool {
-  return m_store.isSolidInChunk(worldX, worldY, worldZ, chunk);
-}
-
-auto World::isSolid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool {
-  return m_store.isSolid(worldX, worldY, worldZ);
-}
-
-auto World::isFluid(int32_t worldX, int32_t worldY, int32_t worldZ) const -> bool {
-  return m_store.isFluid(worldX, worldY, worldZ);
 }
 
 void World::markUploaded(const Chunk& chunk) {
@@ -183,33 +139,11 @@ void World::clear() {
 }
 
 void World::onWorldGenDone(int32_t slotIndex) {
-  // @see notes/world-switch-stale-callbacks.md
   auto* chunk = getChunkBySlotIndex(slotIndex);
   if (!chunk) return;
   if (chunk->state != ChunkState::Generating) return;
 
-  // ---- Validate generated chunk data ----
-  // Check that bedrock was placed at y=0. If generation ran correctly
-  // bedrock will always be present; its absence indicates a silent failure.
-  {
-    auto slot = m_pool.view(chunk->slotIndex);
-    const int32_t sx = m_config.chunkSize;
-    const int32_t sz = m_config.chunkSize;
-    // Sample a few columns at the chunk corners.
-    bool hasBedrock = false;
-    const int32_t checkIndices[] = {0, sz - 1, (sz - 1) * sx, sz * sx - 1};
-    for (int32_t ci : checkIndices) {
-      if (slot.voxels[ci] != 0) { hasBedrock = true; break; }
-    }
-    if (!hasBedrock && chunk->genRetries < MAX_CHUNK_GEN_RETRIES) {
-      ++chunk->genRetries;
-      chunk->state = ChunkState::QueuedGen;
-      m_jobQueue.pushGen(chunk->slotIndex, chunk->chunkX, chunk->chunkZ);
-      return;
-    }
-  }
-
-  chunk->state = ChunkState::VoxelsReady;
+  chunk->state = ChunkState::DensityReady;
   chunk->needsRemesh = false;
   markChunkDirty(chunk->chunkX, chunk->chunkZ);
   m_jobQueue.pushMesh(chunk->slotIndex, chunk->chunkX, chunk->chunkZ);
@@ -243,25 +177,6 @@ auto World::drainPendingUploadSlots() -> std::vector<int32_t> {
   return std::move(m_pendingUploadSlots);
 }
 
-void World::onSaveLoadSuccess(int32_t chunkX, int32_t chunkZ,
-                              const uint8_t* voxels, const uint8_t* light, const uint8_t* redstone,
-                              size_t dataSize) {
-  auto* chunk = m_chunks.getMut(chunkX, chunkZ);
-  if (!chunk) return;
-  if (chunk->state != ChunkState::LoadingFromDisk) return;
-  auto slot = m_pool.view(chunk->slotIndex);
-  *slot.chunkX = chunkX;
-  *slot.chunkZ = chunkZ;
-  std::memcpy(slot.voxels, voxels, dataSize);
-  std::memcpy(slot.light, light, dataSize);
-  std::memcpy(slot.redstone, redstone, dataSize);
-  *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
-  chunk->state = ChunkState::VoxelsReady;
-  chunk->needsRemesh = false;
-  m_jobQueue.pushMesh(chunk->slotIndex, chunk->chunkX, chunk->chunkZ);
-  requestNeighborRemeshes(*chunk);
-}
-
 void World::onSaveLoadFailed(int32_t chunkX, int32_t chunkZ) {
   auto* chunk = m_chunks.getMut(chunkX, chunkZ);
   if (!chunk) return;
@@ -283,8 +198,6 @@ void World::ensureVisibleRadius(int32_t centerCX, int32_t centerCZ) {
   std::vector<ChunkOffset> visibleOffsets;
   visibleOffsets.reserve(static_cast<size_t>((r * 2 + 1) * (r * 2 + 1)));
 
-  // Discover visible chunks in a center-out order so world streaming feels
-  // natural and the terrain around the player appears before the outer ring.
   for (int32_t dz = -r; dz <= r; ++dz) {
     for (int32_t dx = -r; dx <= r; ++dx) {
       if (dx * dx + dz * dz > r2) continue;
@@ -319,7 +232,6 @@ void World::ensureVisibleRadius(int32_t centerCX, int32_t centerCZ) {
     *slot->chunkZ = cz;
     m_chunks.set(chunk);
 
-    // Store slot coordinates — map-backed chunks can rehash, so pointers are not stable.
     auto* inserted = m_chunks.getMut(cx, cz);
     if (inserted) {
       m_slotToChunk[chunk.slotIndex] = {cx, cz};
@@ -392,7 +304,7 @@ void World::requestRemesh(Chunk& chunk) {
   }
   if (chunk.state == ChunkState::Generating ||
       chunk.state == ChunkState::QueuedGen ||
-      chunk.state == ChunkState::VoxelsReady) {
+      chunk.state == ChunkState::DensityReady) {
     return;
   }
   chunk.state = ChunkState::QueuedMesh;
@@ -403,8 +315,8 @@ void World::markChunkDirty(int32_t cx, int32_t cz) {
   if (m_persistence) m_persistence->markDirty(cx, cz);
 }
 
-auto World::chunkHasVoxelData(const Chunk& chunk) const -> bool {
-  return chunk.state == ChunkState::VoxelsReady ||
+auto World::chunkHasTerrainData(const Chunk& chunk) const -> bool {
+  return chunk.state == ChunkState::DensityReady ||
          chunk.state == ChunkState::QueuedMesh ||
          chunk.state == ChunkState::Meshing ||
          chunk.state == ChunkState::MeshReady ||
@@ -433,8 +345,8 @@ void World::requestBoundaryNeighborRemeshes(const Chunk& chunk, int32_t localX, 
 
 void World::requestNeighborRemesh(const Chunk& chunk, int32_t dx, int32_t dz) {
   auto* neighbor = m_chunks.getMut(chunk.chunkX + dx, chunk.chunkZ + dz);
-  if (!neighbor || !chunkHasVoxelData(*neighbor)) return;
+  if (!neighbor || !chunkHasTerrainData(*neighbor)) return;
   requestRemesh(*neighbor);
 }
 
-} // namespace voxel
+} // namespace terrain

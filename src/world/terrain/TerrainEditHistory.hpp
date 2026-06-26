@@ -5,7 +5,7 @@
 #include <mutex>
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
 /// Represents a single manual terrain edit.
 struct TerrainEdit {
@@ -51,4 +51,4 @@ private:
   mutable std::mutex m_mutex;
 };
 
-} // namespace voxel
+} // namespace terrain

@@ -1,18 +1,14 @@
 #pragma once
 
 #include <cstdint>
-
 #include "TerrainSampling.hpp"
-#include "CaveCarver.hpp"
-#include "OreDistributor.hpp"
 #include "SimplexNoise.hpp"
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+namespace terrain {
 
 /// Full world generation pipeline for a single chunk.
 /// Terrain sampling is delegated to TerrainSampler so the continuous surface
-/// logic can be reused by smooth meshers without changing the legacy voxel
+/// logic can be reused by smooth meshers without changing the legacy terrain
 /// meshing path.
 class WorldGenPipeline {
 public:
@@ -26,11 +22,6 @@ public:
                             uint32_t seed,
                             const WorldGenerationConfig& config = {});
 
-  /// Generate terrain into the given voxel array.
-  void generate(uint8_t* voxels, int32_t chunkX, int32_t chunkZ,
-                int32_t sizeX, int32_t sizeY, int32_t sizeZ,
-                uint32_t chunkSeed = 0);
-
   /// Continuous signed-distance-like sampling for smooth meshers.
   [[nodiscard]] auto sampleDensity(float worldX, float worldY, float worldZ) const -> float;
 
@@ -39,15 +30,9 @@ public:
   [[nodiscard]] auto sampleMaterial(float worldX, float worldY, float worldZ,
                                     const glm::vec3& normal) const -> TerrainMaterial;
 
-  /// Fill a chunk from an acquired slot (used by worker threads).
-  void fillChunk(uint8_t* voxels, int32_t* chunkXPtr, int32_t* chunkZPtr,
-                 uint32_t* genSeed, int32_t sizeX, int32_t sizeY, int32_t sizeZ);
-
 private:
   TerrainSampler m_terrain;
   SimplexNoise m_densityNoise;
-  CaveCarver m_caveCarver;
-  OreDistributor m_oreDist;
 };
 
-} // namespace voxel
+} // namespace terrain

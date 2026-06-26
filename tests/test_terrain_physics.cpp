@@ -13,7 +13,7 @@
 #include <memory>
 #include <vector>
 
-namespace voxel {
+namespace terrain {
 
 // Helper to declare rayTriangleIntersect in test if not in header
 extern bool rayTriangleIntersect(const glm::vec3& origin, const glm::vec3& dir,
@@ -201,15 +201,15 @@ TEST_CASE("EntityCollisions Dual System Integration", "[terrain_physics]") {
   }
 
   SECTION("Collision with placed blocks vs natural blocks in meshed chunk") {
-    // Player standing at (5.5, 9.5, 5.5) which overlaps the natural grass voxel at (5,10,5),
+    // Player standing at (5.5, 9.5, 5.5) which overlaps the natural grass terrain at (5,10,5),
     // but the terrain mesh is at y=10.0. If we only test the mesh, it collides because y=9.5 penetrates y=10.0.
-    // If we test a position above the terrain mesh but overlapping the natural voxel:
-    // e.g. position y=10.1 (so feet are at 10.1, head at 11.9, overlapping voxel y=10).
-    // In this case, the natural voxel should be ignored!
+    // If we test a position above the terrain mesh but overlapping the natural terrain:
+    // e.g. position y=10.1 (so feet are at 10.1, head at 11.9, overlapping terrain y=10).
+    // In this case, the natural terrain should be ignored!
     glm::vec3 posOverlapNatural(5.5f, 10.1f, 5.5f);
     REQUIRE_FALSE(collisions.collidesAt(posOverlapNatural, body));
 
-    // However, if we overlap the placed planks voxel at (5, 12, 5):
+    // However, if we overlap the placed planks terrain at (5, 12, 5):
     // e.g. position y=11.5 (so feet are at 11.5, body overlaps y=12).
     // The placed block at y=12 should collide!
     glm::vec3 posOverlapPlaced(5.5f, 11.5f, 5.5f);
@@ -224,4 +224,4 @@ TEST_CASE("EntityCollisions Dual System Integration", "[terrain_physics]") {
   }
 }
 
-} // namespace voxel
+} // namespace terrain

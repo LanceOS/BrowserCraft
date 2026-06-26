@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 struct TerrainBrush;
 
@@ -23,4 +23,4 @@ public:
   virtual void recordTerrainEdit(const TerrainBrush& brush) = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

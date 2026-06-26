@@ -1,43 +1,33 @@
 #include "PlayerControllerSystem.hpp"
-#include "engine/core/TickContext.hpp"
 #include "engine/ecs/EntityManager.hpp"
-#include "game/BlockInteractionAudio.hpp"
-#include "world/BlockIds.hpp"
-#include "world/BlockRaycast.hpp"
-#include "world/BlockRegistry.hpp"
+#include "game/WorldController.hpp"
+#include "engine/save/SaveManager.hpp"
+#include "world/World.hpp"
+#include "world/terrain/TerrainRaycast.hpp"
+#include "world/terrain/TerrainBrush.hpp"
+#include "world/terrain/TerrainEditAPI.hpp"
+#include "world/generation/WorldGenPipeline.hpp"
 #include <algorithm>
-#include <array>
 #include <cmath>
+#include <utility>
 
 namespace {
 
-constexpr std::array<uint8_t, 9> kDebugHotbarPalette = {
-  voxel::BlockId::GRASS,
-  voxel::BlockId::DIRT,
-  voxel::BlockId::STONE,
-  voxel::BlockId::SAND,
-  voxel::BlockId::OAK_WOOD,
-  voxel::BlockId::OAK_PLANKS,
-  voxel::BlockId::OAK_LEAVES,
-  voxel::BlockId::WATER,
-  voxel::BlockId::LAVA,
-};
-
-void syncHotbarSelection(const voxel::InputState& input, voxel::cmp::Player& player) {
-  if (input.isPressed(voxel::InputState::KEY_1)) player.selectedHotbarSlot = 0;
-  else if (input.isPressed(voxel::InputState::KEY_2)) player.selectedHotbarSlot = 1;
-  else if (input.isPressed(voxel::InputState::KEY_3)) player.selectedHotbarSlot = 2;
-  else if (input.isPressed(voxel::InputState::KEY_4)) player.selectedHotbarSlot = 3;
-  else if (input.isPressed(voxel::InputState::KEY_5)) player.selectedHotbarSlot = 4;
-  else if (input.isPressed(voxel::InputState::KEY_6)) player.selectedHotbarSlot = 5;
-  else if (input.isPressed(voxel::InputState::KEY_7)) player.selectedHotbarSlot = 6;
-  else if (input.isPressed(voxel::InputState::KEY_8)) player.selectedHotbarSlot = 7;
-  else if (input.isPressed(voxel::InputState::KEY_9)) player.selectedHotbarSlot = 8;
+void syncHotbarSelection(const terrain::InputState& input, terrain::cmp::Player& player) {
+  if (input.isPressed(terrain::InputState::KEY_1)) player.selectedHotbarSlot = 0;
+  else if (input.isPressed(terrain::InputState::KEY_2)) player.selectedHotbarSlot = 1;
+  else if (input.isPressed(terrain::InputState::KEY_3)) player.selectedHotbarSlot = 2;
+  else if (input.isPressed(terrain::InputState::KEY_4)) player.selectedHotbarSlot = 3;
+  else if (input.isPressed(terrain::InputState::KEY_5)) player.selectedHotbarSlot = 4;
+  else if (input.isPressed(terrain::InputState::KEY_6)) player.selectedHotbarSlot = 5;
+  else if (input.isPressed(terrain::InputState::KEY_7)) player.selectedHotbarSlot = 6;
+  else if (input.isPressed(terrain::InputState::KEY_8)) player.selectedHotbarSlot = 7;
+  else if (input.isPressed(terrain::InputState::KEY_9)) player.selectedHotbarSlot = 8;
 }
 
 auto highestGroundInFootprint(
-    const voxel::EntityCollisions& collisions,
-    const voxel::cmp::RigidBody& body,
+    const terrain::EntityCollisions& collisions,
+    const terrain::cmp::RigidBody& body,
     const glm::vec3& position,
     int32_t startY) -> int32_t
 {
@@ -60,49 +50,18 @@ auto highestGroundInFootprint(
   return highest;
 }
 
-auto lookDirectionFromPlayer(const voxel::cmp::Player& player) -> glm::vec3 {
+auto lookDirectionFromPlayer(const terrain::cmp::Player& player) -> glm::vec3 {
   const float cosPitch = std::cos(player.pitch);
   return glm::normalize(glm::vec3(
-      cosPitch * std::sin(player.yaw),
+      std::sin(player.yaw) * cosPitch,
       std::sin(player.pitch),
-      -cosPitch * std::cos(player.yaw)));
-}
-
-auto isReplaceableBlock(const voxel::BlockRegistry& blocks, uint8_t blockId) -> bool {
-  if (blockId == 0) return true;
-  const auto* def = blocks.tryGet(blockId);
-  return def && !def->collision.hasVolume();
-}
-
-auto overlapsPlacedBlock(
-    const voxel::cmp::Transform& transform,
-    const voxel::cmp::RigidBody& body,
-    const voxel::BlockDefinition& blockDef,
-    int32_t worldX,
-    int32_t worldY,
-    int32_t worldZ) -> bool
-{
-  if (!blockDef.collision.hasVolume()) return false;
-
-  const glm::vec3 playerMin = transform.position + body.aabbMin;
-  const glm::vec3 playerMax = transform.position + body.aabbMax;
-  const glm::vec3 blockMin(
-      static_cast<float>(worldX) + blockDef.collision.minX,
-      static_cast<float>(worldY) + blockDef.collision.minY,
-      static_cast<float>(worldZ) + blockDef.collision.minZ);
-  const glm::vec3 blockMax(
-      static_cast<float>(worldX) + blockDef.collision.maxX,
-      static_cast<float>(worldY) + blockDef.collision.maxY,
-      static_cast<float>(worldZ) + blockDef.collision.maxZ);
-
-  return playerMin.x < blockMax.x && playerMax.x > blockMin.x &&
-         playerMin.y < blockMax.y && playerMax.y > blockMin.y &&
-         playerMin.z < blockMax.z && playerMax.z > blockMin.z;
+      -std::cos(player.yaw) * cosPitch
+  ));
 }
 
 } // namespace
 
-namespace voxel {
+namespace terrain {
 
 PlayerControllerSystem::PlayerControllerSystem(
     GLFWwindow* window,
@@ -110,9 +69,8 @@ PlayerControllerSystem::PlayerControllerSystem(
     ComponentStore<cmp::Transform>& transforms,
     ComponentStore<cmp::RigidBody>& bodies,
     ComponentStore<cmp::Player>& players,
-    World& world,
-    BlockRegistry& blocks,
-    BlockInteractionAudio* blockAudio,
+    WorldController& worldController,
+    WorldGenPipeline& pipeline,
     CameraView& camera,
     const GameConfig& config,
     UIManager& ui,
@@ -123,14 +81,14 @@ PlayerControllerSystem::PlayerControllerSystem(
   , m_transforms(transforms)
   , m_bodies(bodies)
   , m_players(players)
-  , m_world(world)
-  , m_blocks(blocks)
-  , m_blockAudio(blockAudio)
+  , m_worldController(worldController)
+  , m_world(worldController.world())
+  , m_pipeline(pipeline)
   , m_camera(camera)
   , m_ui(ui)
   , m_session(session)
   , m_cameraDirty(cameraDirty)
-  , m_collisions(world, config)
+  , m_collisions(worldController.world(), config)
 {}
 
 auto PlayerControllerSystem::name() const -> const std::string& {
@@ -143,13 +101,11 @@ auto PlayerControllerSystem::stage() const -> SystemStage {
 }
 
 void PlayerControllerSystem::update(TickContext& ctx) {
-  // Only run controls while actively playing
   if (m_session.state() != GameState::InGame &&
       m_session.state() != GameState::GeneratingWorld) {
     return;
   }
 
-  // Resolve player entity index from the TickContext (always fresh).
   int32_t playerId = ctx.playerEntityId;
   if (playerId < 0) return;
   int32_t idx = EntityManager::indexOf(playerId);
@@ -179,7 +135,6 @@ void PlayerControllerSystem::update(TickContext& ctx) {
     return;
   }
 
-  // Ensure pointer lock is active
   if (glfwGetInputMode(m_window, GLFW_CURSOR) != GLFW_CURSOR_DISABLED) {
     glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
   }
@@ -187,7 +142,6 @@ void PlayerControllerSystem::update(TickContext& ctx) {
 
   applyMouseLook(ctx.dt);
 
-  // Build movement direction from WASD
   glm::vec3 forwardFlat(std::sin(player.yaw), 0.0f, -std::cos(player.yaw));
   forwardFlat = glm::normalize(forwardFlat);
   glm::vec3 rightFlat = glm::normalize(glm::cross(forwardFlat, m_camera.up));
@@ -203,7 +157,6 @@ void PlayerControllerSystem::update(TickContext& ctx) {
   }
 
   if (!m_collisions.hasTerrain()) {
-    // No terrain yet — allow mouse look and horizontal movement but no gravity
     float speed = m_input.isHeld(InputState::KEY_SHIFT) ? player.sprintSpeed
                                                         : player.walkSpeed;
     transform.position += moveDir * speed * ctx.dt;
@@ -213,11 +166,9 @@ void PlayerControllerSystem::update(TickContext& ctx) {
   }
 
   applyMovement(ctx.dt, transform, body, player, moveDir);
-  handleBlockInteraction(transform, body, player);
+  handleTerrainInteraction(transform, body, player);
   syncCameraFromPlayer();
 }
-
-// ---- Private helpers ----
 
 void PlayerControllerSystem::handleInventoryToggle() {
   if (m_input.isPressed(InputState::KEY_E)) {
@@ -258,14 +209,9 @@ void PlayerControllerSystem::applyMovement(
     return;
   }
 
-  // Grounded / falling movement
   float speed = m_input.isHeld(InputState::KEY_SHIFT) ? player.sprintSpeed
                                                       : player.walkSpeed;
 
-  // Check ground contact every tick (60 Hz).  We use a fresh proximity scan
-  // instead of relying on body.onGround, because body.onGround can be
-  // spuriously zeroed by sub-step iteration quirks (step-assist raising,
-  // overshoot, etc.) even when the player is visually on the surface.
   int32_t gY = highestGroundInFootprint(
       m_collisions,
       body,
@@ -276,11 +222,9 @@ void PlayerControllerSystem::applyMovement(
   if (gY >= 0) {
     float feetY = transform.position.y + body.aabbMin.y;
     float surfY = static_cast<float>(gY + 1);
-    grounded = grounded || (feetY - surfY) <= 0.55f; // covers kStepHeight (0.52) so step-assist raising doesn't prevent jump
+    grounded = grounded || (feetY - surfY) <= 0.55f;
   }
 
-  // Jump trigger: tap Space (isPressed) for a single jump, or hold Space
-  // and auto-jump when the player next lands (grounded transition).
   bool spaceHeld = m_input.isHeld(InputState::KEY_SPACE);
   bool justLanded = grounded && !m_prevOnGround;
   if (spaceHeld && (grounded || body.isFluid) &&
@@ -289,32 +233,22 @@ void PlayerControllerSystem::applyMovement(
     body.onGround = 0;
     body.isFluid = 0;
   }
-  // Save grounded state (not body.onGround) for next frame's transition
-  // detection.  body.onGround can be stale after sub-step overrides; our
-  // own proximity check is trustworthy.
   m_prevOnGround = grounded;
 
-  // Apply gravity
   body.velocity.y -= body.gravity * dt;
 
-  // Apply drag to horizontal velocity before clearing it (drag affects
-  // residual velocity from external forces like knockback).
   body.velocity.x *= body.drag;
   body.velocity.z *= body.drag;
 
-  // Clear horizontal velocity — it's set per-frame from input
   body.velocity.x = 0.0f;
   body.velocity.z = 0.0f;
 
-  // Compute total displacement for each axis
   float dx = moveDir.x * speed * dt;
   float dz = moveDir.z * speed * dt;
   float dy = body.velocity.y * dt;
 
-  // Delegate all collision resolution to EntityCollisions
   m_collisions.resolveMovement(dx, dy, dz, transform, body);
 
-  // Fluid check
   body.isFluid = m_collisions.isFluidAt(
       transform.position.x,
       transform.position.y + body.aabbMin.y,
@@ -324,9 +258,9 @@ void PlayerControllerSystem::applyMovement(
   }
 }
 
-void PlayerControllerSystem::handleBlockInteraction(
+void PlayerControllerSystem::handleTerrainInteraction(
     const cmp::Transform& transform,
-    const cmp::RigidBody& body,
+    const cmp::RigidBody& /*body*/,
     const cmp::Player& player)
 {
   if (!m_input.pointerLocked) return;
@@ -337,46 +271,32 @@ void PlayerControllerSystem::handleBlockInteraction(
 
   const glm::vec3 origin = transform.position + glm::vec3(0.0f, player.eyeHeight, 0.0f);
   const glm::vec3 lookDir = lookDirectionFromPlayer(player);
-  const BlockRaycastHit hit = raycastFirstBlock(m_world, origin, lookDir, kReachDistance);
+  const TerrainRaycastHit hit = raycastTerrain(m_world, origin, lookDir, kReachDistance);
   if (!hit.hit) return;
 
+  // Defaults for terrain brush
+  float radius = 3.0f;
+  float strength = 1.2f;
+
+  TerrainBrush brush{};
+  brush.center = hit.position;
+  brush.radius = radius;
+  brush.strength = strength;
+  brush.planeNormal = hit.normal;
+
+  auto* sm = m_worldController.saveManager();
+
   if (m_input.isMousePressed(GLFW_MOUSE_BUTTON_LEFT)) {
-    if (hit.blockId == BlockId::BEDROCK) return;
-    if (m_world.setBlockIdAt(hit.block.x, hit.block.y, hit.block.z, BlockId::AIR) &&
-        m_blockAudio != nullptr) {
-      m_blockAudio->onBlockBroken(
-          static_cast<float>(hit.block.x),
-          static_cast<float>(hit.block.y),
-          static_cast<float>(hit.block.z),
-          hit.blockId);
-    }
-    return;
+    // Left Click: Carve terrain (Subtract Sphere)
+    brush.type = BrushType::SubtractSphere;
+    if (sm) sm->recordTerrainEdit(brush);
+    TerrainEditAPI::applyBrush(m_world, m_pipeline, brush);
+  } else if (m_input.isMousePressed(GLFW_MOUSE_BUTTON_RIGHT)) {
+    // Right Click: Build terrain (Add Sphere)
+    brush.type = BrushType::AddSphere;
+    if (sm) sm->recordTerrainEdit(brush);
+    TerrainEditAPI::applyBrush(m_world, m_pipeline, brush);
   }
-
-  const uint8_t selectedBlockId = selectedHotbarBlockId(player);
-  if (selectedBlockId == 0) return;
-
-  const auto* placeDef = m_blocks.tryGet(selectedBlockId);
-  if (!placeDef) return;
-
-  const uint8_t currentBlockId =
-      m_world.getBlockIdAt(hit.previous.x, hit.previous.y, hit.previous.z);
-  if (!isReplaceableBlock(m_blocks, currentBlockId)) return;
-  if (overlapsPlacedBlock(transform, body, *placeDef,
-                          hit.previous.x, hit.previous.y, hit.previous.z)) {
-    return;
-  }
-
-  m_world.setBlockIdAt(
-      hit.previous.x,
-      hit.previous.y,
-      hit.previous.z,
-      selectedBlockId);
-}
-
-auto PlayerControllerSystem::selectedHotbarBlockId(const cmp::Player& player) const -> uint8_t {
-  if (player.selectedHotbarSlot >= kDebugHotbarPalette.size()) return 0;
-  return kDebugHotbarPalette[player.selectedHotbarSlot];
 }
 
 void PlayerControllerSystem::syncCameraFromPlayer() {
@@ -395,4 +315,4 @@ void PlayerControllerSystem::syncCameraFromPlayer() {
   m_cameraDirty = true;
 }
 
-} // namespace voxel
+} // namespace terrain

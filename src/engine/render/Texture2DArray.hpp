@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cmath>
 
-namespace voxel {
+namespace terrain {
 
 /// OpenGL 2D texture array for block textures.
 /// Supports 16-bit per channel (64-bit per pixel) RGBA textures
@@ -40,4 +40,4 @@ private:
   bool m_highBitDepth = true;
 };
 
-} // namespace voxel
+} // namespace terrain

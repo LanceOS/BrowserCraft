@@ -12,8 +12,8 @@
 
 #include <glm/glm.hpp>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 /// Configuration for world generation noise layering.
 /// Terrain height is computed as:
@@ -55,7 +55,7 @@ using TerrainMaterial = terrain::TerrainMaterial;
 
 /// Continuous terrain state for a single world-space x/z column.
 /// `surfaceHeight` is the unclamped float surface used by the smooth mesher.
-/// `surfaceY` mirrors the legacy voxel column logic.
+/// `surfaceY` mirrors the legacy terrain column logic.
 /// `biome` points at the dominant biome for the column.
 /// `biomeId`, `temperature`, and `humidity` carry the climate context into the
 /// terrain material system.
@@ -251,4 +251,4 @@ inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float wor
   return terrain::resolveTerrainMaterial(ctx);
 }
 
-} // namespace voxel
+} // namespace terrain

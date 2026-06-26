@@ -6,7 +6,7 @@
 #include "world/generation/SimplexNoise.hpp"
 #include <array>
 
-namespace voxel::biome {
+namespace terrain::biome {
 
 /// Samples temperature and humidity noise, then classifies into biomes.
 /// Owns the noise instances but delegates classification logic to the
@@ -41,4 +41,4 @@ private:
   SimplexNoise m_humidNoise;
 };
 
-} // namespace voxel::biome
+} // namespace terrain::biome

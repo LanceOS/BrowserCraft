@@ -3,7 +3,7 @@
 #include "gl_core.hpp"
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
 /// Wrapper around an OpenGL Vertex Array Object.
 class VertexArray {
@@ -23,4 +23,4 @@ private:
   uint32_t m_vao = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

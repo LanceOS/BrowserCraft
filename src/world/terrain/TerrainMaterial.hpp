@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <cmath>
 
-namespace voxel::terrain {
+namespace terrain::terrain {
 
 /// Terrain materials used by the smooth surface renderer.
 ///
@@ -103,4 +103,4 @@ struct TerrainMaterialContext {
   return result;
 }
 
-} // namespace voxel::terrain
+} // namespace terrain::terrain

@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <string>
 
-namespace voxel {
+namespace terrain {
 
 /// Keyboard and mouse input state, updated each frame by GLFW callbacks.
 class InputState {
@@ -68,4 +68,4 @@ private:
   std::array<uint8_t, 3> m_mouseButtons{};
 };
 
-} // namespace voxel
+} // namespace terrain

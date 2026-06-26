@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace voxel {
+namespace terrain {
 
 WorldNamingService::WorldNamingService(std::filesystem::path saveDir)
   : m_saveDir(std::move(saveDir))
@@ -84,4 +84,4 @@ auto WorldNamingService::validateName(std::string_view displayName) -> std::stri
   return {}; // valid
 }
 
-} // namespace voxel
+} // namespace terrain

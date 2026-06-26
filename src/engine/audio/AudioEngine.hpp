@@ -8,7 +8,7 @@
 #include <cmath>
 #include <random>
 
-namespace voxel::audio {
+namespace terrain::audio {
 
 /// A simple PCM audio buffer (mono, float samples).
 struct AudioBuffer {
@@ -97,4 +97,4 @@ private:
   std::vector<ActiveSound> m_activeSounds;
 };
 
-} // namespace voxel::audio
+} // namespace terrain::audio

@@ -2,7 +2,7 @@
 #include "engine/ecs/EntityManager.hpp"
 
 TEST_CASE("EntityManager allocates unique IDs", "[ecs]") {
-  voxel::EntityManager em(100);
+  terrain::EntityManager em(100);
 
   auto a = em.allocate();
   auto b = em.allocate();
@@ -15,7 +15,7 @@ TEST_CASE("EntityManager allocates unique IDs", "[ecs]") {
 }
 
 TEST_CASE("EntityManager isAlive and destroy", "[ecs]") {
-  voxel::EntityManager em(100);
+  terrain::EntityManager em(100);
 
   auto id = em.allocate();
   REQUIRE(em.isAlive(id));
@@ -30,14 +30,14 @@ TEST_CASE("EntityManager isAlive and destroy", "[ecs]") {
 }
 
 TEST_CASE("EntityManager reuses indices with generation bump", "[ecs]") {
-  voxel::EntityManager em(100);
+  terrain::EntityManager em(100);
 
   auto id1 = em.allocate();
-  int32_t idx1 = voxel::EntityManager::indexOf(id1);
+  int32_t idx1 = terrain::EntityManager::indexOf(id1);
   em.destroy(id1);
 
   auto id2 = em.allocate();
-  int32_t idx2 = voxel::EntityManager::indexOf(id2);
+  int32_t idx2 = terrain::EntityManager::indexOf(id2);
 
   // Same index, different generation
   REQUIRE(idx1 == idx2);
@@ -47,7 +47,7 @@ TEST_CASE("EntityManager reuses indices with generation bump", "[ecs]") {
 }
 
 TEST_CASE("EntityManager capacity exhausted", "[ecs]") {
-  voxel::EntityManager em(3);
+  terrain::EntityManager em(3);
 
   auto id1 = em.allocate();
   auto id2 = em.allocate();

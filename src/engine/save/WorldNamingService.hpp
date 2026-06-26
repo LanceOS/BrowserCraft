@@ -4,7 +4,7 @@
 #include <string_view>
 #include <filesystem>
 
-namespace voxel {
+namespace terrain {
 
 /// Centralized world name validation, slug generation, and collision detection.
 class WorldNamingService {
@@ -31,4 +31,4 @@ private:
   std::filesystem::path m_saveDir;
 };
 
-} // namespace voxel
+} // namespace terrain

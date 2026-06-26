@@ -3,7 +3,7 @@
 #include "BiomeData.hpp"
 #include "Biome.hpp"
 
-namespace voxel::biome {
+namespace terrain::biome {
 
 /// Routes biome IDs to concrete Biome instances and provides thin wrappers
 /// over the climate classifier for legacy call sites.
@@ -51,4 +51,4 @@ public:
   [[nodiscard]] static float blendedHeightBias(const ClimateSample& c);
 };
 
-} // namespace voxel::biome
+} // namespace terrain::biome

@@ -1,7 +1,7 @@
 #include "InputState.hpp"
 #include <cstring>
 
-namespace voxel {
+namespace terrain {
 
 InputState::InputState() {
   m_keys.fill(0);
@@ -55,4 +55,4 @@ void InputState::clearAll() {
   m_mouseButtons.fill(0);
 }
 
-} // namespace voxel
+} // namespace terrain

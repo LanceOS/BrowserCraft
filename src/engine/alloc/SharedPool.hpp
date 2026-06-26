@@ -8,7 +8,7 @@
 #include <optional>
 #include <memory>
 
-namespace voxel {
+namespace terrain {
 
 /// A view into one slot of the shared pool buffer.
 /// All pointers point into the shared buffer — no ownership.
@@ -26,8 +26,6 @@ struct ChunkSlot {
   int32_t* chunkZ;
   uint32_t* genSeed;
   int32_t* densityInitialized;
-  uint8_t* voxels;
-  uint8_t* light;
   uint8_t* redstone;
   float* density;
 };
@@ -69,8 +67,6 @@ private:
   ChunkDimensions m_dims;
 
   size_t m_headerBytes = 40;
-  size_t m_voxelsBytes = 0;
-  size_t m_lightBytes = 0;
   size_t m_redstoneBytes = 0;
   size_t m_densityBytes = 0;
   size_t m_vertsBytes = 0;
@@ -84,4 +80,4 @@ private:
   int32_t m_freeHead = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

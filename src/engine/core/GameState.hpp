@@ -1,6 +1,6 @@
 #pragma once
 
-namespace voxel {
+namespace terrain {
 
 /// High-level game state for UI and loop control.
 enum class GameState {
@@ -11,4 +11,4 @@ enum class GameState {
   Paused,
 };
 
-} // namespace voxel
+} // namespace terrain

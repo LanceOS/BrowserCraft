@@ -1,6 +1,6 @@
 #include "WorkerThreadPool.hpp"
 
-namespace voxel {
+namespace terrain {
 
 WorkerThreadPool::WorkerThreadPool(int32_t numThreads) {
   for (int32_t i = 0; i < numThreads; ++i) {
@@ -28,4 +28,4 @@ WorkerThreadPool::~WorkerThreadPool() {
   }
 }
 
-} // namespace voxel
+} // namespace terrain

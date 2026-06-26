@@ -2,7 +2,7 @@
 #include "engine/core/RenderDistanceLimits.hpp"
 #include <algorithm>
 
-namespace voxel {
+namespace terrain {
 
 GameSession::GameSession(int32_t renderDistance)
   : m_renderDistance(clampRenderDistance(renderDistance)) {}
@@ -41,4 +41,4 @@ auto GameSession::clampRenderDistance(int32_t rd) -> int32_t {
   return std::clamp(rd, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
 }
 
-} // namespace voxel
+} // namespace terrain

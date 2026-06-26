@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(voxel-engine VERSION 0.1.0 LANGUAGES C CXX)
+project(terrain-engine VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -129,9 +129,6 @@ add_library(voxel_engine STATIC
   src/engine/ecs/systems/PlayerControllerSystem.cpp
   src/engine/ecs/systems/PlayerSpawnSystem.cpp
   src/engine/assets/AssetManager.cpp
-  src/world/BlockRegistry.cpp
-  src/world/blocks/VanillaBlockFactory.cpp
-  src/world/VoxelStore.cpp
   src/world/ChunkJobQueue.cpp
   src/world/Chunk.cpp
   src/world/ChunkManager.cpp
@@ -163,18 +160,12 @@ add_library(voxel_engine STATIC
   src/engine/save/SettingsRepository.cpp
   src/engine/save/SaveOrchestrator.cpp
   src/world/generation/SimplexNoise.cpp
-  src/world/generation/CaveCarver.cpp
-  src/world/generation/OreDistributor.cpp
   src/world/generation/WorldGenPipeline.cpp
-  src/engine/workers/mesher/GreedyMesher.cpp
   src/engine/workers/mesher/SmoothTerrainMesher.cpp
   src/world/mesh/SurfaceNetsMesher.cpp
   src/content/biomes/BiomeSampler.cpp
   src/content/biomes/BiomeClassifier.cpp
   src/content/biomes/BiomeFactory.cpp
-  src/content/flora/FloraRegistry.cpp
-  src/content/flora/GrassFactory.cpp
-  src/content/flora/DefaultFlora.cpp
   src/game/GameOrchestrator.cpp
   src/game/ChunkWorkerImpl.cpp
   src/game/GameSession.cpp
@@ -221,9 +212,6 @@ add_executable(voxel_tests
   tests/test_component_store.cpp
   tests/test_query.cpp
   tests/test_system_manager.cpp
-  tests/test_block_registry.cpp
-  tests/test_vanilla_block_factory.cpp
-  tests/test_flora.cpp
   tests/test_world.cpp
   tests/test_terrain_physics.cpp
   tests/test_simplex_noise.cpp
@@ -233,7 +221,6 @@ add_executable(voxel_tests
   tests/test_save_services.cpp
   tests/test_thread_pool.cpp
   tests/test_player_controller.cpp
-  tests/test_mesher.cpp
   tests/test_smooth_terrain_mesher.cpp
   tests/test_surface_nets_mesher.cpp
 )

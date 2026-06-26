@@ -13,7 +13,7 @@
 
 using json = nlohmann::json;
 
-namespace voxel {
+namespace terrain {
 
 namespace {
 auto findAssetRoot() -> std::string {
@@ -186,4 +186,4 @@ int AssetManager::getTextureLayerCount() const {
     return m_textureLayerCount;
 }
 
-} // namespace voxel
+} // namespace terrain

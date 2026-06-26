@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace voxel {
+namespace terrain {
 
 /// Lightweight struct defining a chunk's position inside a massive persistently mapped VBO/EBO.
 class ChunkMesh {
@@ -35,4 +35,4 @@ private:
   size_t m_indexCount = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

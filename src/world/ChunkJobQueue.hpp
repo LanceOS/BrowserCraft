@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <unordered_map>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 class ChunkManager;
 class SharedPool;
@@ -61,4 +61,4 @@ private:
   IChunkWorker& m_worker;
 };
 
-} // namespace voxel
+} // namespace terrain

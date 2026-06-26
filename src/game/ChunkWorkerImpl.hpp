@@ -5,10 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+namespace terrain {
 
-class BlockRegistry;
 class ChunkMeshAllocator;
 class SharedPool;
 class WorkerThreadPool;
@@ -20,7 +18,7 @@ public:
   ChunkWorkerImpl(WorkerThreadPool& genPool, WorkerThreadPool& meshPool,
                   SharedPool& pool, WorldGenPipeline& pipeline,
                   const GameConfig& config, WorldController& controller,
-                  BlockRegistry& blocks, ChunkMeshAllocator& meshAllocator);
+                  ChunkMeshAllocator& meshAllocator);
 
   void generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t seed) override;
   void mesh(int32_t slotIndex) override;
@@ -34,8 +32,7 @@ private:
   WorldGenPipeline& m_pipeline;
   const GameConfig& m_config;
   WorldController& m_controller;
-  BlockRegistry& m_blocks;
   ChunkMeshAllocator& m_meshAllocator;
 };
 
-} // namespace voxel
+} // namespace terrain

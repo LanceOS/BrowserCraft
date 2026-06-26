@@ -4,7 +4,7 @@
 #include <vector>
 #include <memory>
 
-namespace voxel {
+namespace terrain {
 
 struct TerrainTriangle {
   glm::vec3 v0;
@@ -51,4 +51,4 @@ private:
   std::vector<TerrainBVHNode> m_nodes;
 };
 
-} // namespace voxel
+} // namespace terrain

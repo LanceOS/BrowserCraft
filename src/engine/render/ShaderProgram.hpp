@@ -6,7 +6,7 @@
 #include <optional>
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
 /// Compiled and linked OpenGL shader program with uniform caching.
 class ShaderProgram {
@@ -31,4 +31,4 @@ private:
   std::unordered_map<std::string, int32_t> m_uniformCache;
 };
 
-} // namespace voxel
+} // namespace terrain

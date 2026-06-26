@@ -1,7 +1,7 @@
 #include "BiomeFactory.hpp"
 #include "BiomeClassifier.hpp"
 
-namespace voxel::biome {
+namespace terrain::biome {
 
 const Biome& BiomeFactory::forId(BiomeId id) {
   switch (id) {
@@ -45,4 +45,4 @@ float BiomeFactory::blendedHeightBias(const ClimateSample& c) {
   return BiomeClassifier::blendedHeightBias(c);
 }
 
-} // namespace voxel::biome
+} // namespace terrain::biome

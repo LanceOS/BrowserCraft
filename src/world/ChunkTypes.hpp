@@ -2,15 +2,15 @@
 
 #include <cstdint>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 /// Shared chunk-slot lifecycle state used by the pool, job queue, world, and
 /// renderer.
 enum class ChunkSlotStatus : int32_t {
   FREE = 0,
   GENERATING = 1,
-  VOXELS_READY = 2,
+  DENSITY_READY = 2,
   MESHING = 3,
   MESH_READY = 4,
   GPU_UPLOADED = 5,
@@ -33,4 +33,4 @@ struct ChunkDimensions {
   int32_t vertexStrideFloats;
 };
 
-} // namespace voxel
+} // namespace terrain

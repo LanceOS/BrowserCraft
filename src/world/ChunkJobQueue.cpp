@@ -3,8 +3,8 @@
 #include "engine/alloc/SharedPool.hpp"
 #include <cstdint>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 void ChunkJobQueue::pushGen(int32_t slotIndex, int32_t chunkX, int32_t chunkZ) {
   m_pendingGen.push_back(PendingChunkJob{slotIndex, chunkX, chunkZ});
@@ -71,4 +71,4 @@ void ChunkJobQueue::clear() {
   m_pendingMesh.clear();
 }
 
-} // namespace voxel
+} // namespace terrain

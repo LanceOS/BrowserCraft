@@ -3,8 +3,8 @@
 #include "engine/ecs/components/Components.hpp"
 
 TEST_CASE("queryEntities finds intersection", "[ecs]") {
-  voxel::ComponentStore<voxel::cmp::Transform> transforms(100);
-  voxel::ComponentStore<voxel::cmp::Health> healths(100);
+  terrain::ComponentStore<terrain::cmp::Transform> transforms(100);
+  terrain::ComponentStore<terrain::cmp::Health> healths(100);
 
   transforms.add(1);
   transforms.add(2);
@@ -14,7 +14,7 @@ TEST_CASE("queryEntities finds intersection", "[ecs]") {
   healths.add(3);
   healths.add(5);
 
-  auto result = voxel::queryEntities(transforms, healths);
+  auto result = terrain::queryEntities(transforms, healths);
 
   // Only entities 2 and 3 have both
   REQUIRE(result.size() == 2);
@@ -29,29 +29,29 @@ TEST_CASE("queryEntities finds intersection", "[ecs]") {
 }
 
 TEST_CASE("queryEntities empty when no overlap", "[ecs]") {
-  voxel::ComponentStore<voxel::cmp::Transform> transforms(100);
-  voxel::ComponentStore<voxel::cmp::Health> healths(100);
+  terrain::ComponentStore<terrain::cmp::Transform> transforms(100);
+  terrain::ComponentStore<terrain::cmp::Health> healths(100);
 
   transforms.add(1);
   healths.add(2);
 
-  auto result = voxel::queryEntities(transforms, healths);
+  auto result = terrain::queryEntities(transforms, healths);
   REQUIRE(result.empty());
 }
 
 TEST_CASE("queryEntities single store returns all", "[ecs]") {
-  voxel::ComponentStore<voxel::cmp::Transform> transforms(100);
+  terrain::ComponentStore<terrain::cmp::Transform> transforms(100);
 
   transforms.add(10);
   transforms.add(20);
 
-  auto result = voxel::queryEntities(transforms);
+  auto result = terrain::queryEntities(transforms);
   REQUIRE(result.size() == 2);
 }
 
 TEST_CASE("queryEntities with TagStore", "[ecs]") {
-  voxel::ComponentStore<voxel::cmp::Transform> transforms(100);
-  voxel::TagStore hostile(100);
+  terrain::ComponentStore<terrain::cmp::Transform> transforms(100);
+  terrain::TagStore hostile(100);
 
   transforms.add(1);
   transforms.add(2);
@@ -60,6 +60,6 @@ TEST_CASE("queryEntities with TagStore", "[ecs]") {
   hostile.add(2);
   hostile.add(3);
 
-  auto result = voxel::queryEntities(transforms, hostile);
+  auto result = terrain::queryEntities(transforms, hostile);
   REQUIRE(result.size() == 2);
 }

@@ -3,7 +3,7 @@
 #include "gl_core.hpp"
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
 /// Wrapper around an OpenGL Uniform Buffer Object.
 class UniformBuffer {
@@ -26,4 +26,4 @@ private:
   size_t m_byteSize;
 };
 
-} // namespace voxel
+} // namespace terrain

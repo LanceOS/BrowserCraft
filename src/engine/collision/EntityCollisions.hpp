@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
 class World;
 namespace cmp {
@@ -19,16 +19,16 @@ class EntityCollisions {
 public:
   EntityCollisions(World& world, const GameConfig& config);
 
-  /// Test whether \a candidatePosition + \a body AABB overlaps any solid block.
+  /// Test whether \a candidatePosition + \a body AABB overlaps any solid terrain triangle.
   [[nodiscard]] auto collidesAt(const glm::vec3& candidatePosition,
                                 const cmp::RigidBody& body) const -> bool;
 
-  /// Scan downward from \a startY at the integer column (\a worldX, \a worldZ)
-  /// and return the Y-coordinate of the highest solid block, or -1 if none.
+  /// Scan downward from \a startY at the column (\a worldX, \a worldZ)
+  /// and return the Y-coordinate of the highest terrain triangle, or -1 if none.
   [[nodiscard]] auto groundHeightAt(float worldX, float worldZ,
                                     int32_t startY) const -> int32_t;
 
-  /// Is the position (in world-block coordinates) a fluid?
+  /// Is the position a fluid? (Always returns false in smooth terrain)
   [[nodiscard]] auto isFluidAt(float worldX, float worldY,
                                float worldZ) const -> bool;
 
@@ -36,7 +36,7 @@ public:
   [[nodiscard]] auto hasTerrain() const -> bool;
 
   /// Push the entity upward by small increments until it stops colliding.
-  void pushOutOfBlocks(glm::vec3& position, const cmp::RigidBody& body) const;
+  void pushOutOfTerrain(glm::vec3& position, const cmp::RigidBody& body) const;
 
   /// Resolve one frame of entity movement with per-axis sub-step collision.
   /// \a dx, \a dy, \a dz are this frame's intended displacements (after
@@ -50,4 +50,4 @@ private:
   const GameConfig& m_config;
 };
 
-} // namespace voxel
+} // namespace terrain

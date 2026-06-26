@@ -1,6 +1,6 @@
 #pragma once
 
-namespace voxel {
+namespace terrain {
 
 /// Player-facing game mode selection shared by save/load, UI, and session state.
 enum class GameMode {
@@ -8,4 +8,4 @@ enum class GameMode {
   Creative,
 };
 
-} // namespace voxel
+} // namespace terrain

@@ -6,33 +6,33 @@
 #include "game/GameSession.hpp"
 
 namespace {
-  class TestSystem final : public voxel::System {
+  class TestSystem final : public terrain::System {
     std::string m_name = "test";
   public:
     auto name() const -> const std::string& override { return m_name; }
-    auto stage() const -> voxel::SystemStage override { return voxel::SystemStage::Physics; }
-    void update(voxel::TickContext& ctx) override {
+    auto stage() const -> terrain::SystemStage override { return terrain::SystemStage::Physics; }
+    void update(terrain::TickContext& ctx) override {
       ctx.playerEntityId += 1;
     }
   };
 
-  class PreSystem final : public voxel::System {
+  class PreSystem final : public terrain::System {
     std::string m_name = "pre";
   public:
     auto name() const -> const std::string& override { return m_name; }
-    auto stage() const -> voxel::SystemStage override { return voxel::SystemStage::PrePhysics; }
-    void update(voxel::TickContext& ctx) override {
+    auto stage() const -> terrain::SystemStage override { return terrain::SystemStage::PrePhysics; }
+    void update(terrain::TickContext& ctx) override {
       ctx.playerEntityId *= 2;
     }
   };
 }
 
 TEST_CASE("SystemManager runs systems in stage order", "[ecs]") {
-  voxel::SystemManager mgr;
-  voxel::InputState input;
+  terrain::SystemManager mgr;
+  terrain::InputState input;
   bool dirty = false;
-  voxel::CameraView camera;
-  voxel::GameSession session(4);
+  terrain::CameraView camera;
+  terrain::GameSession session(4);
 
   // Construct TickContext with valid references. World and UIManager
   // are never accessed by these test systems (only playerEntityId is touched).
@@ -40,11 +40,11 @@ TEST_CASE("SystemManager runs systems in stage order", "[ecs]") {
   // In a real game these would be the actual World and UIManager instances.
   struct Fake { int _; } dummyWorld, dummyUI;
 
-  voxel::TickContext ctx{
+  terrain::TickContext ctx{
     .input = input,
-    .world = reinterpret_cast<voxel::World&>(dummyWorld),
+    .world = reinterpret_cast<terrain::World&>(dummyWorld),
     .camera = camera,
-    .ui = reinterpret_cast<voxel::UIManager&>(dummyUI),
+    .ui = reinterpret_cast<terrain::UIManager&>(dummyUI),
     .session = session,
     .playerEntityId = 42,
     .cameraDirty = dirty,
@@ -61,18 +61,18 @@ TEST_CASE("SystemManager runs systems in stage order", "[ecs]") {
 }
 
 TEST_CASE("SystemManager empty update is safe", "[ecs]") {
-  voxel::SystemManager mgr;
-  voxel::InputState input;
+  terrain::SystemManager mgr;
+  terrain::InputState input;
   bool dirty = false;
-  voxel::CameraView camera;
-  voxel::GameSession session(4);
+  terrain::CameraView camera;
+  terrain::GameSession session(4);
   struct Fake { int _; } dummyWorld, dummyUI;
 
-  voxel::TickContext ctx{
+  terrain::TickContext ctx{
     .input = input,
-    .world = reinterpret_cast<voxel::World&>(dummyWorld),
+    .world = reinterpret_cast<terrain::World&>(dummyWorld),
     .camera = camera,
-    .ui = reinterpret_cast<voxel::UIManager&>(dummyUI),
+    .ui = reinterpret_cast<terrain::UIManager&>(dummyUI),
     .session = session,
     .playerEntityId = 0,
     .cameraDirty = dirty,

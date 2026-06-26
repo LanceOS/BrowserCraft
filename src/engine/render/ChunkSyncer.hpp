@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace voxel {
+namespace terrain {
 
 class IndirectBatcher;
 
@@ -29,4 +29,4 @@ private:
   std::vector<uint8_t> m_liveSlots;
 };
 
-} // namespace voxel
+} // namespace terrain

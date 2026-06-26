@@ -4,7 +4,7 @@
 #include <optional>
 #include <cstddef>
 
-namespace voxel {
+namespace terrain {
 
 /// Fixed-capacity ring buffer (FIFO queue).
 template <typename T>
@@ -45,4 +45,4 @@ private:
   size_t m_capacity;
 };
 
-} // namespace voxel
+} // namespace terrain

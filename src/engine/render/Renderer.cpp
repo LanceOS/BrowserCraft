@@ -46,14 +46,13 @@ auto loadShaderSourceFile(const std::string& relativePath) -> std::string {
 
 } // namespace
 
-namespace voxel {
+namespace terrain {
 
-Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config,
+Renderer::Renderer(GLFWwindow* window, const GameConfig& config,
                    ChunkMeshAllocator& meshAllocator)
   : m_window(window), m_config(config),
     m_terrainShader(loadShaderSourceFile("src/render/shaders/terrain.vert"),
                     loadShaderSourceFile("src/render/shaders/terrain.frag")),
-    m_chunkShader(shaders::chunkVertex, shaders::chunkFragment),
     m_skyShader(shaders::skyVertex, shaders::skyFragment),
     m_cameraUbo(0, CAMERA_BLOCK_FLOATS * sizeof(float)),
     m_timeUbo(2, TIME_BLOCK_FLOATS * sizeof(float)),
@@ -64,14 +63,10 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
         return std::make_unique<IndirectBatcher>(poolCap);
     }()),
     m_chunkSyncer(m_meshAllocator, *m_indirectBatcher, config),
-    m_drawDispatcher(m_terrainShader, m_chunkShader, m_skyShader, m_textures, *m_indirectBatcher, m_masterVao, m_skyVao)
+    m_drawDispatcher(m_terrainShader, m_skyShader, m_textures, *m_indirectBatcher, m_masterVao, m_skyVao)
 {
-  (void)blocks;
-
   m_terrainShader.bindUniformBlock("CameraBlock", 0);
   m_terrainShader.bindUniformBlock("TimeBlock", 2);
-  m_chunkShader.bindUniformBlock("CameraBlock", 0);
-  m_chunkShader.bindUniformBlock("TimeBlock", 2);
   m_skyShader.bindUniformBlock("CameraBlock", 0);
   m_skyShader.bindUniformBlock("TimeBlock", 2);
 
@@ -260,4 +255,4 @@ void Renderer::seedTextureArray() {
   }
 }
 
-} // namespace voxel
+} // namespace terrain

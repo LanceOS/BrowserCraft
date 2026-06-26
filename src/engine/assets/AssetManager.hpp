@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace voxel {
+namespace terrain {
 
 struct BlockDef {
     uint8_t id;
@@ -55,4 +55,4 @@ private:
     int m_textureLayerCount = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

@@ -1,7 +1,7 @@
 #include "SimplexNoise.hpp"
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 SimplexNoise::SimplexNoise(uint32_t seed) {
   // Seed-based permutation table generation
@@ -96,4 +96,4 @@ auto SimplexNoise::noise3D(float x, float y, float z) const -> float {
   return 32.0f * (n0 + n1 + n2 + n3);
 }
 
-} // namespace voxel
+} // namespace terrain

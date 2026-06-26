@@ -6,7 +6,7 @@
 #include <typeindex>
 #include <any>
 
-namespace voxel {
+namespace terrain {
 
 /// Type-erased event bus for game events.
 class EventBus {
@@ -62,4 +62,4 @@ private:
   std::unordered_map<std::type_index, std::vector<ListenerBase*>> m_listeners;
 };
 
-} // namespace voxel
+} // namespace terrain

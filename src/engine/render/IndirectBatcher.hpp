@@ -10,7 +10,7 @@
 #include <cstring>
 #include <atomic>
 
-namespace voxel {
+namespace terrain {
 
 struct ChunkCullData {
     float min[4]; // vec4
@@ -44,9 +44,9 @@ class IndirectBatcher {
 public:
   IndirectBatcher(uint32_t maxChunks) : m_maxChunks(maxChunks) {
       m_chunkDataBuffer = std::make_unique<PersistentBuffer>(maxChunks * sizeof(ChunkCullData), GL_SHADER_STORAGE_BUFFER);
-      // Four command streams are stored back-to-back:
-      // terrain opaque, terrain transparent, block opaque, block transparent.
-      m_indirectBuffer = std::make_unique<PersistentBuffer>(maxChunks * 4u * sizeof(DrawCommand), GL_DRAW_INDIRECT_BUFFER);
+      // Two command streams are stored back-to-back:
+      // terrain opaque, terrain transparent.
+      m_indirectBuffer = std::make_unique<PersistentBuffer>(maxChunks * 2u * sizeof(DrawCommand), GL_DRAW_INDIRECT_BUFFER);
 
       // Zero out.
       std::memset(m_chunkDataBuffer->mappedPtr(), 0, m_chunkDataBuffer->capacity());
@@ -56,8 +56,6 @@ public:
   uint32_t capacity() const { return m_maxChunks; }
   uint32_t terrainOpaqueCommandBase() const { return 0u; }
   uint32_t terrainTransparentCommandBase() const { return m_maxChunks; }
-  uint32_t blockOpaqueCommandBase() const { return m_maxChunks * 2u; }
-  uint32_t blockTransparentCommandBase() const { return m_maxChunks * 3u; }
 
   void updateChunkData(uint32_t slotIndex, const ChunkCullData& data) {
       if (slotIndex >= m_maxChunks) return;
@@ -77,50 +75,33 @@ public:
       uint32_t activeLimit = m_activeSlots.load(std::memory_order_relaxed);
       uint32_t terrainOpaqueCount = 0u;
       uint32_t terrainTransparentCount = 0u;
-      uint32_t blockOpaqueCount = 0u;
-      uint32_t blockTransparentCount = 0u;
       for (uint32_t i = 0; i < activeLimit; ++i) {
         const auto& c = chunks[i];
         if (c.opaqueIndexCount == 0u && c.transparentIndexCount == 0u) continue;
         if (!frustum.intersectsAABB(c.min[0], c.min[1], c.min[2],
                                    c.max[0], c.max[1], c.max[2])) continue;
-        const bool isTerrain = (c.renderFlags & CHUNK_RENDER_FLAG_TERRAIN) != 0u;
-        if (isTerrain) {
-          if (c.opaqueIndexCount > 0u) {
-            const DrawCommand cmd{c.opaqueIndexCount, 1u, c.opaqueFirstIndex, c.baseVertex, c.slotIndex};
-            commands[terrainOpaqueCount++] = cmd;
-          }
-          if (c.transparentIndexCount > 0u) {
-            const DrawCommand cmd{c.transparentIndexCount, 1u, c.transparentFirstIndex, c.baseVertex, c.slotIndex};
-            commands[m_maxChunks + terrainTransparentCount++] = cmd;
-          }
-        } else {
-          if (c.opaqueIndexCount > 0u) {
-            const DrawCommand cmd{c.opaqueIndexCount, 1u, c.opaqueFirstIndex, c.baseVertex, c.slotIndex};
-            commands[m_maxChunks * 2u + blockOpaqueCount++] = cmd;
-          }
-          if (c.transparentIndexCount > 0u) {
-            const DrawCommand cmd{c.transparentIndexCount, 1u, c.transparentFirstIndex, c.baseVertex, c.slotIndex};
-            commands[m_maxChunks * 3u + blockTransparentCount++] = cmd;
-          }
+        
+        if (c.opaqueIndexCount > 0u) {
+          const DrawCommand cmd{c.opaqueIndexCount, 1u, c.opaqueFirstIndex, c.baseVertex, c.slotIndex};
+          commands[terrainOpaqueCount++] = cmd;
+        }
+        if (c.transparentIndexCount > 0u) {
+          const DrawCommand cmd{c.transparentIndexCount, 1u, c.transparentFirstIndex, c.baseVertex, c.slotIndex};
+          commands[m_maxChunks + terrainTransparentCount++] = cmd;
         }
       }
 
       m_terrainOpaqueCount = terrainOpaqueCount;
       m_terrainTransparentCount = terrainTransparentCount;
-      m_blockOpaqueCount = blockOpaqueCount;
-      m_blockTransparentCount = blockTransparentCount;
       gl::MemoryBarrier(GL_COMMAND_BARRIER_BIT);
   }
 
-  auto opaqueCommandCount() const -> uint32_t { return m_terrainOpaqueCount + m_blockOpaqueCount; }
-  auto transparentCommandCount() const -> uint32_t { return m_terrainTransparentCount + m_blockTransparentCount; }
+  auto opaqueCommandCount() const -> uint32_t { return m_terrainOpaqueCount; }
+  auto transparentCommandCount() const -> uint32_t { return m_terrainTransparentCount; }
   auto terrainOpaqueCommandCount() const -> uint32_t { return m_terrainOpaqueCount; }
   auto terrainTransparentCommandCount() const -> uint32_t { return m_terrainTransparentCount; }
-  auto blockOpaqueCommandCount() const -> uint32_t { return m_blockOpaqueCount; }
-  auto blockTransparentCommandCount() const -> uint32_t { return m_blockTransparentCount; }
   auto hasVisibleTransparent() const -> bool {
-      return (m_terrainTransparentCount + m_blockTransparentCount) > 0u;
+      return m_terrainTransparentCount > 0u;
   }
 
   /// Issue an indirect multi-draw for a range of commands.
@@ -140,11 +121,9 @@ private:
   uint32_t m_maxChunks = 0;
   uint32_t m_terrainOpaqueCount = 0u;
   uint32_t m_terrainTransparentCount = 0u;
-  uint32_t m_blockOpaqueCount = 0u;
-  uint32_t m_blockTransparentCount = 0u;
   std::atomic<uint32_t> m_activeSlots{0};
   std::unique_ptr<PersistentBuffer> m_chunkDataBuffer;
   std::unique_ptr<PersistentBuffer> m_indirectBuffer;
 };
 
-} // namespace voxel
+} // namespace terrain

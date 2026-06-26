@@ -1,4 +1,4 @@
-// Precompiled header for the voxel engine.
+// Precompiled header for the terrain engine.
 // Includes stable, rarely-changed, expensive-to-parse headers.
 // This file is force-included by CMake's target_precompile_headers.
 

@@ -5,8 +5,8 @@
 #include <utility>
 #include <vector>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 /// Collects boundary edits during a frame and flushes each unique chunk once.
 class RemeshScheduler {
@@ -35,4 +35,4 @@ private:
   std::vector<std::pair<int32_t, int32_t>> m_boundaryEdits;
 };
 
-} // namespace voxel
+} // namespace terrain

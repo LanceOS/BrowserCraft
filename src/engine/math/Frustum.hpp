@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <array>
 
-namespace voxel {
+namespace terrain {
 
 /// Frustum for view-frustum culling of chunks and entities.
 /// Stores 6 planes (left, right, bottom, top, near, far) as normalized vec4.
@@ -24,4 +24,4 @@ private:
   std::array<glm::vec4, 6> m_planes{};
 };
 
-} // namespace voxel
+} // namespace terrain

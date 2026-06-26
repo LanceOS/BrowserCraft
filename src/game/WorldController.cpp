@@ -2,24 +2,20 @@
 #include <filesystem>
 #include <algorithm>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+namespace terrain {
 
-WorldController::WorldController(SharedPool& pool, BlockRegistry& blocks, const GameConfig& config)
-  : m_pool(pool), m_blocks(blocks), m_config(config)
+WorldController::WorldController(SharedPool& pool, const GameConfig& config)
+  : m_pool(pool), m_config(config)
 {}
 
 void WorldController::createWorld(IChunkWorker& worker, IChunkPersistence* persistence) {
-  m_world = std::make_unique<World>(m_pool, m_blocks, m_config, worker, persistence);
+  m_world = std::make_unique<World>(m_pool, m_config, worker, persistence);
 }
 
 void WorldController::configureSaveWorld(const std::string& saveDir, const std::string& slotId,
                                           bool startFresh, WorkerThreadPool* ioPool) {
   std::string selectedSlot = slotId.empty() ? "default" : slotId;
 
-  if (m_saveManager && !startFresh) {
-    m_saveManager->flushPending();
-  }
   m_saveManager.reset();
 
   if (m_world) {
@@ -77,4 +73,4 @@ void WorldController::processSavePending() {
   }
 }
 
-} // namespace voxel
+} // namespace terrain

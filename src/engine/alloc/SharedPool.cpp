@@ -3,7 +3,7 @@
 #include <cstring>
 #include <memory>
 
-namespace voxel {
+namespace terrain {
 
 namespace {
 
@@ -30,9 +30,7 @@ SharedPool::SharedPool(int32_t capacity, ChunkDimensions dims)
 }
 
 void SharedPool::computeLayout() {
-  m_voxelsBytes = static_cast<size_t>(m_dims.sizeX) * m_dims.sizeY * m_dims.sizeZ;
-  m_lightBytes = m_voxelsBytes;
-  m_redstoneBytes = m_voxelsBytes;
+  m_redstoneBytes = static_cast<size_t>(m_dims.sizeX) * m_dims.sizeY * m_dims.sizeZ;
   // Size of density grid: (sizeX + 2) * (sizeY + 1) * (sizeZ + 2) floats
   size_t densityCount = (static_cast<size_t>(m_dims.sizeX) + 2) *
                         (static_cast<size_t>(m_dims.sizeY) + 1) *
@@ -43,8 +41,7 @@ void SharedPool::computeLayout() {
   m_indicesBytes = 0;
 
   size_t unaligned =
-    m_headerBytes + m_voxelsBytes + m_lightBytes +
-    m_redstoneBytes + m_densityBytes + m_vertsBytes + m_indicesBytes;
+    m_headerBytes + m_redstoneBytes + m_densityBytes + m_vertsBytes + m_indicesBytes;
   m_slotByteSize = (unaligned + 63) & ~size_t{63};
 }
 
@@ -65,8 +62,6 @@ auto SharedPool::acquire() -> std::optional<ChunkSlot> {
   *slot.opaqueIndexCount = 0;
   *slot.transparentIndexCount = 0;
   *slot.densityInitialized = 0;
-  std::memset(slot.voxels, 0, m_voxelsBytes);
-  std::memset(slot.light, 0, m_lightBytes);
   std::memset(slot.redstone, 0, m_redstoneBytes);
   std::memset(slot.density, 0, m_densityBytes);
   return slot;
@@ -122,12 +117,10 @@ auto SharedPool::view(int32_t slotIndex) const -> ChunkSlot {
   slot.chunkZ = reinterpret_cast<int32_t*>(buf + base + kChunkZOffset);
   slot.genSeed = reinterpret_cast<uint32_t*>(buf + base + kGenSeedOffset);
   slot.densityInitialized = reinterpret_cast<int32_t*>(buf + base + kDensityInitializedOffset);
-  slot.voxels = buf + base + m_headerBytes;
-  slot.light = buf + base + m_headerBytes + m_voxelsBytes;
-  slot.redstone = buf + base + m_headerBytes + m_voxelsBytes + m_lightBytes;
-  slot.density = reinterpret_cast<float*>(buf + base + m_headerBytes + m_voxelsBytes + m_lightBytes + m_redstoneBytes);
+  slot.redstone = buf + base + m_headerBytes;
+  slot.density = reinterpret_cast<float*>(buf + base + m_headerBytes + m_redstoneBytes);
   // slot.vertices and slot.indices removed — mesher writes directly to GPU.
   return slot;
 }
 
-} // namespace voxel
+} // namespace terrain

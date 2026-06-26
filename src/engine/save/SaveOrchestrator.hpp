@@ -13,7 +13,7 @@
 #include <random>
 #include <filesystem>
 
-namespace voxel {
+namespace terrain {
 
 /// High-level facade over the save subsystem.
 /// Owns naming, listing, settings, and coordinates world create/load operations
@@ -90,4 +90,4 @@ private:
   std::mt19937 m_seedRng;
 };
 
-} // namespace voxel
+} // namespace terrain

@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <stdexcept>
 
-namespace voxel {
+namespace terrain {
 
 /// A persistently mapped buffer for zero-overhead GPU uploads.
 class PersistentBuffer {
@@ -72,4 +72,4 @@ private:
   uint32_t m_target = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

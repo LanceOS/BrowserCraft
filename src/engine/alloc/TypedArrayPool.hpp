@@ -4,7 +4,7 @@
 #include <memory>
 #include <functional>
 
-namespace voxel {
+namespace terrain {
 
 /// Simple object pool that reuses previously released objects.
 template <typename T>
@@ -36,4 +36,4 @@ private:
   std::function<std::unique_ptr<T>()> m_factory;
 };
 
-} // namespace voxel
+} // namespace terrain

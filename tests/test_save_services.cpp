@@ -17,7 +17,7 @@ TEST_CASE("WorldMetadata round-trip serialization", "[save][metadata]") {
   auto metaPath = tmpDir / "world.meta";
 
   // Create metadata
-  auto meta = voxel::WorldMetadata::create("My World", "my_world", 12345, 0);
+  auto meta = terrain::WorldMetadata::create("My World", "my_world", 12345, 0);
   REQUIRE(meta.displayName() == "My World");
   REQUIRE(meta.displaySlug() == "my_world");
   REQUIRE(meta.seed == 12345);
@@ -28,7 +28,7 @@ TEST_CASE("WorldMetadata round-trip serialization", "[save][metadata]") {
   REQUIRE(meta.write(metaPath));
 
   // Read back
-  auto loaded = voxel::WorldMetadata::read(metaPath);
+  auto loaded = terrain::WorldMetadata::read(metaPath);
   REQUIRE(loaded.has_value());
   REQUIRE(loaded->displayName() == "My World");
   REQUIRE(loaded->displaySlug() == "my_world");
@@ -37,8 +37,8 @@ TEST_CASE("WorldMetadata round-trip serialization", "[save][metadata]") {
   REQUIRE(loaded->lastPlayedTimestamp == meta.lastPlayedTimestamp);
 
   // Verify magic/version
-  REQUIRE(loaded->magic == voxel::WorldMetadata::MAGIC);
-  REQUIRE(loaded->version == voxel::WorldMetadata::CURRENT_VERSION);
+  REQUIRE(loaded->magic == terrain::WorldMetadata::MAGIC);
+  REQUIRE(loaded->version == terrain::WorldMetadata::CURRENT_VERSION);
 
   // Touch timestamp
   loaded->touch();
@@ -54,7 +54,7 @@ TEST_CASE("WorldMetadata invalid file returns nullopt", "[save][metadata]") {
   fs::create_directories(tmpDir);
   auto metaPath = tmpDir / "nonexistent.meta";
 
-  auto result = voxel::WorldMetadata::read(metaPath);
+  auto result = terrain::WorldMetadata::read(metaPath);
   REQUIRE_FALSE(result.has_value());
 
   fs::remove_all(tmpDir);
@@ -62,48 +62,48 @@ TEST_CASE("WorldMetadata invalid file returns nullopt", "[save][metadata]") {
 
 TEST_CASE("WorldNamingService slug generation", "[save][naming]") {
   SECTION("simple name") {
-    REQUIRE(voxel::WorldNamingService::generateSlug("My World") == "my_world");
+    REQUIRE(terrain::WorldNamingService::generateSlug("My World") == "my_world");
   }
   SECTION("spaces and special chars") {
-    REQUIRE(voxel::WorldNamingService::generateSlug("Hello!!! World?") == "hello_world");
+    REQUIRE(terrain::WorldNamingService::generateSlug("Hello!!! World?") == "hello_world");
   }
   SECTION("already safe") {
-    REQUIRE(voxel::WorldNamingService::generateSlug("test_world_1") == "test_world_1");
+    REQUIRE(terrain::WorldNamingService::generateSlug("test_world_1") == "test_world_1");
   }
   SECTION("leading/trailing spaces") {
-    REQUIRE(voxel::WorldNamingService::generateSlug("  spaces  ") == "spaces");
+    REQUIRE(terrain::WorldNamingService::generateSlug("  spaces  ") == "spaces");
   }
   SECTION("only special chars") {
-    REQUIRE(voxel::WorldNamingService::generateSlug("!!! ???") == "world");
+    REQUIRE(terrain::WorldNamingService::generateSlug("!!! ???") == "world");
   }
   SECTION("mixed case") {
-    REQUIRE(voxel::WorldNamingService::generateSlug("MyCoolWorld") == "mycoolworld");
+    REQUIRE(terrain::WorldNamingService::generateSlug("MyCoolWorld") == "mycoolworld");
   }
   SECTION("numbers") {
-    REQUIRE(voxel::WorldNamingService::generateSlug("World 123") == "world_123");
+    REQUIRE(terrain::WorldNamingService::generateSlug("World 123") == "world_123");
   }
 }
 
 TEST_CASE("WorldNamingService name validation", "[save][naming]") {
   SECTION("empty name") {
-    auto err = voxel::WorldNamingService::validateName("");
+    auto err = terrain::WorldNamingService::validateName("");
     REQUIRE_FALSE(err.empty());
   }
   SECTION("too long") {
     std::string longName(61, 'a');
-    auto err = voxel::WorldNamingService::validateName(longName);
+    auto err = terrain::WorldNamingService::validateName(longName);
     REQUIRE_FALSE(err.empty());
   }
   SECTION("no alphanumeric") {
-    auto err = voxel::WorldNamingService::validateName("___");
+    auto err = terrain::WorldNamingService::validateName("___");
     REQUIRE_FALSE(err.empty());
   }
   SECTION("valid name") {
-    auto err = voxel::WorldNamingService::validateName("My World");
+    auto err = terrain::WorldNamingService::validateName("My World");
     REQUIRE(err.empty());
   }
   SECTION("valid short name") {
-    auto err = voxel::WorldNamingService::validateName("a");
+    auto err = terrain::WorldNamingService::validateName("a");
     REQUIRE(err.empty());
   }
 }
@@ -116,10 +116,10 @@ TEST_CASE("WorldNamingService collision detection", "[save][naming]") {
   // Create a fake world directory with metadata
   auto worldDir = tmpDir / "existing_world";
   fs::create_directories(worldDir);
-  auto meta = voxel::WorldMetadata::create("Existing World", "existing_world", 0, 0);
+  auto meta = terrain::WorldMetadata::create("Existing World", "existing_world", 0, 0);
   REQUIRE(meta.write(worldDir / "world.meta"));
 
-  voxel::WorldNamingService naming(tmpDir.string());
+  terrain::WorldNamingService naming(tmpDir.string());
 
   SECTION("detects taken name") {
     REQUIRE(naming.isNameTaken("Existing World"));
@@ -157,7 +157,7 @@ TEST_CASE("WorldListService scans and sorts worlds", "[save][worldlist]") {
                           uint32_t seed, int64_t timestamp) {
     auto dir = tmpDir / slug;
     fs::create_directories(dir);
-    auto meta = voxel::WorldMetadata::create(name, slug, seed, 0);
+    auto meta = terrain::WorldMetadata::create(name, slug, seed, 0);
     meta.lastPlayedTimestamp = timestamp;
     REQUIRE(meta.write(dir / "world.meta"));
   };
@@ -167,7 +167,7 @@ TEST_CASE("WorldListService scans and sorts worlds", "[save][worldlist]") {
   createWorld("Beta", "beta", 200, 3000);
   createWorld("Gamma", "gamma", 300, 2000);
 
-  voxel::WorldListService listService(tmpDir.string());
+  terrain::WorldListService listService(tmpDir.string());
 
   SECTION("finds all worlds") {
     REQUIRE(listService.count() == 3);
@@ -197,7 +197,7 @@ TEST_CASE("WorldListService scans and sorts worlds", "[save][worldlist]") {
     auto emptyDir = fs::temp_directory_path() / "voxel_test_list_empty";
     fs::remove_all(emptyDir);
     fs::create_directories(emptyDir);
-    voxel::WorldListService emptyService(emptyDir.string());
+    terrain::WorldListService emptyService(emptyDir.string());
     REQUIRE(emptyService.empty());
     REQUIRE(emptyService.count() == 0);
     fs::remove_all(emptyDir);
@@ -221,7 +221,7 @@ TEST_CASE("SettingsRepository CRUD operations", "[save][settings]") {
   fs::create_directories(tmpDir);
   auto dbPath = tmpDir / "settings.db";
 
-  voxel::SettingsRepository repo(dbPath.string());
+  terrain::SettingsRepository repo(dbPath.string());
 
   SECTION("default values") {
     REQUIRE(repo.get("nonexistent") == "");
@@ -291,7 +291,7 @@ TEST_CASE("SettingsRepository persists across sessions", "[save][settings][persi
 
   // First session: write data
   {
-    voxel::SettingsRepository repo(dbPath.string());
+    terrain::SettingsRepository repo(dbPath.string());
     repo.set("name", "test_value");
     repo.setInt("render_distance", 8);
     repo.setFloat("volume", 0.75f);
@@ -301,7 +301,7 @@ TEST_CASE("SettingsRepository persists across sessions", "[save][settings][persi
 
   // Second session: verify data persists
   {
-    voxel::SettingsRepository repo(dbPath.string());
+    terrain::SettingsRepository repo(dbPath.string());
     REQUIRE(repo.get("name") == "test_value");
     REQUIRE(repo.getInt("render_distance") == 8);
     REQUIRE(repo.getFloat("volume") == 0.75f);
@@ -317,32 +317,32 @@ TEST_CASE("SaveOrchestrator clamps loaded render distance", "[save][orchestrator
   fs::create_directories(tmpDir);
 
   {
-    voxel::SettingsRepository repo((tmpDir / "settings.db").string());
+    terrain::SettingsRepository repo((tmpDir / "settings.db").string());
     repo.setInt("renderDistance", 40);
     repo.setBool("showFps", false);
   }
 
-  voxel::SaveOrchestrator orch(tmpDir.string());
+  terrain::SaveOrchestrator orch(tmpDir.string());
   auto settings = orch.loadSettings();
-  REQUIRE(settings.renderDistance == voxel::MAX_RENDER_DISTANCE);
+  REQUIRE(settings.renderDistance == terrain::MAX_RENDER_DISTANCE);
   REQUIRE(settings.showFps == false);
 
   fs::remove_all(tmpDir);
 }
 
 TEST_CASE("SaveOrchestrator buildWorldEntries", "[save][orchestrator]") {
-  std::vector<voxel::WorldMetadata> worlds;
+  std::vector<terrain::WorldMetadata> worlds;
 
   // Empty list
-  auto entries = voxel::SaveOrchestrator::buildWorldEntries(worlds);
+  auto entries = terrain::SaveOrchestrator::buildWorldEntries(worlds);
   REQUIRE(entries.empty());
 
   // Single world
-  auto meta1 = voxel::WorldMetadata::create("Alpha", "alpha", 100, 0);
+  auto meta1 = terrain::WorldMetadata::create("Alpha", "alpha", 100, 0);
   meta1.lastPlayedTimestamp = 1000;
   worlds.push_back(meta1);
 
-  entries = voxel::SaveOrchestrator::buildWorldEntries(worlds);
+  entries = terrain::SaveOrchestrator::buildWorldEntries(worlds);
   REQUIRE(entries.size() == 1);
   REQUIRE(entries[0].name == "Alpha");
   REQUIRE(entries[0].slug == "alpha");
@@ -351,11 +351,11 @@ TEST_CASE("SaveOrchestrator buildWorldEntries", "[save][orchestrator]") {
   REQUIRE(entries[0].lastPlayedTimestamp == 1000);
 
   // Multiple worlds
-  auto meta2 = voxel::WorldMetadata::create("Beta", "beta", 200, 1);
+  auto meta2 = terrain::WorldMetadata::create("Beta", "beta", 200, 1);
   meta2.lastPlayedTimestamp = 2000;
   worlds.push_back(meta2);
 
-  entries = voxel::SaveOrchestrator::buildWorldEntries(worlds);
+  entries = terrain::SaveOrchestrator::buildWorldEntries(worlds);
   REQUIRE(entries.size() == 2);
   REQUIRE(entries[0].name == "Alpha");
   REQUIRE(entries[1].name == "Beta");
@@ -367,11 +367,11 @@ TEST_CASE("SaveOrchestrator new world preparation", "[save][orchestrator]") {
   fs::remove_all(tmpDir);
   fs::create_directories(tmpDir);
 
-  voxel::SaveOrchestrator orch(tmpDir.string());
+  terrain::SaveOrchestrator orch(tmpDir.string());
 
   SECTION("creates valid new world") {
     uint32_t seed = 0;
-    auto result = orch.prepareNewWorld("My New World", voxel::GameMode::Survival, seed);
+    auto result = orch.prepareNewWorld("My New World", terrain::GameMode::Survival, seed);
     REQUIRE(result.error.empty());
     REQUIRE_FALSE(result.slug.empty());
     REQUIRE(result.slug == "my_new_world");
@@ -380,43 +380,43 @@ TEST_CASE("SaveOrchestrator new world preparation", "[save][orchestrator]") {
 
   SECTION("rejects empty name") {
     uint32_t seed = 0;
-    auto result = orch.prepareNewWorld("", voxel::GameMode::Survival, seed);
+    auto result = orch.prepareNewWorld("", terrain::GameMode::Survival, seed);
     REQUIRE_FALSE(result.error.empty());
   }
 
   SECTION("rejects duplicate name") {
     // First world: succeeds
     uint32_t seed1 = 0;
-    auto result1 = orch.prepareNewWorld("My World", voxel::GameMode::Creative, seed1);
+    auto result1 = orch.prepareNewWorld("My World", terrain::GameMode::Creative, seed1);
     REQUIRE(result1.error.empty());
     REQUIRE(result1.slug == "my_world");
 
     // Create the world directory so the name is taken
     fs::create_directories(tmpDir / "my_world");
-    auto meta = voxel::WorldMetadata::create("My World", "my_world", seed1, 1);
+    auto meta = terrain::WorldMetadata::create("My World", "my_world", seed1, 1);
     REQUIRE(meta.write(tmpDir / "my_world" / "world.meta"));
     orch.refreshWorldList();
 
     // Second attempt with same name: fails
     uint32_t seed2 = 0;
-    auto result2 = orch.prepareNewWorld("My World", voxel::GameMode::Survival, seed2);
+    auto result2 = orch.prepareNewWorld("My World", terrain::GameMode::Survival, seed2);
     REQUIRE_FALSE(result2.error.empty());
   }
 
   SECTION("generates unique slugs for duplicate slugs") {
     uint32_t seed = 0;
-    auto result1 = orch.prepareNewWorld("My World", voxel::GameMode::Survival, seed);
+    auto result1 = orch.prepareNewWorld("My World", terrain::GameMode::Survival, seed);
     REQUIRE(result1.slug == "my_world");
 
     // Create the directory to make slug taken
     fs::create_directories(tmpDir / "my_world");
-    auto meta1 = voxel::WorldMetadata::create("My World", "my_world", seed, 0);
+    auto meta1 = terrain::WorldMetadata::create("My World", "my_world", seed, 0);
     REQUIRE(meta1.write(tmpDir / "my_world" / "world.meta"));
     orch.refreshWorldList();
 
     // Second world with different name that maps to same slug
     uint32_t seed2 = 0;
-    auto result2 = orch.prepareNewWorld("my_world", voxel::GameMode::Survival, seed2);
+    auto result2 = orch.prepareNewWorld("my_world", terrain::GameMode::Survival, seed2);
     REQUIRE(result2.error.empty());
     // Should get a numbered suffix
     REQUIRE(result2.slug.find("my_world") == 0);
@@ -433,10 +433,10 @@ TEST_CASE("SaveOrchestrator load world preparation", "[save][orchestrator]") {
 
   // Create a world directory with metadata
   fs::create_directories(tmpDir / "existing_world");
-  auto meta = voxel::WorldMetadata::create("Existing World", "existing_world", 42, 0);
+  auto meta = terrain::WorldMetadata::create("Existing World", "existing_world", 42, 0);
   REQUIRE(meta.write(tmpDir / "existing_world" / "world.meta"));
 
-  voxel::SaveOrchestrator orch(tmpDir.string());
+  terrain::SaveOrchestrator orch(tmpDir.string());
   orch.refreshWorldList();
 
   SECTION("load by slug") {

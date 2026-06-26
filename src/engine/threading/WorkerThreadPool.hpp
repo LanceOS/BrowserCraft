@@ -9,7 +9,7 @@
 #include <atomic>
 #include <future>
 
-namespace voxel {
+namespace terrain {
 
 /// Simple thread pool for running world-gen and mesh jobs in parallel.
 class WorkerThreadPool {
@@ -61,4 +61,4 @@ private:
   std::atomic<bool> m_stop{false};
 };
 
-} // namespace voxel
+} // namespace terrain

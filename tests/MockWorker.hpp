@@ -4,7 +4,7 @@
 #include "world/IChunkPersistence.hpp"
 #include <functional>
 
-namespace voxel {
+namespace terrain {
 
 /// Minimal IChunkWorker for unit tests — captures gen/mesh lambdas.
 class TestChunkWorker final : public IChunkWorker {
@@ -24,9 +24,7 @@ public:
   }
 
   void setGpuTargets(float*, size_t, uint32_t*, size_t) override {
-    // No-op: test mock writes to SharedPool slot vertex/index buffers,
-    // but those have been removed. Tests that call mesh() directly
-    // must provide their own output handling via the MeshFn lambda.
+    // No-op
   }
 
 private:
@@ -42,4 +40,4 @@ public:
   void recordTerrainEdit(const TerrainBrush&) override {}
 };
 
-} // namespace voxel
+} // namespace terrain

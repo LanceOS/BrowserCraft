@@ -1,6 +1,6 @@
 #include "BiomeClassifier.hpp"
 
-namespace voxel::biome {
+namespace terrain::biome {
 
 namespace {
 
@@ -90,4 +90,4 @@ float BiomeClassifier::blendedHeightBias(const ClimateSample& c) {
   return evaluateClimate(c).blendedHeightBias;
 }
 
-} // namespace voxel::biome
+} // namespace terrain::biome

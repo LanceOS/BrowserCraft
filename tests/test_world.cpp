@@ -1,6 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
 #include "world/World.hpp"
-#include "world/BlockRegistry.hpp"
 #include "world/ChunkCoords.hpp"
 #include "engine/core/Config.hpp"
 #include "engine/alloc/SharedPool.hpp"
@@ -10,8 +9,8 @@
 
 namespace {
 
-auto makeTestConfig() -> voxel::GameConfig {
-  voxel::GameConfig cfg{};
+auto makeTestConfig() -> terrain::GameConfig {
+  terrain::GameConfig cfg{};
   cfg.chunkSize = 16;
   cfg.worldHeight = 256;
   cfg.renderDistance = 2; // small for testing
@@ -22,7 +21,7 @@ auto makeTestConfig() -> voxel::GameConfig {
   return cfg;
 }
 
-auto makeDims(const voxel::GameConfig& cfg) -> voxel::ChunkDimensions {
+auto makeDims(const terrain::GameConfig& cfg) -> terrain::ChunkDimensions {
   return {
     cfg.chunkSize,
     cfg.worldHeight,
@@ -37,33 +36,20 @@ auto makeDims(const voxel::GameConfig& cfg) -> voxel::ChunkDimensions {
 
 TEST_CASE("World basic chunk lifecycle", "[world]") {
   auto cfg = makeTestConfig();
-  auto pool = voxel::SharedPool::create(16, makeDims(cfg));
-  voxel::BlockRegistry blocks(256);
-  blocks.register_(voxel::BlockDefinition{.id = 1, .name = "stone"});
+  auto pool = terrain::SharedPool::create(16, makeDims(cfg));
 
   int genCount = 0;
   int meshCount = 0;
 
-  // Capture pool by raw pointer so the mock worker can fill in voxel data
-  // to satisfy the chunk validation in World::onWorldGenDone().
-  voxel::SharedPool* poolPtr = pool.get();
-  voxel::TestChunkWorker worker(
-    [&, poolPtr](int32_t slotIndex, int32_t, int32_t, uint32_t) {
+  terrain::SharedPool* poolPtr = pool.get();
+  terrain::TestChunkWorker worker(
+    [&](int32_t, int32_t, int32_t, uint32_t) {
       ++genCount;
-      // Write bedrock at y=0 and some stone so the chunk passes validation.
-      auto slot = poolPtr->view(slotIndex);
-      constexpr int32_t sx = 16, sz = 16;
-      for (int32_t z = 0; z < sz; ++z) {
-        for (int32_t x = 0; x < sx; ++x) {
-          slot.voxels[(0 * sz + z) * sx + x] = 7; // bedrock
-          slot.voxels[(1 * sz + z) * sx + x] = 1; // some stone
-        }
-      }
     },
     [&](int32_t) { ++meshCount; }
   );
   // Null persistence — chunks go through generation path
-  voxel::World world(*pool, blocks, cfg, worker, nullptr);
+  terrain::World world(*pool, cfg, worker, nullptr);
 
   // Initially centered at origin — not ready
   REQUIRE_FALSE(world.isReady());
@@ -73,8 +59,6 @@ TEST_CASE("World basic chunk lifecycle", "[world]") {
   REQUIRE(genCount > 0);
 
   // Signal gen complete — should queue mesh.
-  // Use a valid slot index: the pool allocates LIFO, so the last acquired slot
-  // is the lowest index. Find the center chunk (0,0) and use its slot.
   int meshBefore = meshCount;
   const auto* centerChunk = world.getChunk(0, 0);
   REQUIRE(centerChunk != nullptr);
@@ -86,29 +70,19 @@ TEST_CASE("World basic chunk lifecycle", "[world]") {
 
 TEST_CASE("World restarts failed chunk meshes from scratch with a retry cap", "[world]") {
   auto cfg = makeTestConfig();
-  auto pool = voxel::SharedPool::create(16, makeDims(cfg));
-  voxel::BlockRegistry blocks(256);
-  blocks.register_(voxel::BlockDefinition{.id = 1, .name = "stone"});
+  auto pool = terrain::SharedPool::create(16, makeDims(cfg));
 
   int genCount = 0;
   int meshCount = 0;
-  voxel::SharedPool* poolPtr = pool.get();
-  voxel::TestChunkWorker worker(
-    [&, poolPtr](int32_t slotIndex, int32_t, int32_t, uint32_t) {
+  terrain::SharedPool* poolPtr = pool.get();
+  terrain::TestChunkWorker worker(
+    [&](int32_t, int32_t, int32_t, uint32_t) {
       ++genCount;
-      auto slot = poolPtr->view(slotIndex);
-      constexpr int32_t sx = 16, sz = 16;
-      for (int32_t z = 0; z < sz; ++z) {
-        for (int32_t x = 0; x < sx; ++x) {
-          slot.voxels[(0 * sz + z) * sx + x] = 7;
-          slot.voxels[(1 * sz + z) * sx + x] = 1;
-        }
-      }
     },
     [&](int32_t) { ++meshCount; }
   );
 
-  voxel::World world(*pool, blocks, cfg, worker, nullptr);
+  terrain::World world(*pool, cfg, worker, nullptr);
   world.update(glm::vec3(0.0f, 64.0f, 0.0f));
   const int genAfterInitialLoad = genCount;
 
@@ -122,7 +96,7 @@ TEST_CASE("World restarts failed chunk meshes from scratch with a retry cap", "[
   REQUIRE(meshAfterFirstDispatch > 0);
 
   world.onMeshDone(centerSlot, 0, 0, false);
-  REQUIRE(world.getChunk(0, 0)->state == voxel::ChunkState::QueuedGen);
+  REQUIRE(world.getChunk(0, 0)->state == terrain::ChunkState::QueuedGen);
   REQUIRE(world.getChunk(0, 0)->meshRestartRetries == 1);
 
   world.update(glm::vec3(0.0f, 64.0f, 0.0f));
@@ -134,7 +108,7 @@ TEST_CASE("World restarts failed chunk meshes from scratch with a retry cap", "[
   REQUIRE(meshAfterSecondDispatch > meshAfterFirstDispatch);
 
   world.onMeshDone(centerSlot, 0, 0, false);
-  REQUIRE(world.getChunk(0, 0)->state == voxel::ChunkState::QueuedGen);
+  REQUIRE(world.getChunk(0, 0)->state == terrain::ChunkState::QueuedGen);
   REQUIRE(world.getChunk(0, 0)->meshRestartRetries == 2);
 
   const int genAfterSecondRestart = genCount;
@@ -147,8 +121,8 @@ TEST_CASE("World restarts failed chunk meshes from scratch with a retry cap", "[
   REQUIRE(meshAfterThirdDispatch > meshAfterSecondDispatch);
 
   world.onMeshDone(centerSlot, 0, 0, false);
-  REQUIRE(world.getChunk(0, 0)->state == voxel::ChunkState::MeshFailed);
-  REQUIRE(world.getChunk(0, 0)->meshRestartRetries == voxel::MAX_CHUNK_MESH_RESTART_RETRIES);
+  REQUIRE(world.getChunk(0, 0)->state == terrain::ChunkState::MeshFailed);
+  REQUIRE(world.getChunk(0, 0)->meshRestartRetries == terrain::MAX_CHUNK_MESH_RESTART_RETRIES);
 
   const int genAfterFailureCap = genCount;
   const int meshAfterFailureCap = meshCount;
@@ -157,30 +131,18 @@ TEST_CASE("World restarts failed chunk meshes from scratch with a retry cap", "[
   REQUIRE(meshCount == meshAfterFailureCap);
 }
 
-TEST_CASE("World getBlockIdAt returns 0 for unloaded chunks", "[world]") {
-  auto cfg = makeTestConfig();
-  auto pool = voxel::SharedPool::create(16, makeDims(cfg));
-  voxel::BlockRegistry blocks(256);
-
-  voxel::TestChunkWorker worker;
-  voxel::World world(*pool, blocks, cfg, worker, nullptr);
-
-  REQUIRE(world.getBlockIdAt(100, 64, 100) == 0);
-}
-
 TEST_CASE("World queues chunk generation from center outward", "[world]") {
   auto cfg = makeTestConfig();
   cfg.renderDistance = 2;
 
-  auto pool = voxel::SharedPool::create(32, makeDims(cfg));
-  voxel::BlockRegistry blocks(256);
+  auto pool = terrain::SharedPool::create(32, makeDims(cfg));
 
   std::vector<std::pair<int32_t, int32_t>> generatedChunks;
-  voxel::TestChunkWorker worker(
+  terrain::TestChunkWorker worker(
       [&](int32_t, int32_t chunkX, int32_t chunkZ, uint32_t) {
         generatedChunks.emplace_back(chunkX, chunkZ);
       });
-  voxel::World world(*pool, blocks, cfg, worker, nullptr);
+  terrain::World world(*pool, cfg, worker, nullptr);
 
   world.update(glm::vec3(0.0f, 64.0f, 0.0f));
 
@@ -195,79 +157,28 @@ TEST_CASE("World queues chunk generation from center outward", "[world]") {
   }
 }
 
-TEST_CASE("World resolves large integer coordinates without float precision loss", "[world]") {
+TEST_CASE("World redstone data get and set", "[world]") {
   auto cfg = makeTestConfig();
-  auto pool = voxel::SharedPool::create(16, makeDims(cfg));
-  voxel::BlockRegistry blocks(256);
-  blocks.register_(voxel::BlockDefinition{.id = 1, .name = "stone"});
+  auto pool = terrain::SharedPool::create(16, makeDims(cfg));
 
-  voxel::TestChunkWorker worker;
-  voxel::World world(*pool, blocks, cfg, worker, nullptr);
-
-  constexpr int32_t worldX = 16777231; // 2^24 + 15, still in chunk 1048576
-  const int32_t chunkBaseX = worldX - 15;
-  world.update(glm::vec3(static_cast<float>(chunkBaseX), 64.0f, 0.0f));
-
-  REQUIRE(world.getChunk(voxel::floorToChunk(worldX, cfg.chunkSize), 0) != nullptr);
-  REQUIRE(world.setBlockIdAt(worldX, 10, 0, 1));
-  REQUIRE(world.getBlockIdAt(worldX, 10, 0) == 1);
-}
-
-TEST_CASE("World clears redstone data whenever a block changes", "[world]") {
-  auto cfg = makeTestConfig();
-  auto pool = voxel::SharedPool::create(16, makeDims(cfg));
-  voxel::BlockRegistry blocks(256);
-  blocks.register_(voxel::BlockDefinition{.id = 1, .name = "stone"});
-  blocks.register_(voxel::BlockDefinition{.id = 2, .name = "dirt"});
-
-  voxel::TestChunkWorker worker;
-  voxel::World world(*pool, blocks, cfg, worker, nullptr);
+  terrain::TestChunkWorker worker;
+  terrain::World world(*pool, cfg, worker, nullptr);
 
   world.update(glm::vec3(0.0f, 64.0f, 0.0f));
 
-  REQUIRE(world.setBlockIdAt(1, 10, 1, 1));
+  // Center chunk is loaded
   REQUIRE(world.setRedstonePackedAt(1, 10, 1, 42));
   REQUIRE(world.getRedstonePackedAt(1, 10, 1) == 42);
 
-  REQUIRE(world.setBlockIdAt(1, 10, 1, 2));
+  REQUIRE(world.setRedstonePackedAt(1, 10, 1, 0));
   REQUIRE(world.getRedstonePackedAt(1, 10, 1) == 0);
 }
 
-TEST_CASE("World isSolid and isFluid", "[world]") {
-  auto cfg = makeTestConfig();
-  auto pool = voxel::SharedPool::create(16, makeDims(cfg));
-  voxel::BlockRegistry blocks(256);
-
-  // Register a solid block (id=1) and a liquid (id=2)
-  voxel::BlockDefinition stone{.id = 1, .name = "stone"};
-  stone.material.opaque = true;
-  stone.material.liquid = false;
-  blocks.register_(std::move(stone));
-
-  voxel::BlockDefinition water{.id = 2, .name = "water"};
-  water.material.opaque = false;
-  water.material.transparent = true;
-  water.material.liquid = true;
-  water.collision = voxel::EMPTY_BLOCK_AABB;
-  blocks.register_(std::move(water));
-
-  voxel::TestChunkWorker worker;
-  voxel::World world(*pool, blocks, cfg, worker, nullptr);
-
-  // Unloaded chunks — both return false
-  REQUIRE_FALSE(world.isSolid(0, 64, 0));
-  REQUIRE_FALSE(world.isFluid(0, 64, 0));
-
-  // Below world — returns false
-  REQUIRE_FALSE(world.isSolid(0, -1, 0));
-  REQUIRE_FALSE(world.isSolid(0, 256, 0));
-}
-
 TEST_CASE("ChunkManager basic operations", "[world]") {
-  voxel::ChunkManager cm;
+  terrain::ChunkManager cm;
   REQUIRE_FALSE(cm.has(0, 0));
 
-  voxel::Chunk c{0, 0, 0};
+  terrain::Chunk c{0, 0, 0};
   cm.set(c);
   REQUIRE(cm.has(0, 0));
   REQUIRE(cm.get(0, 0) != nullptr);
@@ -278,10 +189,10 @@ TEST_CASE("ChunkManager basic operations", "[world]") {
 }
 
 TEST_CASE("ChunkState transitions", "[world]") {
-  voxel::Chunk c{0, 0, 0};
-  REQUIRE(c.state == voxel::ChunkState::QueuedGen);
+  terrain::Chunk c{0, 0, 0};
+  REQUIRE(c.state == terrain::ChunkState::QueuedGen);
 
   auto key = c.key();
-  REQUIRE(key == voxel::chunkKey(0, 0));
-  REQUIRE(voxel::Chunk::makeKey(5, -3) == voxel::chunkKey(5, -3));
+  REQUIRE(key == terrain::chunkKey(0, 0));
+  REQUIRE(terrain::Chunk::makeKey(5, -3) == terrain::chunkKey(5, -3));
 }

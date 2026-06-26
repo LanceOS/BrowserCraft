@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
 /// Runtime configuration for the game engine.
 struct GameConfig {
@@ -19,4 +19,4 @@ struct GameConfig {
   int32_t textureArrayLayers = 64;
 };
 
-} // namespace voxel
+} // namespace terrain

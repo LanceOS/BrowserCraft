@@ -2,7 +2,7 @@
 #include "engine/alloc/RingBuffer.hpp"
 
 TEST_CASE("RingBuffer push and shift", "[alloc]") {
-  voxel::RingBuffer<int> buf(3);
+  terrain::RingBuffer<int> buf(3);
 
   REQUIRE(buf.empty());
   REQUIRE(buf.size() == 0);
@@ -25,7 +25,7 @@ TEST_CASE("RingBuffer push and shift", "[alloc]") {
 }
 
 TEST_CASE("RingBuffer wraps around", "[alloc]") {
-  voxel::RingBuffer<int> buf(3);
+  terrain::RingBuffer<int> buf(3);
   buf.push(1);
   buf.push(2);
   buf.shift(); // remove 1

@@ -3,7 +3,7 @@
 #include <functional>
 #include <chrono>
 
-namespace voxel {
+namespace terrain {
 
 /// Fixed-timestep game loop with variable rendering.
 /// Calls update(fixedDt) at a fixed rate, then render(alpha, timeSeconds) each frame.
@@ -32,4 +32,4 @@ private:
   RenderFn m_render;
 };
 
-} // namespace voxel
+} // namespace terrain
