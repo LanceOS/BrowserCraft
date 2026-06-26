@@ -55,7 +55,8 @@ out vec2 v_uv;
 out vec3 v_normal;
 out float v_texLayer;
 out vec3 v_worldPos;
-out float v_skyExposure;
+out float v_skyLight;
+out float v_blockLight;
 out float v_ao;
 
 void main() {
@@ -71,7 +72,8 @@ void main() {
   v_texLayer = a_texLayer;
   v_worldPos = worldPos;
   uint packedLight = uint(a_lightData + 0.5);
-  v_skyExposure = float(packedLight & 0x0Fu) / 15.0;
+  v_skyLight = float(packedLight & 0x0Fu) / 15.0;
+  v_blockLight = float((packedLight >> 4u) & 0x0Fu) / 15.0;
   v_ao = float((packedLight >> 16u) & 0x03u) / 3.0;
 }
 )glsl";
@@ -107,7 +109,8 @@ in vec2 v_uv;
 in vec3 v_normal;
 in float v_texLayer;
 in vec3 v_worldPos;
-in float v_skyExposure;
+in float v_skyLight;
+in float v_blockLight;
 in float v_ao;
 
 out vec4 fragColor;
@@ -127,33 +130,25 @@ void main() {
 
   vec3 normal = normalize(v_normal);
   vec3 sunDir = normalize(u_sunDir);
+  float skyLight = v_skyLight * mix(0.18, 1.0, u_daylight);
+  float blockLight = v_blockLight;
+  float upward = clamp(normal.y * 0.5 + 0.5, 0.0, 1.0);
+  float lightPresence = max(v_skyLight, v_blockLight);
 
-  // ---- Hemisphere ambient ----
-  // Surfaces facing up receive more ambient light than those facing down.
-  float NdotU = max(dot(normal, vec3(0.0, 1.0, 0.0)), 0.0);
-  float ambient = u_ambientIntensity * (0.3 + 0.7 * NdotU);
+  // Use the baked light field as the primary signal so adjacent faces blend
+  // smoothly, then layer a softer directional sun over exposed surfaces.
+  float ambient = mix(0.04, u_ambientIntensity * mix(0.16, 0.36, upward), lightPresence);
+  float indirect = max(skyLight, blockLight);
+  float overlap = 0.20 * skyLight + 0.30 * blockLight;
+  float sunMask = smoothstep(0.05, 0.85, v_skyLight);
+  float sunDiffuse = max(dot(normal, sunDir), 0.0) * u_sunIntensity * sunMask * 0.35;
+  float aoFactor = 1.0 - v_ao * 0.25;
 
-  // ---- Directional sunlight ----
-  float NdotL = max(dot(normal, sunDir), 0.0);
-  float diffuse = NdotL * u_sunIntensity;
+  vec3 lighting = vec3(ambient + indirect * 0.50 + overlap * 0.20) * aoFactor
+                + u_sunColor * (sunDiffuse * aoFactor);
+  lighting = max(lighting, vec3(0.03));
 
-  // ---- Sky exposure ----
-  // Baked per-vertex value: 1.0 = fully open to sky, 0.0 = underground.
-  // Provides a soft ambient boost for exposed surfaces.
-  float skyAmbient = u_ambientIntensity * v_skyExposure * 0.35;
-
-  // ---- Combine lighting ----
-  // Three independent components, each multiplied by AO:
-  //   1. Hemisphere ambient (untinted)
-  //   2. Directional sunlight (tinted by sun color for warm sunrise/sunset)
-  //   3. Sky exposure (untinted, baked per-vertex openness to sky)
-  float aoFactor = 1.0 - v_ao * 0.4;
-
-  vec3 litColor = vec3(ambient * aoFactor)
-                + u_sunColor * (diffuse * aoFactor)
-                + vec3(skyAmbient * aoFactor);
-
-  vec3 finalLighting = albedo.rgb * litColor;
+  vec3 finalLighting = albedo.rgb * lighting;
 
   // ---- Per-fragment fog ----
   float fogDist = u_fogColor.a;
@@ -247,7 +242,8 @@ void main() {
   // Sun corona (very wide faint glow)
   float sunCorona = pow(sunDot, 20.0) * u_sunIntensity * 0.15;
 
-  vec3 sunRenderColor = u_sunColor * (sunDisc + sunGlow) + sunCorona * vec3(1.0, 0.7, 0.3);
+  // @see notes/daynight-sun-tint.md
+  vec3 sunRenderColor = u_sunColor * (sunDisc + sunGlow) + sunCorona * vec3(1.0, 0.88, 0.68);
 
   // ---- Star field (visible at night) ----
   float starIntensity = 1.0 - u_daylight;

@@ -54,20 +54,25 @@ static inline auto isSolidExcluding(const uint8_t* voxels,
 }
 
 static inline auto skyNibble(uint8_t packed) -> int32_t { return (packed >> 4) & 0x0F; }
+static inline auto blockNibble(uint8_t packed) -> int32_t { return packed & 0x0F; }
 
+// @see notes/chunk-border-light-seams.md
 static inline auto getPackedLight(const uint8_t* light,
                                   int32_t x, int32_t y, int32_t z,
                                   const MesherConfig& cfg) -> uint8_t {
-  if (x < 0 || x >= cfg.sizeX) return 0;
-  if (y < 0 || y >= cfg.sizeY) return 0;
-  if (z < 0 || z >= cfg.sizeZ) return 0;
+  // Clamp instead of returning 0 so border vertices do not blend in
+  // artificial darkness when a chunk has no neighbor data available.
+  x = std::clamp(x, 0, cfg.sizeX - 1);
+  y = std::clamp(y, 0, cfg.sizeY - 1);
+  z = std::clamp(z, 0, cfg.sizeZ - 1);
   return light[voxelIndex(x, y, z, cfg)];
 }
 
-/// Pack sky light and AO into a float.
+/// Pack sky light, block light, and AO into a float.
 /// The shader does `uint(a_lightData + 0.5)` to recover the integer.
-static inline auto packLight(int32_t sky, int32_t ao) -> float {
+static inline auto packLight(int32_t sky, int32_t block, int32_t ao) -> float {
   uint32_t p = ( static_cast<uint32_t>(sky) & 0x0Fu)
+             | ((static_cast<uint32_t>(block) & 0x0Fu) << 4)
              | ((static_cast<uint32_t>(ao)  & 0x03u) << 16);
   return static_cast<float>(p);
 }
@@ -161,22 +166,42 @@ static inline int32_t aoBack(const uint8_t* voxels,
 // Corner light — average of four surrounding blocks
 // ======================================================================
 
-struct AvgLight { int32_t sky; };
+struct AvgLight {
+  int32_t sky = 0;
+  int32_t block = 0;
+};
 
 static inline auto cornerLight(const uint8_t* light,
-                               int32_t cx, int32_t cy, int32_t cz,
+                               int32_t axis, int32_t sign,
+                               int32_t uAxis, int32_t vAxis,
+                               const int32_t corner[3],
                                const MesherConfig& cfg) -> AvgLight {
-  int32_t sTot = 0, cnt = 0;
-  int32_t ox[4] = {-1, 0, -1, 0};
-  int32_t oz[4] = {-1, -1, 0, 0};
-  for (int32_t i = 0; i < 4; ++i) {
-    uint8_t p = getPackedLight(light, cx + ox[i], cy, cz + oz[i], cfg);
-    sTot += skyNibble(p);
-    ++cnt;
+  const int32_t airAxisCoord = corner[axis] + (sign < 0 ? -1 : 0);
+
+  int32_t skyTotal = 0;
+  int32_t blockTotal = 0;
+  int32_t count = 0;
+
+  for (int32_t du = -1; du <= 0; ++du) {
+    for (int32_t dv = -1; dv <= 0; ++dv) {
+      int32_t sample[3] = {corner[0], corner[1], corner[2]};
+      sample[axis] = airAxisCoord;
+      sample[uAxis] += du;
+      sample[vAxis] += dv;
+
+      const uint8_t packed = getPackedLight(light, sample[0], sample[1], sample[2], cfg);
+      skyTotal += skyNibble(packed);
+      blockTotal += blockNibble(packed);
+      ++count;
+    }
   }
-  AvgLight r;
-  r.sky   = (cnt > 0) ? ((sTot + cnt/2) / cnt) : 0;
-  return r;
+
+  AvgLight result;
+  if (count > 0) {
+    result.sky = (skyTotal + count / 2) / count;
+    result.block = (blockTotal + count / 2) / count;
+  }
+  return result;
 }
 
 // ======================================================================
@@ -385,14 +410,8 @@ bool greedyMesh(
           int32_t bx, by, bz;
           { int32_t co[3] = {sl,0,0}; co[uAxis]=u; co[vAxis]=v; bx=co[0]; by=co[1]; bz=co[2]; }
 
-          // Light sample y-level
-          int32_t lY;
-          if (di == 2)      lY = static_cast<int32_t>(fc) - 1; // below top face
-          else if (di == 3) lY = static_cast<int32_t>(fc);     // at bottom face
-          else              lY = c[0][1];
-
           // AO & light per corner
-          int32_t ao[4], sky[4];
+          int32_t ao[4], sky[4], block[4];
           for (int32_t ci = 0; ci < 4; ++ci) {
             int32_t cx = c[ci][0], cy = c[ci][1], cz = c[ci][2];
             switch (di) {
@@ -403,13 +422,14 @@ bool greedyMesh(
               case 4: ao[ci]=aoFront(voxels,cx,cy,(int32_t)fc,bx,by,bz,cfg,blocks); break;
               case 5: ao[ci]=aoBack( voxels,cx,cy,(int32_t)fc,bx,by,bz,cfg,blocks); break;
             }
-            AvgLight al = cornerLight(light, cx, lY, cz, cfg);
+            AvgLight al = cornerLight(light, axis, sign, uAxis, vAxis, c[ci], cfg);
             sky[ci] = al.sky;
+            block[ci] = al.block;
           }
 
           float ld[4];
           for (int32_t ci = 0; ci < 4; ++ci)
-            ld[ci] = packLight(sky[ci], ao[ci]);
+            ld[ci] = packLight(sky[ci], block[ci], ao[ci]);
 
           bool flip = (ao[0] + ao[2]) > (ao[1] + ao[3]);
 

@@ -2,6 +2,7 @@
 #include "shaders/ShaderSources.hpp"
 #include "world/daynight/DayNightCycle.hpp"
 #include "engine/assets/AssetManager.hpp"
+#include <array>
 #include <cmath>
 #include <algorithm>
 #include <cstring>
@@ -110,30 +111,41 @@ void Renderer::render(World& world, const CameraView& camera,
     glm::vec3 sunCol = daynight::computeSunColor(timeSeconds);
     float sunIntensity = dayFac; // sun contribution scales with daylight
 
-    // std140 layout (48 bytes = 12 floats):
+    // std140 layout (80 bytes = 20 floats):
     //   0: u_timeElapsed
     //   4: u_daylight
     //   8: u_sunIntensity
     //  12: u_ambientIntensity
-    //  16: u_sunDir (vec3, aligned to 16-byte boundary)
-    //  28: u_timeOfDay
-    //  32: u_sunColor (vec3, aligned to 16-byte boundary)
-    //  44: u_pad
-    float timeData[12] = {
-      timeSeconds,           // u_timeElapsed
-      dayFac,                // u_daylight (0=night, 1=day)
-      sunIntensity,          // u_sunIntensity
-      ambientIntensity,      // u_ambientIntensity
-      sunDir.x,              // u_sunDir.x
-      sunDir.y,              // u_sunDir.y
-      sunDir.z,              // u_sunDir.z
-      normalizedTimeOfDay,   // u_timeOfDay (0-1)
-      sunCol.r,              // u_sunColor.r
-      sunCol.g,              // u_sunColor.g
-      sunCol.b,              // u_sunColor.b
-      0.0f                   // u_pad
-    };
-    m_timeUbo.upload(timeData, sizeof(timeData));
+    //  16: u_sunDir.x
+    //  20: u_sunDir.y
+    //  24: u_sunDir.z
+    //  28: padding
+    //  32: u_timeOfDay
+    //  36: padding
+    //  40: padding
+    //  44: padding
+    //  48: u_sunColor.r
+    //  52: u_sunColor.g
+    //  56: u_sunColor.b
+    //  60: padding
+    //  64: u_pad
+    //  68: padding
+    //  72: padding
+    //  76: padding
+    std::array<float, TIME_BLOCK_FLOATS> timeData{};
+    timeData[0] = timeSeconds;          // u_timeElapsed
+    timeData[1] = dayFac;               // u_daylight (0=night, 1=day)
+    timeData[2] = sunIntensity;         // u_sunIntensity
+    timeData[3] = ambientIntensity;     // u_ambientIntensity
+    timeData[4] = sunDir.x;             // u_sunDir.x
+    timeData[5] = sunDir.y;             // u_sunDir.y
+    timeData[6] = sunDir.z;             // u_sunDir.z
+    timeData[8] = normalizedTimeOfDay;   // u_timeOfDay (0-1)
+    timeData[12] = sunCol.r;            // u_sunColor.r
+    timeData[13] = sunCol.g;            // u_sunColor.g
+    timeData[14] = sunCol.b;            // u_sunColor.b
+    timeData[16] = 0.0f;                // u_pad
+    m_timeUbo.upload(timeData.data(), sizeof(timeData));
   }
 
   m_drawDispatcher.renderSky();
