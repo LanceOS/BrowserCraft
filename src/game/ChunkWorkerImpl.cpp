@@ -6,7 +6,6 @@
 #include "engine/workers/mesher/LightPropagator.hpp"
 #include "engine/workers/mesher/LightSampling.hpp"
 #include "game/WorldController.hpp"
-#include "world/BlockIds.hpp"
 #include "world/BlockRegistry.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
 #include "world/mesh/SurfaceNetsMesher.hpp"
@@ -62,65 +61,12 @@ auto gatherNeighborVoxels(const SharedPool& pool, int32_t slotIndex,
   return neighbors;
 }
 
-struct TerrainTexturePalette {
-  uint16_t grassTop = 0;
-  uint16_t grassBottom = 0;
-  uint16_t grassSide = 0;
-  uint16_t dirt = 0;
-  uint16_t stone = 0;
-  uint16_t sand = 0;
-};
-
-auto loadTerrainPalette(const BlockRegistry& blocks) -> TerrainTexturePalette {
-  TerrainTexturePalette palette{};
-
-  if (const auto* grass = blocks.tryGet(BlockId::GRASS)) {
-    palette.grassTop = grass->textures.top;
-    palette.grassBottom = grass->textures.bottom;
-    palette.grassSide = grass->textures.side;
-  }
-  if (const auto* dirt = blocks.tryGet(BlockId::DIRT)) {
-    palette.dirt = dirt->textures.top;
-  }
-  if (const auto* stone = blocks.tryGet(BlockId::STONE)) {
-    palette.stone = stone->textures.top;
-  }
-  if (const auto* sand = blocks.tryGet(BlockId::SAND)) {
-    palette.sand = sand->textures.top;
-  }
-
-  return palette;
-}
-
-auto pickTerrainLayer(MaterialId material, float nx, float ny, float nz,
-                      const TerrainTexturePalette& palette) -> uint16_t {
-  const float ax = std::fabs(nx);
-  const float ay = std::fabs(ny);
-  const float az = std::fabs(nz);
-
-  switch (material) {
-    case MaterialId::Grass:
-      if (ay >= ax && ay >= az) {
-        return ny >= 0.0f ? palette.grassTop : palette.grassBottom;
-      }
-      return palette.grassSide;
-    case MaterialId::Dirt:
-      return palette.dirt != 0u ? palette.dirt : palette.stone;
-    case MaterialId::Sand:
-      return palette.sand != 0u ? palette.sand : palette.dirt;
-    case MaterialId::Stone:
-    default:
-      return palette.stone != 0u ? palette.stone : palette.dirt;
-  }
-}
-
 auto surfaceDensitySample(void* userData, float worldX, float worldY, float worldZ) -> float {
   auto* pipeline = static_cast<WorldGenPipeline*>(userData);
   return pipeline->sampleDensity(worldX, worldY, worldZ);
 }
 
 void annotateSurfaceNetsVertices(const WorldGenPipeline& pipeline,
-                                 const TerrainTexturePalette& palette,
                                  const mesh::SurfaceNetsConfig& cfg,
                                  float* vertexOut,
                                  uint32_t vertexCount) {
@@ -131,10 +77,12 @@ void annotateSurfaceNetsVertices(const WorldGenPipeline& pipeline,
     const float worldX = cfg.originX + v[0];
     const float worldY = cfg.originY + v[1];
     const float worldZ = cfg.originZ + v[2];
-    const MaterialId material = pipeline.sampleMaterial(worldX, worldY, worldZ);
-    const uint16_t texLayer = pickTerrainLayer(material, v[3], v[4], v[5], palette);
-    v[8] = static_cast<float>(texLayer);
-    v[9] = mesher::packLight(15, 0, 0);
+    const glm::vec3 normal(v[3], v[4], v[5]);
+    const TerrainMaterial material = pipeline.sampleMaterial(worldX, worldY, worldZ, normal);
+    v[6] = static_cast<float>(material.primary);
+    v[7] = static_cast<float>(material.secondary);
+    v[8] = material.blend;
+    v[9] = material.tint;
   }
 }
 
@@ -224,10 +172,11 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
         g_meshScratch.indices.data(),
         vc, ic);
     if (ok) {
-      annotateSurfaceNetsVertices(m_pipeline, loadTerrainPalette(m_blocks), scfg,
+      annotateSurfaceNetsVertices(m_pipeline, scfg,
                                   g_meshScratch.vertices.data(), vc);
       opaqueIc = ic;
       transparentIc = 0u;
+      *slot.renderFlags |= CHUNK_RENDER_FLAG_TERRAIN;
     } else {
       usedGreedyFallback = true;
       ok = buildGreedyMesh();
@@ -244,6 +193,7 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
 
     if (vc == 0u || ic == 0u) {
       m_meshAllocator.releaseSlot(slotIndex);
+      *slot.renderFlags = 0u;
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
       m_controller.onMeshCompleted(slotIndex, true);
       return;
@@ -256,6 +206,7 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     if (!allocation || !allocation->valid()) {
       if (!usedGreedyFallback) {
         usedGreedyFallback = true;
+        *slot.renderFlags &= ~CHUNK_RENDER_FLAG_TERRAIN;
         ok = buildGreedyMesh();
         if (ok) {
           allocation = m_meshAllocator.allocateForSlot(
@@ -289,6 +240,9 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     *slot.opaqueIndexCount = opaqueIc;
     *slot.transparentIndexCount = transparentIc;
     *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+    if (ok && (*slot.renderFlags & CHUNK_RENDER_FLAG_TERRAIN) != 0u) {
+      *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
+    }
     if (transparentIc > 0u) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
     if (opaqueIc > 0u) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
     m_controller.onMeshCompleted(slotIndex, true);

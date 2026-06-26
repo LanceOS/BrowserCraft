@@ -35,7 +35,9 @@ public:
   [[nodiscard]] auto sampleDensity(float worldX, float worldY, float worldZ) const -> float;
 
   /// Terrain material sampling for smooth meshers.
-  [[nodiscard]] auto sampleMaterial(float worldX, float worldY, float worldZ) const -> MaterialId;
+  [[nodiscard]] auto sampleMaterial(float worldX, float worldY, float worldZ) const -> TerrainMaterial;
+  [[nodiscard]] auto sampleMaterial(float worldX, float worldY, float worldZ,
+                                    const glm::vec3& normal) const -> TerrainMaterial;
 
   /// Fill a chunk from an acquired slot (used by worker threads).
   void fillChunk(uint8_t* voxels, int32_t* chunkXPtr, int32_t* chunkZPtr,

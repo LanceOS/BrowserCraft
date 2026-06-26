@@ -1,7 +1,6 @@
 #include "SmoothTerrainMesher.hpp"
 
 #include "LightSampling.hpp"
-#include "world/BlockIds.hpp"
 #include "world/BlockRegistry.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
 
@@ -27,15 +26,6 @@ struct SmoothTerrainScratch {
 
 thread_local SmoothTerrainScratch g_smoothScratch;
 
-struct TerrainTexturePalette {
-  uint16_t grassTop = 0;
-  uint16_t grassBottom = 0;
-  uint16_t grassSide = 0;
-  uint16_t dirt = 0;
-  uint16_t stone = 0;
-  uint16_t sand = 0;
-};
-
 struct CornerVertex {
   glm::vec3 pos{};
   float density = 0.0f;
@@ -50,8 +40,8 @@ struct Triangle {
 static inline void writeVtx(float* data, uint32_t offset,
                             float x, float y, float z,
                             float nx, float ny, float nz,
-                            float u, float v,
-                            float texLayer, float lightData) {
+                            float primaryMaterial, float secondaryMaterial,
+                            float blend, float tint) {
   float* p = data + offset;
   p[0] = x;
   p[1] = y;
@@ -59,10 +49,10 @@ static inline void writeVtx(float* data, uint32_t offset,
   p[3] = nx;
   p[4] = ny;
   p[5] = nz;
-  p[6] = u;
-  p[7] = v;
-  p[8] = texLayer;
-  p[9] = lightData;
+  p[6] = primaryMaterial;
+  p[7] = secondaryMaterial;
+  p[8] = blend;
+  p[9] = tint;
 }
 
 constexpr std::array<std::array<int32_t, 3>, 8> kCornerOffsets{{
@@ -89,60 +79,6 @@ auto densityIndex(int32_t x, int32_t y, int32_t z, const MesherConfig& cfg) -> s
   const size_t sx = static_cast<size_t>(cfg.sizeX + 1);
   const size_t sz = static_cast<size_t>(cfg.sizeZ + 1);
   return (static_cast<size_t>(y) * sz + static_cast<size_t>(z)) * sx + static_cast<size_t>(x);
-}
-
-auto loadTerrainPalette(const BlockRegistry& blocks) -> TerrainTexturePalette {
-  TerrainTexturePalette palette{};
-
-  if (const auto* grass = blocks.tryGet(BlockId::GRASS)) {
-    palette.grassTop = grass->textures.top;
-    palette.grassBottom = grass->textures.bottom;
-    palette.grassSide = grass->textures.side;
-  }
-  if (const auto* dirt = blocks.tryGet(BlockId::DIRT)) {
-    palette.dirt = dirt->textures.top;
-  }
-  if (const auto* stone = blocks.tryGet(BlockId::STONE)) {
-    palette.stone = stone->textures.top;
-  }
-  if (const auto* sand = blocks.tryGet(BlockId::SAND)) {
-    palette.sand = sand->textures.top;
-  }
-
-  return palette;
-}
-
-auto pickTerrainLayer(MaterialId material, const glm::vec3& normal,
-                      const TerrainTexturePalette& palette) -> uint16_t {
-  const glm::vec3 an = glm::abs(normal);
-
-  switch (material) {
-    case MaterialId::Grass:
-      if (an.y >= an.x && an.y >= an.z) {
-        return normal.y >= 0.0f ? palette.grassTop : palette.grassBottom;
-      }
-      return palette.grassSide;
-    case MaterialId::Dirt:
-      return palette.dirt != 0u ? palette.dirt : palette.stone;
-    case MaterialId::Sand:
-      return palette.sand != 0u ? palette.sand : palette.dirt;
-    case MaterialId::Stone:
-    default:
-      return palette.stone != 0u ? palette.stone : palette.dirt;
-  }
-}
-
-auto projectedUv(const glm::vec3& worldPos, const glm::vec3& normal) -> glm::vec2 {
-  const glm::vec3 an = glm::abs(normal);
-  constexpr float kUvScale = 0.25f;
-
-  if (an.y >= an.x && an.y >= an.z) {
-    return {worldPos.x * kUvScale, worldPos.z * kUvScale};
-  }
-  if (an.x >= an.z) {
-    return {worldPos.z * kUvScale, worldPos.y * kUvScale};
-  }
-  return {worldPos.x * kUvScale, worldPos.y * kUvScale};
 }
 
 auto safeNormalize(const glm::vec3& v) -> glm::vec3 {
@@ -185,7 +121,6 @@ auto orientTriangle(Triangle tri, const glm::vec3& desiredNormal) -> Triangle {
 auto emitTriangle(const Triangle& tri,
                   const glm::vec3& chunkOrigin,
                   const WorldGenPipeline& pipeline,
-                  const TerrainTexturePalette& palette,
                   const MesherConfig& cfg,
                   float* vertexOut,
                   uint32_t* indexOut,
@@ -199,10 +134,6 @@ auto emitTriangle(const Triangle& tri,
   const glm::vec3 worldP0 = tri.p0 + chunkOrigin;
   const glm::vec3 worldP1 = tri.p1 + chunkOrigin;
   const glm::vec3 worldP2 = tri.p2 + chunkOrigin;
-  const glm::vec3 centroid = (worldP0 + worldP1 + worldP2) * (1.0f / 3.0f);
-
-  const MaterialId material = pipeline.sampleMaterial(centroid.x, centroid.y, centroid.z);
-  const float density = pipeline.sampleDensity(centroid.x, centroid.y, centroid.z);
 
   glm::vec3 normal = glm::cross(tri.p1 - tri.p0, tri.p2 - tri.p0);
   normal = safeNormalize(normal);
@@ -210,36 +141,26 @@ auto emitTriangle(const Triangle& tri,
     return true;
   }
 
-  const uint16_t texLayer = pickTerrainLayer(material, normal, palette);
-
-  // Keep underground caves darker without needing a separate light field.
-  const float depthBelowSurface = std::max(0.0f, -density);
-  const int32_t skyLight = std::clamp(
-      static_cast<int32_t>(std::round(15.0f - depthBelowSurface * 0.40f)),
-      3,
-      15);
-  const float packedLight = packLight(skyLight, 0, 0);
-
-  const glm::vec2 uv0 = projectedUv(worldP0, normal);
-  const glm::vec2 uv1 = projectedUv(worldP1, normal);
-  const glm::vec2 uv2 = projectedUv(worldP2, normal);
+  const TerrainMaterial mat0 = pipeline.sampleMaterial(worldP0.x, worldP0.y, worldP0.z, normal);
+  const TerrainMaterial mat1 = pipeline.sampleMaterial(worldP1.x, worldP1.y, worldP1.z, normal);
+  const TerrainMaterial mat2 = pipeline.sampleMaterial(worldP2.x, worldP2.y, worldP2.z, normal);
 
   const uint32_t baseVertex = vertexCountOut;
   writeVtx(vertexOut, baseVertex * cfg.strideFloats,
            tri.p0.x, tri.p0.y, tri.p0.z,
            normal.x, normal.y, normal.z,
-           uv0.x, uv0.y,
-           static_cast<float>(texLayer), packedLight);
+           static_cast<float>(mat0.primary), static_cast<float>(mat0.secondary),
+           mat0.blend, mat0.tint);
   writeVtx(vertexOut, (baseVertex + 1u) * cfg.strideFloats,
            tri.p1.x, tri.p1.y, tri.p1.z,
            normal.x, normal.y, normal.z,
-           uv1.x, uv1.y,
-           static_cast<float>(texLayer), packedLight);
+           static_cast<float>(mat1.primary), static_cast<float>(mat1.secondary),
+           mat1.blend, mat1.tint);
   writeVtx(vertexOut, (baseVertex + 2u) * cfg.strideFloats,
            tri.p2.x, tri.p2.y, tri.p2.z,
            normal.x, normal.y, normal.z,
-           uv2.x, uv2.y,
-           static_cast<float>(texLayer), packedLight);
+           static_cast<float>(mat2.primary), static_cast<float>(mat2.secondary),
+           mat2.blend, mat2.tint);
 
   indexOut[indexCountOut++] = baseVertex;
   indexOut[indexCountOut++] = baseVertex + 1u;
@@ -252,7 +173,6 @@ auto emitTetra(const std::array<CornerVertex, 4>& corners,
                const glm::vec3& chunkOrigin,
                const glm::vec3& desiredNormal,
                const WorldGenPipeline& pipeline,
-               const TerrainTexturePalette& palette,
                const MesherConfig& cfg,
                float* vertexOut,
                uint32_t* indexOut,
@@ -272,7 +192,7 @@ auto emitTetra(const std::array<CornerVertex, 4>& corners,
   auto makeTriangle = [&](const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) -> bool {
     Triangle tri{a, b, c};
     tri = orientTriangle(tri, desiredNormal);
-    return emitTriangle(tri, chunkOrigin, pipeline, palette, cfg,
+    return emitTriangle(tri, chunkOrigin, pipeline, cfg,
                         vertexOut, indexOut, vertexCountOut, indexCountOut);
   };
 
@@ -397,7 +317,7 @@ bool smoothTerrainMesh(const WorldGenPipeline& pipeline,
     }
   }
 
-  const TerrainTexturePalette palette = loadTerrainPalette(blocks);
+  (void)blocks;
 
   for (int32_t y = 0; y < cfg.sizeY; ++y) {
     for (int32_t z = 0; z < cfg.sizeZ; ++z) {
@@ -430,7 +350,7 @@ bool smoothTerrainMesh(const WorldGenPipeline& pipeline,
               cellCorners[static_cast<size_t>(tet[3])],
           };
 
-          if (!emitTetra(corners, chunkOrigin, grad, pipeline, palette, cfg,
+          if (!emitTetra(corners, chunkOrigin, grad, pipeline, cfg,
                          vertexOut, indexOut, vertexCountOut, indexCountOut)) {
             if (opaqueIndexCountOut) *opaqueIndexCountOut = indexCountOut;
             if (transparentIndexCountOut) *transparentIndexCountOut = 0u;

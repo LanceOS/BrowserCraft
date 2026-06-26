@@ -15,7 +15,7 @@ class IndirectBatcher;
 /// Owns sky rendering, indirect command building, and opaque/transparent draw passes.
 class DrawDispatcher {
 public:
-  DrawDispatcher(ShaderProgram& chunkShader, ShaderProgram& skyShader,
+  DrawDispatcher(ShaderProgram& terrainShader, ShaderProgram& chunkShader, ShaderProgram& skyShader,
                  Texture2DArray& textures, IndirectBatcher& indirectBatcher,
                  uint32_t& masterVao, uint32_t& skyVao);
 
@@ -27,6 +27,7 @@ public:
   void renderChunks(const Frustum& frustum);
 
 private:
+  ShaderProgram& m_terrainShader;
   ShaderProgram& m_chunkShader;
   ShaderProgram& m_skyShader;
   Texture2DArray& m_textures;

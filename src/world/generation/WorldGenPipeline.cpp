@@ -92,8 +92,13 @@ auto WorldGenPipeline::sampleDensity(float worldX, float worldY, float worldZ) c
   return m_terrain.sampleDensity(worldX, worldY, worldZ);
 }
 
-auto WorldGenPipeline::sampleMaterial(float worldX, float worldY, float worldZ) const -> MaterialId {
+auto WorldGenPipeline::sampleMaterial(float worldX, float worldY, float worldZ) const -> TerrainMaterial {
   return m_terrain.sampleMaterial(worldX, worldY, worldZ);
+}
+
+auto WorldGenPipeline::sampleMaterial(float worldX, float worldY, float worldZ,
+                                      const glm::vec3& normal) const -> TerrainMaterial {
+  return m_terrain.sampleMaterial(worldX, worldY, worldZ, normal);
 }
 
 void WorldGenPipeline::fillChunk(uint8_t* voxels, int32_t* chunkXPtr, int32_t* chunkZPtr,

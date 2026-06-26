@@ -51,6 +51,7 @@ void ChunkSyncer::sync(World& world) {
       if (!alloc || !alloc->valid()) {
         continue;
       }
+      auto slot = world.getChunkSlot(*chunk);
 
       ChunkCullData cullData{};
       const float borderPad = 1.0f;
@@ -69,6 +70,7 @@ void ChunkSyncer::sync(World& world) {
       cullData.transparentFirstIndex = firstIndex + chunk->opaqueIndexCount;
       cullData.baseVertex = static_cast<uint32_t>(alloc->baseVertex);
       cullData.slotIndex = static_cast<uint32_t>(slotIndex);
+      cullData.renderFlags = *slot.renderFlags;
       m_indirectBatcher.updateChunkData(static_cast<uint32_t>(slotIndex), cullData);
     } else {
       ChunkCullData emptyData{};
