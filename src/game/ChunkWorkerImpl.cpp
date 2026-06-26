@@ -5,7 +5,6 @@
 #include "engine/workers/mesher/GreedyMesher.hpp"
 #include "engine/workers/mesher/LightPropagator.hpp"
 #include "engine/workers/mesher/LightSampling.hpp"
-#include "engine/workers/mesher/SmoothTerrainMesher.hpp"
 #include "game/WorldController.hpp"
 #include "world/BlockIds.hpp"
 #include "world/BlockRegistry.hpp"
@@ -204,64 +203,34 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
           vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
     };
 
-    bool ok = false;
-    if (m_config.useSurfaceNets) {
-      mesh::SurfaceNetsConfig scfg;
-      scfg.sizeX = m_config.chunkSize;
-      scfg.sizeY = m_config.worldHeight;
-      scfg.sizeZ = m_config.chunkSize;
-      scfg.maxVertices = m_config.maxVertsPerChunk;
-      scfg.maxIndices = m_config.maxIndicesPerChunk;
-      scfg.strideFloats = m_config.vertexStrideFloats;
-      scfg.originX = static_cast<float>(chunkX * m_config.chunkSize);
-      scfg.originY = 0.0f;
-      scfg.originZ = static_cast<float>(chunkZ * m_config.chunkSize);
+    mesh::SurfaceNetsConfig scfg;
+    scfg.sizeX = m_config.chunkSize;
+    scfg.sizeY = m_config.worldHeight;
+    scfg.sizeZ = m_config.chunkSize;
+    scfg.maxVertices = m_config.maxVertsPerChunk;
+    scfg.maxIndices = m_config.maxIndicesPerChunk;
+    scfg.strideFloats = m_config.vertexStrideFloats;
+    scfg.originX = static_cast<float>(chunkX * m_config.chunkSize);
+    scfg.originY = 0.0f;
+    scfg.originZ = static_cast<float>(chunkZ * m_config.chunkSize);
 
-      mesh::DensitySampler sampler{};
-      sampler.userData = &m_pipeline;
-      sampler.sample = &surfaceDensitySample;
+    mesh::DensitySampler sampler{};
+    sampler.userData = &m_pipeline;
+    sampler.sample = &surfaceDensitySample;
 
-      ok = mesh::surfaceNetsMesh(
-          scfg, sampler,
-          g_meshScratch.vertices.data(),
-          g_meshScratch.indices.data(),
-          vc, ic);
-      if (ok) {
-        annotateSurfaceNetsVertices(m_pipeline, loadTerrainPalette(m_blocks), scfg,
-                                    g_meshScratch.vertices.data(), vc);
-        opaqueIc = ic;
-        transparentIc = 0u;
-      } else {
-        usedGreedyFallback = true;
-        ok = buildGreedyMesh();
-      }
+    bool ok = mesh::surfaceNetsMesh(
+        scfg, sampler,
+        g_meshScratch.vertices.data(),
+        g_meshScratch.indices.data(),
+        vc, ic);
+    if (ok) {
+      annotateSurfaceNetsVertices(m_pipeline, loadTerrainPalette(m_blocks), scfg,
+                                  g_meshScratch.vertices.data(), vc);
+      opaqueIc = ic;
+      transparentIc = 0u;
     } else {
-      ok = mesher::smoothTerrainMesh(
-          m_pipeline, m_blocks, mcfg, chunkX, chunkZ,
-          g_meshScratch.vertices.data(),
-          g_meshScratch.indices.data(),
-          vc, ic, &opaqueIc, &transparentIc);
-      if (!ok) {
-        usedGreedyFallback = true;
-        ok = buildGreedyMesh();
-      } else {
-        const uint32_t smoothVertexCount = vc;
-        const uint32_t smoothOpaqueIndexCount = ic;
-
-        ok = mesher::overlayGreedyMesh(
-            slot.voxels, slot.light, m_blocks, mcfg,
-            smoothVertexCount, smoothOpaqueIndexCount,
-            g_meshScratch.vertices.data(),
-            g_meshScratch.indices.data(),
-            vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
-        if (!ok) {
-          // The smooth surface can still be dense on cave-heavy terrain.
-          // If the overlay layer blows the scratch budget, fall back to the
-          // existing greedy voxel mesh instead of dropping the chunk.
-          usedGreedyFallback = true;
-          ok = buildGreedyMesh();
-        }
-      }
+      usedGreedyFallback = true;
+      ok = buildGreedyMesh();
     }
 
     if (!ok) {
