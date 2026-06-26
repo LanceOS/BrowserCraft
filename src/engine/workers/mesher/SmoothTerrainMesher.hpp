@@ -3,6 +3,7 @@
 #include "GreedyMesher.hpp"
 #include <cstdint>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 class BlockRegistry;
@@ -32,4 +33,3 @@ bool smoothTerrainMesh(
 
 } // namespace mesher
 } // namespace voxel
-

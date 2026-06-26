@@ -7,6 +7,7 @@
 #include <limits>
 #include <vector>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel::mesh {
 
 namespace {

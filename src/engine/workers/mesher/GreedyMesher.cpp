@@ -6,6 +6,7 @@
 #include <cstring>
 #include <vector>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 namespace mesher {
 

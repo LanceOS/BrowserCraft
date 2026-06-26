@@ -140,13 +140,23 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
         g_meshScratch.indices.data(),
         vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
     if (!ok) {
-      std::cerr << "Chunk overlay build exceeded scratch limits for (" << chunkX << ", "
-                << chunkZ << ") max " << mcfg.maxVertices << " verts / "
-                << mcfg.maxIndices << " indices\n";
-      m_meshAllocator.releaseSlot(slotIndex);
-      *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-      m_controller.onMeshCompleted(slotIndex, false);
-      return;
+      // The smooth surface can still be dense on cave-heavy terrain.
+      // If the overlay layer blows the scratch budget, fall back to the
+      // existing greedy voxel mesh instead of dropping the chunk.
+      ok = mesher::greedyMesh(
+          slot.voxels, slot.light, m_blocks, mcfg,
+          g_meshScratch.vertices.data(),
+          g_meshScratch.indices.data(),
+          vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
+      if (!ok) {
+        std::cerr << "Chunk overlay build exceeded scratch limits for (" << chunkX << ", "
+                  << chunkZ << ") max " << mcfg.maxVertices << " verts / "
+                  << mcfg.maxIndices << " indices\n";
+        m_meshAllocator.releaseSlot(slotIndex);
+        *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+        m_controller.onMeshCompleted(slotIndex, false);
+        return;
+      }
     }
 
     if (vc == 0u || ic == 0u) {

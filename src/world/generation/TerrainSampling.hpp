@@ -10,6 +10,7 @@
 #include "content/biomes/BiomeSampler.hpp"
 #include "world/BlockIds.hpp"
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Configuration for world generation noise layering.
