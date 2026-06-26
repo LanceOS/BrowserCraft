@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Distributes ore veins through generated stone in a chunk.

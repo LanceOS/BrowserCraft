@@ -1,10 +1,12 @@
 #include "GreedyMesher.hpp"
 #include "AmbientOcclusion.hpp"
 #include "LightSampling.hpp"
+#include "world/BlockIds.hpp"
 #include <algorithm>
 #include <cstring>
 #include <vector>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 namespace mesher {
 
@@ -37,6 +39,20 @@ struct GreedyMeshScratch {
   std::vector<uint32_t> transparentIndices;
 };
 thread_local GreedyMeshScratch g_scratch;
+
+auto isOverlayRenderableBlock(const BlockDefinition& def) -> bool {
+  switch (def.id) {
+    case BlockId::GRASS:
+    case BlockId::DIRT:
+    case BlockId::STONE:
+    case BlockId::SAND:
+    case BlockId::BEDROCK:
+    case BlockId::MOSSY_STONE:
+      return false;
+    default:
+      return true;
+  }
+}
 }
 
 // ======================================================================
@@ -87,11 +103,14 @@ auto estimateMeshCapacity(
 }
 
 // @see notes/mesher-capacity-accounting.md
-bool greedyMesh(
+template <typename ShouldEmitFn>
+bool meshVolumeImpl(
     const uint8_t* voxels,
     const uint8_t* light,
     const BlockRegistry& blocks,
     const MesherConfig& cfg,
+    uint32_t vertexBase,
+    uint32_t opaqueIndexBase,
     float* vertexOut,
     uint32_t* indexOut,
     uint32_t& vertexCountOut,
@@ -100,13 +119,14 @@ bool greedyMesh(
     bool* hasOpaqueOut,
     uint32_t* opaqueIndexCountOut,
     uint32_t* transparentIndexCountOut,
-    const NeighborVoxelViews& neighbors)
+    const NeighborVoxelViews& neighbors,
+    ShouldEmitFn&& shouldEmitBlock)
 {
-  vertexCountOut = 0;
-  indexCountOut = 0;
+  vertexCountOut = vertexBase;
+  indexCountOut = opaqueIndexBase;
   if (hasTransparentOut) *hasTransparentOut = false;
-  if (hasOpaqueOut) *hasOpaqueOut = false;
-  if (opaqueIndexCountOut) *opaqueIndexCountOut = 0;
+  if (hasOpaqueOut) *hasOpaqueOut = opaqueIndexBase > 0u;
+  if (opaqueIndexCountOut) *opaqueIndexCountOut = opaqueIndexBase;
   if (transparentIndexCountOut) *transparentIndexCountOut = 0;
 
   if (!voxels || !light || !vertexOut || !indexOut) return false;
@@ -122,8 +142,10 @@ bool greedyMesh(
   const uint32_t maxI  = static_cast<uint32_t>(cfg.maxIndices);
   const uint32_t strideFloats = static_cast<uint32_t>(S);
 
-  uint32_t vo = 0; // float offset into vertexOut
-  uint32_t opaqueIo = 0; // opaque index count
+  if (vertexBase > maxVertices || opaqueIndexBase > maxI) return false;
+
+  uint32_t vo = vertexBase * strideFloats; // float offset into vertexOut
+  uint32_t opaqueIo = opaqueIndexBase;      // opaque index count
 
   // Scratch mask sized to the largest face for this chunk configuration.
   const auto neededScratch =
@@ -186,7 +208,7 @@ bool greedyMesh(
           uint8_t bid = static_cast<uint8_t>(maskVal & 0xFF);
 
           const auto* def = blocks.tryGet(bid);
-          if (!def) { mask[v * uSz + u] = 0; continue; }
+          if (!def || !shouldEmitBlock(*def)) { mask[v * uSz + u] = 0; continue; }
           if (hasTransparentOut && !def->material.opaque) *hasTransparentOut = true;
           if (hasOpaqueOut && def->material.opaque) *hasOpaqueOut = true;
 
@@ -331,6 +353,60 @@ bool greedyMesh(
   if (opaqueIndexCountOut) *opaqueIndexCountOut = opaqueIo;
   if (transparentIndexCountOut) *transparentIndexCountOut = transparentIo;
   return true;
+}
+
+bool greedyMesh(
+    const uint8_t* voxels,
+    const uint8_t* light,
+    const BlockRegistry& blocks,
+    const MesherConfig& cfg,
+    float* vertexOut,
+    uint32_t* indexOut,
+    uint32_t& vertexCountOut,
+    uint32_t& indexCountOut,
+    bool* hasTransparentOut,
+    bool* hasOpaqueOut,
+    uint32_t* opaqueIndexCountOut,
+    uint32_t* transparentIndexCountOut,
+    const NeighborVoxelViews& neighbors)
+{
+  return meshVolumeImpl(
+      voxels, light, blocks, cfg,
+      0u, 0u,
+      vertexOut, indexOut,
+      vertexCountOut, indexCountOut,
+      hasTransparentOut, hasOpaqueOut,
+      opaqueIndexCountOut, transparentIndexCountOut,
+      neighbors,
+      [](const BlockDefinition&) { return true; });
+}
+
+bool overlayGreedyMesh(
+    const uint8_t* voxels,
+    const uint8_t* light,
+    const BlockRegistry& blocks,
+    const MesherConfig& cfg,
+    uint32_t vertexBase,
+    uint32_t opaqueIndexBase,
+    float* vertexOut,
+    uint32_t* indexOut,
+    uint32_t& vertexCountOut,
+    uint32_t& indexCountOut,
+    bool* hasTransparentOut,
+    bool* hasOpaqueOut,
+    uint32_t* opaqueIndexCountOut,
+    uint32_t* transparentIndexCountOut,
+    const NeighborVoxelViews& neighbors)
+{
+  return meshVolumeImpl(
+      voxels, light, blocks, cfg,
+      vertexBase, opaqueIndexBase,
+      vertexOut, indexOut,
+      vertexCountOut, indexCountOut,
+      hasTransparentOut, hasOpaqueOut,
+      opaqueIndexCountOut, transparentIndexCountOut,
+      neighbors,
+      [](const BlockDefinition& def) { return isOverlayRenderableBlock(def); });
 }
 
 } // namespace mesher

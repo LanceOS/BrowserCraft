@@ -6,6 +6,7 @@
 #include <mutex>
 #include <random>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Plays block interaction sounds (break, place, step).

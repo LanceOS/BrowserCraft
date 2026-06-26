@@ -10,6 +10,7 @@
 #include "content/biomes/BiomeSampler.hpp"
 #include "world/BlockIds.hpp"
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Configuration for world generation noise layering.
@@ -82,6 +83,7 @@ public:
       m_climateSource(m_ownedSampler.get()),
       m_continentalNoise(seed ^ 0x1a2b3cu),
       m_detailNoise(seed ^ 0x4d5e6fu),
+      m_densityNoise(seed),
       m_config(config)
   {}
 
@@ -93,6 +95,7 @@ public:
       m_climateSource(&climateSource),
       m_continentalNoise(seed ^ 0x1a2b3cu),
       m_detailNoise(seed ^ 0x4d5e6fu),
+      m_densityNoise(seed),
       m_config(config)
   {}
 
@@ -132,6 +135,7 @@ private:
   biome::IClimateSource* m_climateSource;
   SimplexNoise m_continentalNoise;
   SimplexNoise m_detailNoise;
+  SimplexNoise m_densityNoise;
   WorldGenerationConfig m_config;
 };
 
@@ -206,7 +210,26 @@ inline auto TerrainSampler::sampleTerrain(float worldX, float worldZ) const -> T
 }
 
 inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worldZ) const -> float {
-  return worldY - sampleTerrain(worldX, worldZ).surfaceHeight;
+  const auto terrain = sampleTerrain(worldX, worldZ);
+  float density = worldY - terrain.surfaceHeight;
+
+  const auto& cfg = m_config;
+  if (cfg.densityNoiseScale > 0.0f) {
+    const float depthBelowSurface = terrain.surfaceHeight - worldY;
+    if (depthBelowSurface > 5.0f) {
+      const float caveNoise = m_densityNoise.noise3D(
+          worldX * cfg.densityNoiseScale,
+          worldY * cfg.densityNoiseScale,
+          worldZ * cfg.densityNoiseScale);
+
+      // Positive depthFactor reinforces the solid mass deeper underground,
+      // while negative noise carves out air pockets and overhangs.
+      const float depthFactor = depthBelowSurface * cfg.densityDepthScale;
+      density -= (caveNoise + depthFactor) * 4.0f;
+    }
+  }
+
+  return density;
 }
 
 inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float worldZ) const -> MaterialId {

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 namespace {
 

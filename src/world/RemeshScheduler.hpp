@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Collects boundary edits during a frame and flushes each unique chunk once.

@@ -163,6 +163,7 @@ add_library(voxel_engine STATIC
   src/world/generation/OreDistributor.cpp
   src/world/generation/WorldGenPipeline.cpp
   src/engine/workers/mesher/GreedyMesher.cpp
+  src/engine/workers/mesher/SmoothTerrainMesher.cpp
   src/world/mesh/SurfaceNetsMesher.cpp
   src/content/biomes/BiomeSampler.cpp
   src/content/biomes/BiomeClassifier.cpp
@@ -228,6 +229,7 @@ add_executable(voxel_tests
   tests/test_thread_pool.cpp
   tests/test_player_controller.cpp
   tests/test_mesher.cpp
+  tests/test_smooth_terrain_mesher.cpp
   tests/test_surface_nets_mesher.cpp
 )
 target_link_libraries(voxel_tests PRIVATE voxel_engine Catch2::Catch2WithMain)

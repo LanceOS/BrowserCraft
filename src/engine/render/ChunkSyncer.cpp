@@ -53,7 +53,7 @@ void ChunkSyncer::sync(World& world) {
       }
 
       ChunkCullData cullData{};
-      const float borderPad = m_config.useSurfaceNets ? 1.0f : 0.0f;
+      const float borderPad = 1.0f;
       cullData.min[0] = static_cast<float>(chunk->chunkX * m_config.chunkSize) - borderPad;
       cullData.min[1] = 0.0f;
       cullData.min[2] = static_cast<float>(chunk->chunkZ * m_config.chunkSize) - borderPad;

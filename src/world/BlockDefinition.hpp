@@ -4,6 +4,7 @@
 #include <string>
 #include <optional>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Axis-aligned bounding box for block collision.

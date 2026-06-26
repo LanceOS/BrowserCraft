@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 WorldGenPipeline::WorldGenPipeline(uint32_t seed, const WorldGenerationConfig& config)
@@ -103,4 +104,3 @@ void WorldGenPipeline::fillChunk(uint8_t* voxels, int32_t* chunkXPtr, int32_t* c
 }
 
 } // namespace voxel
-

@@ -5,6 +5,7 @@
 #include <optional>
 #include <cstdint>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Manages the set of active chunks around the player.

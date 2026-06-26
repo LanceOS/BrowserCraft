@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Shared chunk-slot lifecycle state used by the pool, job queue, world, and

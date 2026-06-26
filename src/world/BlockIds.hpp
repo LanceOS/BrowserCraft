@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Symbolic block IDs matching assets/blocks.json.

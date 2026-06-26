@@ -6,6 +6,7 @@
 #include "engine/alloc/SharedPool.hpp"
 #include <cmath>
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 namespace {
 

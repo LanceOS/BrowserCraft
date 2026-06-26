@@ -7,6 +7,7 @@
 #include "OreDistributor.hpp"
 #include "SimplexNoise.hpp"
 
+// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
 namespace voxel {
 
 /// Full world generation pipeline for a single chunk.
@@ -48,4 +49,3 @@ private:
 };
 
 } // namespace voxel
-
