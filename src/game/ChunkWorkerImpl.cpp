@@ -6,6 +6,8 @@
 #include "engine/workers/mesher/LightPropagator.hpp"
 #include "game/WorldController.hpp"
 #include "world/BlockRegistry.hpp"
+#include "world/BlockIds.hpp"
+#include "world/mesh/SurfaceNetsMesher.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
 #include <algorithm>
 #include <cstring>
@@ -25,7 +27,76 @@ struct MeshScratchBuffers {
   std::vector<uint32_t> indices;
 };
 
+struct TerrainTextureLayers {
+  uint16_t grassTop = 0;
+  uint16_t grassSide = 0;
+  uint16_t dirt = 0;
+  uint16_t stone = 0;
+  uint16_t sand = 0;
+};
+
 thread_local MeshScratchBuffers g_meshScratch;
+
+auto samplePipelineDensity(void* userData, float worldX, float worldY, float worldZ) -> float {
+  return static_cast<WorldGenPipeline*>(userData)->sampleDensity(worldX, worldY, worldZ);
+}
+
+auto resolveTerrainTextureLayers(const BlockRegistry& blocks) -> TerrainTextureLayers {
+  TerrainTextureLayers layers{};
+
+  if (const auto* grass = blocks.tryGet(BlockId::GRASS)) {
+    layers.grassTop = grass->textures.top;
+    layers.grassSide = grass->textures.side;
+  }
+  if (const auto* dirt = blocks.tryGet(BlockId::DIRT)) {
+    layers.dirt = dirt->textures.top;
+  }
+  if (const auto* stone = blocks.tryGet(BlockId::STONE)) {
+    layers.stone = stone->textures.top;
+  }
+  if (const auto* sand = blocks.tryGet(BlockId::SAND)) {
+    layers.sand = sand->textures.top;
+  }
+
+  return layers;
+}
+
+void applyTerrainTextureLayers(float* vertices, uint32_t vertexCount, uint32_t strideFloats,
+                               const GameConfig& config, int32_t chunkX, int32_t chunkZ,
+                               WorldGenPipeline& pipeline, const TerrainTextureLayers& layers) {
+  if (!vertices) return;
+  const float originX = static_cast<float>(chunkX * config.chunkSize);
+  const float originZ = static_cast<float>(chunkZ * config.chunkSize);
+
+  for (uint32_t i = 0; i < vertexCount; ++i) {
+    float* v = vertices + static_cast<size_t>(i) * strideFloats;
+    const float worldX = originX + v[0];
+    const float worldY = v[1];
+    const float worldZ = originZ + v[2];
+    const float normalY = v[4];
+
+    const auto material = pipeline.sampleMaterial(worldX, worldY, worldZ);
+    uint16_t layer = layers.stone;
+    switch (material) {
+      case MaterialId::Grass:
+        layer = normalY > 0.55f ? layers.grassTop : layers.grassSide;
+        break;
+      case MaterialId::Dirt:
+        layer = layers.dirt;
+        break;
+      case MaterialId::Stone:
+        layer = layers.stone;
+        break;
+      case MaterialId::Sand:
+        layer = layers.sand != 0u ? layers.sand : layers.dirt;
+        break;
+      default:
+        layer = layers.stone;
+        break;
+    }
+    v[8] = static_cast<float>(layer);
+  }
+}
 
 } // namespace
 
@@ -57,26 +128,14 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     *slot.transparentIndexCount = 0u;
     *slot.renderFlags = 0u;
 
-    mesher::MesherConfig mcfg;
-    mcfg.sizeX = m_config.chunkSize;
-    mcfg.sizeY = m_config.worldHeight;
-    mcfg.sizeZ = m_config.chunkSize;
-    mcfg.maxVertices = m_config.maxVertsPerChunk;
-    mcfg.maxIndices = m_config.maxIndicesPerChunk;
-    mcfg.strideFloats = m_config.vertexStrideFloats;
-
     const int32_t chunkX = *slot.chunkX;
     const int32_t chunkZ = *slot.chunkZ;
-    const auto neighbors = gatherNeighborVoxels(slotIndex, chunkX, chunkZ);
-
-    // Rebuild the packed light volume for every remesh so terrain edits and
-    // streamed-in chunks keep their smooth lighting in sync with geometry.
-    mesher::calculateLighting(slot.voxels, slot.light, m_blocks, mcfg);
+    const uint32_t strideFloats = static_cast<uint32_t>(m_config.vertexStrideFloats);
 
     const size_t scratchVertexFloats =
-        static_cast<size_t>(std::max(0, mcfg.maxVertices)) *
-        static_cast<size_t>(std::max(1, mcfg.strideFloats));
-    const size_t scratchIndices = static_cast<size_t>(std::max(0, mcfg.maxIndices));
+        static_cast<size_t>(std::max(0, m_config.maxVertsPerChunk)) *
+        static_cast<size_t>(std::max(1, m_config.vertexStrideFloats));
+    const size_t scratchIndices = static_cast<size_t>(std::max(0, m_config.maxIndicesPerChunk));
     if (g_meshScratch.vertices.size() < scratchVertexFloats) {
       g_meshScratch.vertices.resize(scratchVertexFloats);
     }
@@ -88,19 +147,76 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     uint32_t opaqueIc = 0, transparentIc = 0;
     bool hasTransparent = false;
     bool hasOpaque = false;
-    bool ok = mesher::greedyMesh(
-        slot.voxels, slot.light, m_blocks, mcfg,
-        g_meshScratch.vertices.data(),
-        g_meshScratch.indices.data(),
-        vc, ic, &hasTransparent, &hasOpaque, &opaqueIc, &transparentIc, neighbors);
-    if (!ok) {
-      std::cerr << "Chunk mesh build exceeded scratch limits for (" << chunkX << ", " << chunkZ
-                << ") max " << mcfg.maxVertices << " verts / "
-                << mcfg.maxIndices << " indices\n";
-      m_meshAllocator.releaseSlot(slotIndex);
-      *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-      m_controller.onMeshCompleted(slotIndex, false);
-      return;
+    bool ok = false;
+
+    if (m_config.useSurfaceNets) {
+      mesh::SurfaceNetsConfig scfg;
+      scfg.sizeX = m_config.chunkSize;
+      scfg.sizeY = m_config.worldHeight;
+      scfg.sizeZ = m_config.chunkSize;
+      scfg.maxVertices = m_config.maxVertsPerChunk;
+      scfg.maxIndices = m_config.maxIndicesPerChunk;
+      scfg.strideFloats = m_config.vertexStrideFloats;
+      scfg.originX = static_cast<float>(chunkX * m_config.chunkSize);
+      scfg.originY = 0.0f;
+      scfg.originZ = static_cast<float>(chunkZ * m_config.chunkSize);
+
+      mesh::DensitySampler densitySampler{};
+      densitySampler.userData = &m_pipeline;
+      densitySampler.sample = &samplePipelineDensity;
+
+      ok = mesh::surfaceNetsMesh(
+          scfg, densitySampler,
+          g_meshScratch.vertices.data(),
+          g_meshScratch.indices.data(),
+          vc, ic);
+
+      if (!ok) {
+        std::cerr << "Surface Nets mesh build exceeded scratch limits for (" << chunkX << ", "
+                  << chunkZ << ") max " << scfg.maxVertices << " verts / "
+                  << scfg.maxIndices << " indices\n";
+        m_meshAllocator.releaseSlot(slotIndex);
+        *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+        m_controller.onMeshCompleted(slotIndex, false);
+        return;
+      }
+
+      if (vc > 0u) {
+        const auto terrainLayers = resolveTerrainTextureLayers(m_blocks);
+        applyTerrainTextureLayers(g_meshScratch.vertices.data(), vc, strideFloats,
+                                  m_config, chunkX, chunkZ, m_pipeline, terrainLayers);
+        hasOpaque = true;
+        opaqueIc = ic;
+      }
+    } else {
+      mesher::MesherConfig mcfg;
+      mcfg.sizeX = m_config.chunkSize;
+      mcfg.sizeY = m_config.worldHeight;
+      mcfg.sizeZ = m_config.chunkSize;
+      mcfg.maxVertices = m_config.maxVertsPerChunk;
+      mcfg.maxIndices = m_config.maxIndicesPerChunk;
+      mcfg.strideFloats = m_config.vertexStrideFloats;
+
+      const auto neighbors = gatherNeighborVoxels(slotIndex, chunkX, chunkZ);
+
+      // Rebuild the packed light volume for every remesh so terrain edits and
+      // streamed-in chunks keep their smooth lighting in sync with geometry.
+      mesher::calculateLighting(slot.voxels, slot.light, m_blocks, mcfg);
+
+      ok = mesher::greedyMesh(
+          slot.voxels, slot.light, m_blocks, mcfg,
+          g_meshScratch.vertices.data(),
+          g_meshScratch.indices.data(),
+          vc, ic, &hasTransparent, &hasOpaque, &opaqueIc, &transparentIc, neighbors);
+      if (!ok) {
+        std::cerr << "Chunk mesh build exceeded scratch limits for (" << chunkX << ", " << chunkZ
+                  << ") max " << mcfg.maxVertices << " verts / "
+                  << mcfg.maxIndices << " indices\n";
+        m_meshAllocator.releaseSlot(slotIndex);
+        *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
+        m_controller.onMeshCompleted(slotIndex, false);
+        return;
+      }
     }
 
     if (vc == 0u || ic == 0u) {
