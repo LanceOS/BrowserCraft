@@ -12,6 +12,7 @@
 #include "engine/core/GameState.hpp"
 #include "engine/core/TickContext.hpp"
 #include "engine/alloc/SharedPool.hpp"
+#include "engine/render/ChunkMeshAllocator.hpp"
 #include "engine/ecs/EntityManager.hpp"
 #include "engine/ecs/ComponentStore.hpp"
 #include "engine/ecs/SystemManager.hpp"
@@ -85,6 +86,7 @@ private:
   BlockRegistry m_blocks;
   std::unique_ptr<flora::FloraRegistry> m_flora;
   std::unique_ptr<SharedPool> m_pool;
+  std::unique_ptr<ChunkMeshAllocator> m_meshAllocator;
   std::unique_ptr<WorldController> m_worldController;
   std::unique_ptr<Renderer> m_renderer;
   std::unique_ptr<UIManager> m_ui;

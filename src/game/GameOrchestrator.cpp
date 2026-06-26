@@ -21,10 +21,11 @@ public:
   ChunkWorkerImpl(WorkerThreadPool& genPool, WorkerThreadPool& meshPool,
                   SharedPool& pool, WorldGenPipeline& pipeline,
                   const GameConfig& config, WorldController& controller,
-                  BlockRegistry& blocks)
+                  BlockRegistry& blocks, ChunkMeshAllocator& meshAllocator)
     : m_genPool(genPool), m_meshPool(meshPool), m_pool(pool),
       m_pipeline(pipeline), m_config(config),
-      m_controller(controller), m_blocks(blocks) {}
+      m_controller(controller), m_blocks(blocks),
+      m_meshAllocator(meshAllocator) {}
 
   void generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t seed) override {
     m_genPool.submitAndForget([this, slotIndex, chunkX, chunkZ, seed]() {
@@ -51,22 +52,19 @@ public:
       mcfg.maxIndices = m_config.maxIndicesPerChunk;
       mcfg.strideFloats = m_config.vertexStrideFloats;
 
-      // Compute output pointers into the persistently mapped GPU VBO/IBO.
-      // The mesher writes directly to GPU memory — no CPU staging copy needed.
-      size_t vboStride = static_cast<size_t>(m_config.maxVertsPerChunk)
-                       * m_config.vertexStrideFloats * sizeof(float);
-      size_t iboStride = static_cast<size_t>(m_config.maxIndicesPerChunk)
-                       * sizeof(uint32_t);
-      if (!m_vboPtr || !m_iboPtr || slotIndex < 0) {
+      auto capacityHint = mesher::estimateMeshCapacity(slot.voxels, m_blocks, mcfg);
+      if (capacityHint.vertexCount == 0u || capacityHint.indexCount == 0u) {
+        m_meshAllocator.releaseSlot(slotIndex);
         *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
-        m_controller.onMeshCompleted(slotIndex, false);
+        m_controller.onMeshCompleted(slotIndex, true);
         return;
       }
 
-      const size_t slotOffset = static_cast<size_t>(slotIndex);
-      const size_t vboOffset = slotOffset * vboStride;
-      const size_t iboOffset = slotOffset * iboStride;
-      if (vboOffset + vboStride > m_vboMaxBytes || iboOffset + iboStride > m_iboMaxBytes) {
+      auto allocation = m_meshAllocator.allocateForSlot(
+          slotIndex,
+          static_cast<size_t>(capacityHint.vertexCount) * m_config.vertexStrideFloats * sizeof(float),
+          static_cast<size_t>(capacityHint.indexCount) * sizeof(uint32_t));
+      if (!allocation || !allocation->valid()) {
         *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
         m_controller.onMeshCompleted(slotIndex, false);
         return;
@@ -75,30 +73,35 @@ public:
       // Rebuild the packed light volume for every remesh so terrain edits and
       // streamed-in chunks keep their smooth lighting in sync with geometry.
       mesher::calculateLighting(slot.voxels, slot.light, m_blocks, mcfg);
+      mcfg.maxVertices = static_cast<int32_t>(capacityHint.vertexCount);
+      mcfg.maxIndices = static_cast<int32_t>(capacityHint.indexCount);
 
       uint32_t vc = 0, ic = 0;
       bool hasTransparent = false;
       bool hasOpaque = false;
       bool ok = mesher::greedyMesh(
           slot.voxels, slot.light, m_blocks, mcfg,
-          reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(m_vboPtr) + vboOffset),
-          reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(m_iboPtr) + iboOffset),
+          allocation->vboPtr,
+          allocation->iboPtr,
           vc, ic, &hasTransparent, &hasOpaque);
       *slot.vertexCount = static_cast<uint32_t>(vc);
       *slot.indexCount = ic;
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
       if (hasTransparent) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
       if (hasOpaque) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
+      if (!ok || vc == 0u || ic == 0u) {
+        m_meshAllocator.releaseSlot(slotIndex);
+      }
       m_controller.onMeshCompleted(slotIndex, ok);
     });
   }
 
   void setGpuTargets(float* vboPtr, size_t vboMaxBytes,
                      uint32_t* iboPtr, size_t iboMaxBytes) override {
-    m_vboPtr = vboPtr;
-    m_vboMaxBytes = vboMaxBytes;
-    m_iboPtr = iboPtr;
-    m_iboMaxBytes = iboMaxBytes;
+    (void)vboPtr;
+    (void)vboMaxBytes;
+    (void)iboPtr;
+    (void)iboMaxBytes;
   }
 
 private:
@@ -109,10 +112,7 @@ private:
   const GameConfig& m_config;
   WorldController& m_controller;
   BlockRegistry& m_blocks;
-  float* m_vboPtr = nullptr;
-  size_t m_vboMaxBytes = 0;
-  uint32_t* m_iboPtr = nullptr;
-  size_t m_iboMaxBytes = 0;
+  ChunkMeshAllocator& m_meshAllocator;
 };
 
 static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
@@ -125,21 +125,17 @@ static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
 void GameOrchestrator::buildRuntimeStack(Game& game) {
   int32_t poolCap = (game.m_config.renderDistance * 2 + 1) * (game.m_config.renderDistance * 2 + 1) + 8;
   game.m_pool = SharedPool::create(poolCap, makeDims(game.m_config));
+  game.m_meshAllocator = std::make_unique<ChunkMeshAllocator>(game.m_config, poolCap);
 
   game.m_worldController = std::make_unique<WorldController>(*game.m_pool, game.m_blocks, game.m_config);
   game.m_chunkWorker = std::make_unique<ChunkWorkerImpl>(
     *game.m_genPool, *game.m_meshPool, *game.m_pool, game.m_worldGenPipeline,
-    game.m_config, *game.m_worldController, game.m_blocks);
+    game.m_config, *game.m_worldController, game.m_blocks, *game.m_meshAllocator);
   // Persistence is attached later by configureSaveWorld.
   game.m_worldController->createWorld(*game.m_chunkWorker, nullptr);
 
-  game.m_renderer = std::make_unique<Renderer>(game.m_window, game.m_blocks, game.m_config);
-
-  // Wire GPU VBO/IBO targets to the chunk worker so meshers write directly
-  // to persistently mapped GPU memory, bypassing CPU-side staging buffers.
-  game.m_chunkWorker->setGpuTargets(
-      game.m_renderer->vboPtr(), game.m_renderer->vboBytes(),
-      game.m_renderer->iboPtr(), game.m_renderer->iboBytes());
+  game.m_renderer = std::make_unique<Renderer>(game.m_window, game.m_blocks, game.m_config,
+                                               *game.m_meshAllocator);
 }
 
 void GameOrchestrator::initialize(Game& game, GLFWwindow* window, const Game::Options& options) {
@@ -264,7 +260,9 @@ void GameOrchestrator::applyRenderDistance(Game& game, int32_t newRd) {
   } catch (const std::bad_alloc&) {
     // Allocation failed — revert to the old render distance and recreate.
     game.m_renderer.reset();
+    game.m_chunkWorker.reset();
     game.m_worldController.reset();
+    game.m_meshAllocator.reset();
     game.m_pool.reset();
 
     game.m_config.renderDistance = oldRd;

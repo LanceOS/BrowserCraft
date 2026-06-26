@@ -8,30 +8,24 @@
 #include <cstring>
 namespace voxel {
 
-Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config)
+Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config,
+                   ChunkMeshAllocator& meshAllocator)
   : m_window(window), m_config(config),
     m_chunkShader(shaders::chunkVertex, shaders::chunkFragment),
     m_skyShader(shaders::skyVertex, shaders::skyFragment),
     m_cameraUbo(0, CAMERA_BLOCK_FLOATS * sizeof(float)),
     m_timeUbo(2, TIME_BLOCK_FLOATS * sizeof(float)),
     m_textures(16, 16, std::max(1, AssetManager::get().getTextureLayerCount())),
-    m_masterVbo([&]{
-        int32_t poolCap = (config.renderDistance * 2 + 1) * (config.renderDistance * 2 + 1) + 8;
-        size_t vboSize = static_cast<size_t>(poolCap) * config.maxVertsPerChunk * config.vertexStrideFloats * sizeof(float);
-        return std::make_unique<PersistentBuffer>(vboSize, GL_ARRAY_BUFFER);
-    }()),
-    m_masterIbo([&]{
-        int32_t poolCap = (config.renderDistance * 2 + 1) * (config.renderDistance * 2 + 1) + 8;
-        size_t iboSize = static_cast<size_t>(poolCap) * config.maxIndicesPerChunk * sizeof(uint32_t);
-        return std::make_unique<PersistentBuffer>(iboSize, GL_ELEMENT_ARRAY_BUFFER);
-    }()),
+    m_meshAllocator(meshAllocator),
     m_indirectBatcher([&]{
         int32_t poolCap = (config.renderDistance * 2 + 1) * (config.renderDistance * 2 + 1) + 8;
         return std::make_unique<IndirectBatcher>(poolCap);
     }()),
-    m_chunkSyncer(m_masterVbo.get(), m_masterIbo.get(), m_indirectBatcher.get(), config),
+    m_chunkSyncer(m_meshAllocator, *m_indirectBatcher, config),
     m_drawDispatcher(m_chunkShader, m_skyShader, m_textures, *m_indirectBatcher, m_masterVao, m_skyVao)
 {
+  (void)blocks;
+
   m_chunkShader.bindUniformBlock("CameraBlock", 0);
   m_chunkShader.bindUniformBlock("TimeBlock", 2);
   m_skyShader.bindUniformBlock("CameraBlock", 0);
@@ -57,8 +51,8 @@ Renderer::Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& 
 
   gl::GenVertexArrays(1, &m_masterVao);
   gl::BindVertexArray(m_masterVao);
-  gl::BindBuffer(GL_ARRAY_BUFFER, m_masterVbo->buffer());
-  gl::BindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_masterIbo->buffer());
+  gl::BindBuffer(GL_ARRAY_BUFFER, m_meshAllocator.vboBuffer());
+  gl::BindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_meshAllocator.iboBuffer());
 
   size_t strideBytes = m_config.vertexStrideFloats * sizeof(float);
   gl::EnableVertexAttribArray(0);
@@ -160,8 +154,6 @@ void Renderer::dispose() {
 
   if (m_masterVao) gl::DeleteVertexArrays(1, &m_masterVao);
   m_masterVao = 0;
-  m_masterVbo.reset();
-  m_masterIbo.reset();
   m_indirectBatcher.reset();
 }
 

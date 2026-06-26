@@ -31,6 +31,12 @@ static inline auto getBlock(const uint8_t* voxels,
   return voxels[voxelIndex(x, y, z, cfg)];
 }
 
+static inline auto isOpaqueBlock(uint8_t blockId, const BlockRegistry& blocks) -> bool {
+  if (blockId == 0) return false;
+  const auto* def = blocks.tryGet(blockId);
+  return def && def->material.opaque;
+}
+
 /// True if block at (x,y,z) is present and marked opaque.
 static inline auto isSolid(const uint8_t* voxels,
                            int32_t x, int32_t y, int32_t z,
@@ -294,6 +300,48 @@ thread_local GreedyMeshScratch g_scratch;
 // ======================================================================
 // Public API
 // ======================================================================
+
+auto estimateMeshCapacity(
+    const uint8_t* voxels,
+    const BlockRegistry& blocks,
+    const MesherConfig& cfg) -> MeshCapacityHint
+{
+  MeshCapacityHint hint{};
+  if (!voxels) return hint;
+  if (cfg.sizeX <= 0 || cfg.sizeY <= 0 || cfg.sizeZ <= 0) return hint;
+
+  static constexpr int32_t kNeighborOffsets[6][3] = {
+    { 1, 0, 0}, {-1, 0, 0},
+    { 0, 1, 0}, { 0,-1, 0},
+    { 0, 0, 1}, { 0, 0,-1},
+  };
+
+  for (int32_t y = 0; y < cfg.sizeY; ++y) {
+    for (int32_t z = 0; z < cfg.sizeZ; ++z) {
+      for (int32_t x = 0; x < cfg.sizeX; ++x) {
+        uint8_t bid = getBlock(voxels, x, y, z, cfg);
+        if (bid == 0) continue;
+
+        const auto* def = blocks.tryGet(bid);
+        if (!def) continue;
+
+        for (const auto& off : kNeighborOffsets) {
+          const int32_t nx = x + off[0];
+          const int32_t ny = y + off[1];
+          const int32_t nz = z + off[2];
+          if (isOpaqueBlock(getBlock(voxels, nx, ny, nz, cfg), blocks)) {
+            continue;
+          }
+          ++hint.quadCount;
+        }
+      }
+    }
+  }
+
+  hint.vertexCount = hint.quadCount * 4u;
+  hint.indexCount = hint.quadCount * 6u;
+  return hint;
+}
 
 // @see notes/mesher-capacity-accounting.md
 bool greedyMesh(

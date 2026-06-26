@@ -16,6 +16,20 @@ struct MesherConfig {
   int32_t strideFloats = 10;
 };
 
+/// Upper-bound hint for the greedy mesher output.
+struct MeshCapacityHint {
+  uint32_t vertexCount = 0;
+  uint32_t indexCount = 0;
+  uint32_t quadCount = 0;
+};
+
+/// Estimate the maximum mesh output needed for the current voxel volume.
+/// The result is an upper bound, not an exact count.
+[[nodiscard]] auto estimateMeshCapacity(
+    const uint8_t* voxels,
+    const BlockRegistry& blocks,
+    const MesherConfig& cfg) -> MeshCapacityHint;
+
 /// Perform greedy meshing on a chunk's voxel data.
 ///
 /// Reads block IDs from \a voxels and light data from \a light,

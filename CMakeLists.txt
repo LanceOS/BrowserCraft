@@ -143,6 +143,7 @@ add_library(voxel_engine STATIC
   src/engine/render/UniformBuffer.cpp
   src/engine/render/Texture2DArray.cpp
   src/engine/render/ChunkMesh.cpp
+  src/engine/render/ChunkMeshAllocator.cpp
   src/engine/render/ChunkSyncer.cpp
   src/engine/render/DrawDispatcher.cpp
   src/engine/render/Renderer.cpp

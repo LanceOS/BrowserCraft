@@ -174,6 +174,27 @@ TEST_CASE("GreedyMesher maxVertices is counted in vertices, not floats",
   CHECK(indexCount == 36);
 }
 
+TEST_CASE("Mesh capacity estimate matches a single exposed block",
+          "[mesher][capacity]") {
+  BlockRegistry reg(256);
+  registerTestBlock(reg, 1, "TestBlock", 11, 22, 33);
+
+  constexpr int32_t SX = 3, SY = 3, SZ = 3;
+  std::vector<uint8_t> voxels(SX * SY * SZ, 0);
+  std::vector<uint8_t> light(SX * SY * SZ, 0);
+  voxels[(1 * SZ + 1) * SX + 1] = 1;
+
+  mesher::MesherConfig cfg;
+  cfg.sizeX = SX;
+  cfg.sizeY = SY;
+  cfg.sizeZ = SZ;
+
+  auto hint = mesher::estimateMeshCapacity(voxels.data(), reg, cfg);
+  CHECK(hint.quadCount == 6);
+  CHECK(hint.vertexCount == 24);
+  CHECK(hint.indexCount == 36);
+}
+
 TEST_CASE("LightPropagator fills open columns with sky light",
           "[mesher][light]") {
   BlockRegistry reg(256);
