@@ -280,6 +280,17 @@ static inline bool aabbOverlap(const glm::vec3& minA, const glm::vec3& maxA,
 // Solves the quadratic equation (at^2 + bt + c = 0) to find the earliest time of impact (t).
 // Returns true if a valid root is found between 0.0 and maxR.
 static bool getLowestRoot(float a, float b, float c, float maxR, float& root) {
+  // Handle linear case (a == 0) where velocity is parallel to an edge
+  if (std::abs(a) < 1e-7f) {
+    if (std::abs(b) < 1e-7f) return false;
+    float r = -c / b;
+    if (r >= 0.0f && r < maxR) {
+      root = r;
+      return true;
+    }
+    return false;
+  }
+
   float determinant = b * b - 4.0f * a * c;
   if (determinant < 0.0f) return false;
   float sqrtD = std::sqrt(determinant);
