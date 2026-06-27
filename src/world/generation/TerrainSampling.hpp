@@ -217,6 +217,9 @@ inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float wor
                                            const glm::vec3& normal) const -> TerrainMaterial {
   const auto terrain = sampleTerrain(worldX, worldZ);
   terrain::TerrainMaterialContext ctx{};
+  ctx.worldX = worldX;
+  ctx.worldY = worldY;
+  ctx.worldZ = worldZ;
   ctx.surfaceHeight = terrain.surfaceHeight;
   ctx.seaLevel = static_cast<float>(m_config.seaLevel);
   ctx.depthBelowSurface = terrain.surfaceHeight - worldY;
