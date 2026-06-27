@@ -34,14 +34,14 @@ in vec3 v_worldPos;
 out vec4 fragColor;
 
 int terrainLayer(int materialId) {
-  // Keep these layer indices aligned with the current atlas order in
-  // assets/blocks.json.
+  // Layer indices based on alphabetical sorting of keys in assets/blocks.json
+  // 2 = dirt, 6 = grass_top, 14 = stone
   switch (materialId) {
-    case 0: return 0; // grass_top
+    case 0: return 6; // grass_top
     case 1: return 2; // dirt
-    case 2: return 3; // stone
+    case 2: return 14; // stone
     case 3: return 2; // sand fallback to dirt until a dedicated sand atlas exists
-    default: return 3;
+    default: return 14;
   }
 }
 
