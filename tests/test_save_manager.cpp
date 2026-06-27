@@ -1,7 +1,40 @@
 #include <catch2/catch_test_macros.hpp>
 #include "engine/save/TerrainSaveData.hpp"
+#include "engine/save/SaveManager.hpp"
+#include "engine/save/WorldMetadata.hpp"
+#include "engine/alloc/SharedPool.hpp"
+#include "engine/core/Config.hpp"
+#include "MockWorker.hpp"
+#include "world/World.hpp"
 #include "world/terrain/TerrainEditHistory.hpp"
 #include <filesystem>
+
+namespace {
+
+auto makeSaveTestConfig() -> terrain::GameConfig {
+  terrain::GameConfig cfg{};
+  cfg.chunkSize = 16;
+  cfg.worldHeight = 256;
+  cfg.renderDistance = 2;
+  cfg.worldSeed = 0;
+  cfg.maxVertsPerChunk = 10000;
+  cfg.maxIndicesPerChunk = 20000;
+  cfg.vertexStrideFloats = 10;
+  return cfg;
+}
+
+auto makeSaveTestDims(const terrain::GameConfig& cfg) -> terrain::ChunkDimensions {
+  return {
+    cfg.chunkSize,
+    cfg.worldHeight,
+    cfg.chunkSize,
+    cfg.maxVertsPerChunk,
+    cfg.maxIndicesPerChunk,
+    cfg.vertexStrideFloats,
+  };
+}
+
+} // namespace
 
 TEST_CASE("TerrainSaveData serialization and deserialization", "[save]") {
   std::filesystem::remove_all("./test_terrain_saves");
@@ -54,4 +87,27 @@ TEST_CASE("TerrainSaveData serialization and deserialization", "[save]") {
   REQUIRE(loadedEdits2[2].timestamp == 3000);
 
   std::filesystem::remove_all("./test_terrain_saves");
+}
+
+TEST_CASE("SaveManager loads existing world metadata", "[save][manager]") {
+  auto tmpDir = std::filesystem::temp_directory_path() / "terrain_test_save_manager_meta";
+  std::filesystem::remove_all(tmpDir);
+  std::filesystem::create_directories(tmpDir / "world_slot");
+
+  auto meta = terrain::WorldMetadata::create("World Slot", "world_slot", 987654321u, 1);
+  REQUIRE(meta.write(tmpDir / "world_slot" / "world.meta"));
+
+  auto cfg = makeSaveTestConfig();
+  auto pool = terrain::SharedPool::create(4, makeSaveTestDims(cfg));
+  terrain::TestChunkWorker worker;
+  terrain::World world(*pool, cfg, worker, nullptr);
+
+  terrain::SaveManager saveManager(tmpDir.string(), "world_slot", *pool, world, nullptr);
+
+  REQUIRE(saveManager.metadata().displayName() == "World Slot");
+  REQUIRE(saveManager.metadata().displaySlug() == "world_slot");
+  REQUIRE(saveManager.metadata().seed == 987654321u);
+  REQUIRE(saveManager.metadata().gameMode == 1);
+
+  std::filesystem::remove_all(tmpDir);
 }

@@ -16,6 +16,14 @@ void WorldController::configureSaveWorld(const std::string& saveDir, const std::
                                           bool startFresh, WorkerThreadPool* ioPool) {
   std::string selectedSlot = slotId.empty() ? "default" : slotId;
 
+  {
+    std::lock_guard lock(m_completionMutex);
+    std::queue<int32_t> emptyGen;
+    std::queue<CompletedMeshJob> emptyMesh;
+    m_completedGenSlots.swap(emptyGen);
+    m_completedMeshSlots.swap(emptyMesh);
+  }
+
   m_saveManager.reset();
 
   if (m_world) {

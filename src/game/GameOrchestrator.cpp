@@ -2,6 +2,7 @@
 #include "game/ChunkWorkerImpl.hpp"
 #include "engine/core/RenderDistanceLimits.hpp"
 #include "engine/alloc/SharedPool.hpp"
+#include "engine/assets/AssetManager.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -16,6 +17,21 @@ namespace {
 static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
   return {cfg.chunkSize, cfg.worldHeight, cfg.chunkSize,
           cfg.maxVertsPerChunk, cfg.maxIndicesPerChunk, cfg.vertexStrideFloats};
+}
+
+static void waitForChunkWorkers(WorkerThreadPool* genPool, WorkerThreadPool* meshPool) {
+  if (genPool) {
+    genPool->waitIdle();
+  }
+  if (meshPool) {
+    meshPool->waitIdle();
+  }
+}
+
+static void waitForSaveWorkers(WorkerThreadPool* ioPool) {
+  if (ioPool) {
+    ioPool->waitIdle();
+  }
 }
 
 } // namespace
@@ -56,6 +72,11 @@ void GameOrchestrator::initialize(Game& game, GLFWwindow* window, const Game::Op
   int32_t savedRd = saved.renderDistance;
   game.m_config.renderDistance = savedRd;
   game.m_session.setRenderDistance(savedRd);
+
+  // Load block definitions and texture layers before constructing the renderer,
+  // otherwise the terrain texture array stays empty and all terrain fragments
+  // get discarded by the shader.
+  AssetManager::get().loadAssets();
 
   buildRuntimeStack(game);
   game.m_worldController->configureSaveWorld(game.m_saveDir, game.m_currentSaveSlug, false, game.m_ioPool.get());
@@ -108,11 +129,23 @@ void GameOrchestrator::shutdown(Game& game) {
       game.m_saveOrchestrator->onWorldClosed(game.m_worldController->saveManager());
     }
   }
+
+  // Drain background work before the terrain pipeline disappears during Game destruction.
+  waitForChunkWorkers(game.m_genPool.get(), game.m_meshPool.get());
+  waitForSaveWorkers(game.m_ioPool.get());
+  if (game.m_chunkWorker) {
+    game.m_chunkWorker.reset();
+  }
+  game.m_ioPool.reset();
+  game.m_meshPool.reset();
+  game.m_genPool.reset();
 }
 
 void GameOrchestrator::applyRenderDistance(Game& game, int32_t newRd) {
   newRd = std::clamp(newRd, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
   if (newRd == game.m_config.renderDistance) return;
+
+  waitForChunkWorkers(game.m_genPool.get(), game.m_meshPool.get());
 
   if (game.m_worldController->saveManager()) {
     game.m_saveOrchestrator->onWorldClosed(game.m_worldController->saveManager());
@@ -204,6 +237,9 @@ void GameOrchestrator::initSystems(Game& game) {
 }
 
 void GameOrchestrator::startWorld(Game& game, GameMode mode, const std::string& slotId, bool startFresh) {
+  waitForChunkWorkers(game.m_genPool.get(), game.m_meshPool.get());
+  waitForSaveWorkers(game.m_ioPool.get());
+
   std::string displayName = slotId;
   std::string slug;
   uint32_t seed = game.m_config.worldSeed;
@@ -232,6 +268,11 @@ void GameOrchestrator::startWorld(Game& game, GameMode mode, const std::string& 
   game.m_worldController->configureSaveWorld(game.m_saveDir, slug, startFresh, game.m_ioPool.get());
 
   if (auto* sm = game.m_worldController->saveManager()) {
+    if (!startFresh) {
+      seed = sm->metadata().seed;
+      game.m_config.worldSeed = seed;
+      game.m_worldGenPipeline = WorldGenPipeline(seed);
+    }
     game.m_saveOrchestrator->finalizeWorldStart(*sm, displayName, slug, seed, mode);
   }
 

@@ -15,6 +15,7 @@ struct CallbackContext {
 
 CallbackContext* g_inputContext = nullptr;
 CallbackContext g_inputContextStorage{};
+GLFWwindow* g_inputWindow = nullptr;
 
 // @see notes/imGui-window-user-pointer-conflict.md
 void onKey(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -84,10 +85,21 @@ void setupInputCallbacks(GLFWwindow* window, InputState& input) {
   g_inputContextStorage.lastY = 0.0;
   g_inputContextStorage.firstMouse = true;
   g_inputContext = &g_inputContextStorage;
+  g_inputWindow = window;
   installCallbacks(window);
 }
 
 void clearInputCallbacks() {
+  if (g_inputWindow) {
+    glfwSetKeyCallback(g_inputWindow, nullptr);
+    glfwSetMouseButtonCallback(g_inputWindow, nullptr);
+    glfwSetCursorPosCallback(g_inputWindow, nullptr);
+    glfwSetScrollCallback(g_inputWindow, nullptr);
+    glfwSetCharCallback(g_inputWindow, nullptr);
+    glfwSetWindowFocusCallback(g_inputWindow, nullptr);
+    glfwSetCursorEnterCallback(g_inputWindow, nullptr);
+    g_inputWindow = nullptr;
+  }
   g_inputContext = nullptr;
   g_inputContextStorage.input = nullptr;
   g_inputContextStorage.firstMouse = true;
