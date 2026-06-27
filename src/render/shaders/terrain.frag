@@ -34,23 +34,28 @@ in vec3 v_worldPos;
 out vec4 fragColor;
 
 int terrainLayer(int materialId) {
-  // Keep these layer indices aligned with the current atlas order in
-  // assets/blocks.json.
+  // Layer indices based on alphabetical sorting of keys in assets/blocks.json
   switch (materialId) {
-    case 0: return 0; // grass_top
-    case 1: return 2; // dirt
-    case 2: return 3; // stone
-    case 3: return 2; // sand fallback to dirt until a dedicated sand atlas exists
-    default: return 3;
+    case 0: return 8; // grass_top
+    case 1: return 4; // dirt
+    case 2: return 18; // stone
+    case 3: return 17; // sand
+    case 4: return 9; // gravel
+    case 5: return 0; // clay
+    case 6: return 2; // cracked_stone
+    default: return 18; // stone
   }
 }
 
 float terrainScale(int materialId) {
   switch (materialId) {
-    case 0: return 0.18;
-    case 1: return 0.16;
-    case 2: return 0.24;
-    case 3: return 0.14;
+    case 0: return 0.18; // grass
+    case 1: return 0.16; // dirt
+    case 2: return 0.24; // stone
+    case 3: return 0.15; // sand
+    case 4: return 0.20; // gravel
+    case 5: return 0.12; // clay
+    case 6: return 0.25; // cracked stone
     default: return 0.18;
   }
 }
@@ -65,7 +70,13 @@ vec3 terrainTint(int materialId, float tint) {
     case 2:
       return vec3(0.82, 0.82, 0.84);
     case 3:
-      return vec3(0.95, 0.87, 0.68);
+      return vec3(0.95, 0.87, 0.68); // sand
+    case 4:
+      return vec3(0.75, 0.75, 0.75); // gravel
+    case 5:
+      return vec3(0.90, 0.88, 0.86); // clay
+    case 6:
+      return vec3(0.75, 0.75, 0.78); // cracked stone
     default:
       return vec3(1.0);
   }
