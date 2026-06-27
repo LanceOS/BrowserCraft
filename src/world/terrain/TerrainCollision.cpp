@@ -270,6 +270,168 @@ static inline bool aabbOverlap(const glm::vec3& minA, const glm::vec3& maxA,
          minA.z <= maxB.z && maxA.z >= minB.z;
 }
 
+// ---------------------------------------------------------------------------
+// Kasper Fauerby's Swept Ellipsoid (Sphere) vs Triangle Collision
+// This algorithm treats the player as an ellipsoid, and transforms all math
+// into "Ellipsoid Space" (eSpace) where the player becomes a unit sphere (radius 1).
+// This drastically simplifies swept collision detection against arbitrary triangles.
+// ---------------------------------------------------------------------------
+
+// Solves the quadratic equation (at^2 + bt + c = 0) to find the earliest time of impact (t).
+// Returns true if a valid root is found between 0.0 and maxR.
+static bool getLowestRoot(float a, float b, float c, float maxR, float& root) {
+  float determinant = b * b - 4.0f * a * c;
+  if (determinant < 0.0f) return false;
+  float sqrtD = std::sqrt(determinant);
+  float r1 = (-b - sqrtD) / (2.0f * a);
+  float r2 = (-b + sqrtD) / (2.0f * a);
+
+  if (r1 > r2) std::swap(r1, r2);
+
+  if (r1 > 0.0f && r1 < maxR) {
+    root = r1;
+    return true;
+  }
+  if (r2 > 0.0f && r2 < maxR) {
+    root = r2;
+    return true;
+  }
+  return false;
+}
+
+// Uses Barycentric Coordinates to determine if a point (p) lies inside the boundaries
+// of a triangle (a, b, c). Used to verify if a sphere's collision point on the triangle's
+// plane is actually within the triangle itself.
+static bool checkPointInTriangle(const glm::vec3& p, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
+  glm::vec3 v0 = c - a;
+  glm::vec3 v1 = b - a;
+  glm::vec3 v2 = p - a;
+
+  float dot00 = glm::dot(v0, v0);
+  float dot01 = glm::dot(v0, v1);
+  float dot02 = glm::dot(v0, v2);
+  float dot11 = glm::dot(v1, v1);
+  float dot12 = glm::dot(v1, v2);
+
+  float invDenom = 1.0f / (dot00 * dot11 - dot01 * dot01);
+  float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+  float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+  return (u >= 0.0f) && (v >= 0.0f) && (u + v <= 1.0f);
+}
+
+// Core collision routine. Sweeps a unit sphere from eOrigin along eVel against a triangle.
+// Updates contact.t with the earliest time of impact [0, 1] if a collision occurs.
+void sweepSphereTriangle(const glm::vec3& eOrigin, const glm::vec3& eVel,
+                         const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3,
+                         SweepContact& contact) 
+{
+  float t0, t1;
+  bool embeddedInPlane = false;
+
+  // Calculate the triangle's surface normal
+  glm::vec3 e1 = p2 - p1;
+  glm::vec3 e2 = p3 - p1;
+  glm::vec3 normal = glm::normalize(glm::cross(e1, e2));
+
+  float planeD = -glm::dot(normal, p1);
+  float signedDistToPlane = glm::dot(eOrigin, normal) + planeD;
+  float normalDotVel = glm::dot(normal, eVel);
+
+  if (normalDotVel == 0.0f) {
+    if (std::abs(signedDistToPlane) >= 1.0f) {
+      return;
+    }
+    embeddedInPlane = true;
+    t0 = 0.0f;
+    t1 = 1.0f;
+  } else {
+    t0 = (-1.0f - signedDistToPlane) / normalDotVel;
+    t1 = ( 1.0f - signedDistToPlane) / normalDotVel;
+
+    if (t0 > t1) std::swap(t0, t1);
+
+    if (t0 > 1.0f || t1 < 0.0f) return;
+
+    if (t0 < 0.0f) t0 = 0.0f;
+    if (t1 > 1.0f) t1 = 1.0f;
+  }
+
+  // Early out: if the earliest intersection time with the plane is worse than
+  // our best known collision time, this triangle cannot be the closest impact.
+  if (t0 >= contact.t) return;
+
+  bool foundCollision = false;
+  float t = contact.t;
+  glm::vec3 collisionPoint(0.0f);
+
+  // 1. Test Plane Interior (Face Collision)
+  // Does the sphere hit the face of the triangle?
+  if (!embeddedInPlane) {
+    // Calculate the exact point on the plane where the sphere touches it
+    glm::vec3 planeIntersect = eOrigin - normal + t0 * eVel;
+    if (checkPointInTriangle(planeIntersect, p1, p2, p3)) {
+      foundCollision = true;
+      t = t0;
+      collisionPoint = planeIntersect;
+    }
+  }
+
+  // 2. Test Vertices & Edges
+  // If the sphere didn't hit the flat face of the triangle (e.g. it clipped the edge or point),
+  // we sweep the sphere against the vertices (Ray vs Sphere) and edges (Ray vs Cylinder).
+  if (!foundCollision) {
+    float velocitySq = glm::dot(eVel, eVel);
+    float a = velocitySq;
+
+    // Vertices
+    glm::vec3 pts[3] = {p1, p2, p3};
+    for (int i = 0; i < 3; ++i) {
+      glm::vec3 baseToV = eOrigin - pts[i];
+      float b = 2.0f * glm::dot(eVel, baseToV);
+      float c = glm::dot(baseToV, baseToV) - 1.0f;
+      float newT;
+      if (getLowestRoot(a, b, c, t, newT)) {
+        t = newT;
+        foundCollision = true;
+        collisionPoint = pts[i];
+      }
+    }
+
+    // Edges
+    glm::vec3 edges[3] = {p2 - p1, p3 - p2, p1 - p3};
+    for (int i = 0; i < 3; ++i) {
+      glm::vec3 edge = edges[i];
+      glm::vec3 baseToV = eOrigin - pts[i];
+      
+      float edgeSqLen = glm::dot(edge, edge);
+      float edgeDotVel = glm::dot(edge, eVel);
+      float edgeDotBaseToV = glm::dot(edge, baseToV);
+      
+      float aEdge = edgeSqLen * velocitySq - edgeDotVel * edgeDotVel;
+      float bEdge = edgeSqLen * (2.0f * glm::dot(eVel, baseToV)) - 2.0f * edgeDotVel * edgeDotBaseToV;
+      float cEdge = edgeSqLen * (glm::dot(baseToV, baseToV) - 1.0f) - edgeDotBaseToV * edgeDotBaseToV;
+
+      float newT;
+      if (getLowestRoot(aEdge, bEdge, cEdge, t, newT)) {
+        float f = (edgeDotVel * newT - edgeDotBaseToV) / edgeSqLen;
+        if (f >= 0.0f && f <= 1.0f) {
+          t = newT;
+          foundCollision = true;
+          collisionPoint = pts[i] + f * edge;
+        }
+      }
+    }
+  }
+
+  if (foundCollision) {
+    contact.t = t;
+    contact.hitPoint = collisionPoint;
+    contact.hit = true;
+    contact.normal = glm::normalize(eOrigin + eVel * t - collisionPoint);
+  }
+}
+
 // ============================================================================
 // TerrainChunkCollision Method Implementations
 // ============================================================================

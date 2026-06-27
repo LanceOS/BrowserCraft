@@ -25,7 +25,6 @@ public:
 private:
   auto getGroundHeightFloat(float worldX, float worldZ, float startY) -> float;
   auto highestGroundInFootprintFloat(const glm::vec3& probePos, float startY) -> float;
-  bool resolveCollisions(glm::vec3& position, glm::vec3& velocity, bool& outOnGround);
 
   const EntityCollisions& m_collisions;
   World& m_world;

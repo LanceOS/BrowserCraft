@@ -23,6 +23,20 @@ bool collideAABBTriangle(const glm::vec3& boxCenter, const glm::vec3& boxHalfSiz
                          const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2,
                          CollisionContact& contact);
 
+struct SweepContact {
+  bool hit = false;
+  float t = 1.0f;           // Time of impact [0, 1]
+  glm::vec3 hitPoint{0.0f}; // The point on the triangle we hit
+  glm::vec3 normal{0.0f};   // The surface normal at the hit point
+};
+
+// Sweep an ellipsoid (defined by eRadius) against a triangle from eOrigin along eVel.
+// All inputs and outputs except eRadius should be in ellipsoid space (eSpace),
+// meaning world space coordinates divided by eRadius.
+void sweepSphereTriangle(const glm::vec3& eOrigin, const glm::vec3& eVel,
+                         const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3,
+                         SweepContact& contact);
+
 struct TerrainBVHNode {
   glm::vec3 boundsMin;
   glm::vec3 boundsMax;
