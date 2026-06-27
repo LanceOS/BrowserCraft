@@ -74,7 +74,11 @@ struct TerrainMaterialContext {
   }
 
   if (sandWeight > 0.45f) {
-    result.primary = MaterialId::Sand;
+    if (ctx.surfaceHeight < ctx.seaLevel - 2.0f && ctx.biomeId == biome::BiomeId::Ocean) {
+        result.primary = MaterialId::Clay;
+    } else {
+        result.primary = MaterialId::Sand;
+    }
     result.secondary = MaterialId::Stone;
     const float sandDepthBlend =
         std::clamp(depth / std::max(1.0f, surfaceDepth * 1.5f), 0.0f, 1.0f);
@@ -88,6 +92,14 @@ struct TerrainMaterialContext {
     result.secondary = (slopeToStone > 0.40f) ? MaterialId::Stone : MaterialId::Dirt;
     result.blend = std::clamp(std::max(slopeToStone, shallowDepth * 0.35f), 0.0f, 1.0f);
     result.tint = grassTint;
+    
+    // Mountain peaks or steep slopes might use gravel/cracked stone
+    if (ctx.biomeId == biome::BiomeId::Mountains && slopeToStone > 0.6f) {
+        result.primary = MaterialId::Gravel;
+        result.secondary = MaterialId::CrackedStone;
+        result.blend = biome::smoothEdge(slope, 0.65f, 0.85f);
+    }
+    
     return result;
   }
 
@@ -100,8 +112,8 @@ struct TerrainMaterialContext {
   }
 
   result.primary = MaterialId::Stone;
-  result.secondary = MaterialId::Stone;
-  result.blend = 0.0f;
+  result.secondary = MaterialId::CrackedStone;
+  result.blend = biome::smoothEdge(slope, 0.6f, 0.8f);
   result.tint = 0.0f;
   return result;
 }
