@@ -6,7 +6,10 @@
 #include <memory>
 
 #include "SimplexNoise.hpp"
-#include "MountainGenerator.hpp"
+#include "biomes/MountainGenerator.hpp"
+#include "biomes/PlainsGenerator.hpp"
+#include "biomes/RiverGenerator.hpp"
+#include "biomes/LakeGenerator.hpp"
 #include "content/biomes/BiomeFactory.hpp"
 #include "content/biomes/BiomeSampler.hpp"
 #include "world/terrain/TerrainMaterial.hpp"
@@ -38,6 +41,14 @@ struct WorldGenerationConfig {
   /// Mountain amplification — extra high-frequency noise in cold regions.
   float mountainScale = 0.001f;
   float mountainAmplitude = 10.0f;
+
+  /// River carving (ridged noise)
+  float riverScale = 0.001f;
+  float riverDepth = 8.0f;
+
+  /// Lake basins
+  float lakeScale = 0.003f;
+  float lakeDepth = 12.0f;
 
   /// Sea level (for filling water).
   int32_t seaLevel = 64;
@@ -81,10 +92,11 @@ public:
   explicit TerrainSampler(uint32_t seed, const WorldGenerationConfig& config = {})
     : m_ownedSampler(std::make_unique<biome::BiomeSampler>(seed)),
       m_climateSource(m_ownedSampler.get()),
-      m_continentalNoise(seed ^ 0x1a2b3cu),
-      m_detailNoise(seed ^ 0x4d5e6fu),
       m_densityNoise(seed),
+      m_plainsGenerator(seed),
       m_mountainGenerator(seed),
+      m_riverGenerator(seed),
+      m_lakeGenerator(seed),
       m_config(config)
   {}
 
@@ -94,10 +106,11 @@ public:
                           const WorldGenerationConfig& config = {})
     : m_ownedSampler(nullptr),
       m_climateSource(&climateSource),
-      m_continentalNoise(seed ^ 0x1a2b3cu),
-      m_detailNoise(seed ^ 0x4d5e6fu),
       m_densityNoise(seed),
+      m_plainsGenerator(seed),
       m_mountainGenerator(seed),
+      m_riverGenerator(seed),
+      m_lakeGenerator(seed),
       m_config(config)
   {}
 
@@ -123,10 +136,11 @@ public:
 private:
   std::unique_ptr<biome::BiomeSampler> m_ownedSampler;
   biome::IClimateSource* m_climateSource;
-  SimplexNoise m_continentalNoise;
-  SimplexNoise m_detailNoise;
   SimplexNoise m_densityNoise;
+  PlainsGenerator m_plainsGenerator;
   MountainGenerator m_mountainGenerator;
+  RiverGenerator m_riverGenerator;
+  LakeGenerator m_lakeGenerator;
   WorldGenerationConfig m_config;
 };
 
@@ -135,33 +149,25 @@ private:
 inline auto TerrainSampler::sampleTerrain(float worldX, float worldZ) const -> TerrainSample {
   const auto& cfg = m_config;
 
-  float continental = m_continentalNoise.fractalNoise2D(
-      worldX * cfg.continentalScale,
-      worldZ * cfg.continentalScale,
-      3,
-      2.0f,
-      0.5f);
-
-  float detail = m_detailNoise.fractalNoise2D(
-      worldX * cfg.detailScale,
-      worldZ * cfg.detailScale,
-      2,
-      2.0f,
-      0.5f);
+  float baseTerrainHeight = m_plainsGenerator.sample(worldX, worldZ, cfg);
 
   auto climate = m_climateSource->sampleClimate(worldX, worldZ);
   auto climateEval = biome::BiomeFactory::evaluate(climate);
   const auto* activeBiome = climateEval.dominantBiome;
 
   float mountainExtra = m_mountainGenerator.sample(worldX, worldZ, climateEval.mountainWeight, cfg);
+  
+  float riverCarve = m_riverGenerator.sample(worldX, worldZ, cfg);
+  float lakeCarve = m_lakeGenerator.sample(worldX, worldZ, cfg);
 
   TerrainSample sample;
   sample.surfaceHeight =
       cfg.baseHeight
-      + continental * cfg.continentalAmplitude
-      + detail * cfg.detailAmplitude
+      + baseTerrainHeight
       + climateEval.blendedHeightBias
-      + mountainExtra;
+      + mountainExtra
+      + riverCarve
+      + lakeCarve;
   sample.surfaceY = static_cast<int32_t>(sample.surfaceHeight);
   sample.biome = activeBiome;
   sample.biomeId = activeBiome ? activeBiome->id() : biome::BiomeId::Plains;

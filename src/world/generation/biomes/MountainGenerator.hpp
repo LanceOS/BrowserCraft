@@ -1,6 +1,6 @@
 #pragma once
 
-#include "SimplexNoise.hpp"
+#include "../SimplexNoise.hpp"
 
 namespace terrain {
 

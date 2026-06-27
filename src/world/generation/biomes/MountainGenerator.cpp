@@ -1,5 +1,5 @@
 #include "MountainGenerator.hpp"
-#include "TerrainSampling.hpp"
+#include "../TerrainSampling.hpp"
 
 namespace terrain {
 
