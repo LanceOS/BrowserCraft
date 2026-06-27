@@ -160,6 +160,7 @@ add_library(terrain_engine STATIC
   src/engine/save/SettingsRepository.cpp
   src/engine/save/SaveOrchestrator.cpp
   src/world/generation/SimplexNoise.cpp
+  src/world/generation/MountainGenerator.cpp
   src/world/generation/WorldGenPipeline.cpp
   src/engine/workers/mesher/SmoothTerrainMesher.cpp
   src/world/mesh/SurfaceNetsMesher.cpp

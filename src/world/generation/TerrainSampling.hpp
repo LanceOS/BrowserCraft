@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "SimplexNoise.hpp"
+#include "MountainGenerator.hpp"
 #include "content/biomes/BiomeFactory.hpp"
 #include "content/biomes/BiomeSampler.hpp"
 #include "world/terrain/TerrainMaterial.hpp"
@@ -83,6 +84,7 @@ public:
       m_continentalNoise(seed ^ 0x1a2b3cu),
       m_detailNoise(seed ^ 0x4d5e6fu),
       m_densityNoise(seed),
+      m_mountainGenerator(seed),
       m_config(config)
   {}
 
@@ -95,6 +97,7 @@ public:
       m_continentalNoise(seed ^ 0x1a2b3cu),
       m_detailNoise(seed ^ 0x4d5e6fu),
       m_densityNoise(seed),
+      m_mountainGenerator(seed),
       m_config(config)
   {}
 
@@ -118,54 +121,28 @@ public:
   [[nodiscard]] auto config() const -> const WorldGenerationConfig& { return m_config; }
 
 private:
-  [[nodiscard]] static auto fractalNoise2D(const SimplexNoise& noise,
-                                           float x, float z,
-                                           int octaves,
-                                           float lacunarity,
-                                           float persistence) -> float;
-
   std::unique_ptr<biome::BiomeSampler> m_ownedSampler;
   biome::IClimateSource* m_climateSource;
   SimplexNoise m_continentalNoise;
   SimplexNoise m_detailNoise;
   SimplexNoise m_densityNoise;
+  MountainGenerator m_mountainGenerator;
   WorldGenerationConfig m_config;
 };
 
-inline auto TerrainSampler::fractalNoise2D(const SimplexNoise& noise,
-                                           float x, float z,
-                                           int octaves,
-                                           float lacunarity,
-                                           float persistence) -> float {
-  float value = 0.0f;
-  float amplitude = 1.0f;
-  float frequency = 1.0f;
-  float maxAmplitude = 0.0f;
-
-  for (int i = 0; i < octaves; ++i) {
-    value += amplitude * noise.noise3D(x * frequency, 0.0f, z * frequency);
-    maxAmplitude += amplitude;
-    frequency *= lacunarity;
-    amplitude *= persistence;
-  }
-
-  // Normalise to roughly [-1, 1]
-  return maxAmplitude > 0.0f ? value / maxAmplitude : 0.0f;
-}
+// removed fractalNoise2D
 
 inline auto TerrainSampler::sampleTerrain(float worldX, float worldZ) const -> TerrainSample {
   const auto& cfg = m_config;
 
-  float continental = fractalNoise2D(
-      m_continentalNoise,
+  float continental = m_continentalNoise.fractalNoise2D(
       worldX * cfg.continentalScale,
       worldZ * cfg.continentalScale,
       3,
       2.0f,
       0.5f);
 
-  float detail = fractalNoise2D(
-      m_detailNoise,
+  float detail = m_detailNoise.fractalNoise2D(
       worldX * cfg.detailScale,
       worldZ * cfg.detailScale,
       2,
@@ -176,14 +153,7 @@ inline auto TerrainSampler::sampleTerrain(float worldX, float worldZ) const -> T
   auto climateEval = biome::BiomeFactory::evaluate(climate);
   const auto* activeBiome = climateEval.dominantBiome;
 
-  float mountainExtra = climateEval.mountainWeight * fractalNoise2D(
-      m_continentalNoise,
-      worldX * cfg.mountainScale,
-      worldZ * cfg.mountainScale,
-      3,
-      2.5f,
-      0.6f) * cfg.mountainAmplitude;
-  if (mountainExtra < 0.0f) mountainExtra *= -0.6f;
+  float mountainExtra = m_mountainGenerator.sample(worldX, worldZ, climateEval.mountainWeight, cfg);
 
   TerrainSample sample;
   sample.surfaceHeight =
