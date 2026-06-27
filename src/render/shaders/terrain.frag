@@ -50,14 +50,14 @@ int terrainLayer(int materialId) {
 
 float terrainScale(int materialId) {
   switch (materialId) {
-    case 0: return 0.18; // grass
-    case 1: return 0.16; // dirt
-    case 2: return 0.24; // stone
-    case 3: return 0.15; // sand
-    case 4: return 0.20; // gravel
-    case 5: return 0.12; // clay
-    case 6: return 0.25; // cracked stone
-    default: return 0.18;
+    case 0: return 2.0; // grass
+    case 1: return 2.0; // dirt
+    case 2: return 2.0; // stone
+    case 3: return 2.0; // sand
+    case 4: return 2.0; // gravel
+    case 5: return 2.0; // clay
+    case 6: return 2.0; // cracked stone
+    default: return 2.0;
   }
 }
 
