@@ -32,6 +32,60 @@ auto sanitizeSlotId(std::string slotId) -> std::string {
 
   return slotId;
 }
+auto setupImGuiStyle() -> void {
+  ImGuiStyle& style = ImGui::GetStyle();
+  style.WindowRounding = 8.0f;
+  style.ChildRounding = 6.0f;
+  style.FrameRounding = 6.0f;
+  style.PopupRounding = 6.0f;
+  style.ScrollbarRounding = 6.0f;
+  style.GrabRounding = 6.0f;
+  style.WindowPadding = ImVec2(16.0f, 16.0f);
+  style.FramePadding = ImVec2(12.0f, 6.0f);
+  style.ItemSpacing = ImVec2(12.0f, 8.0f);
+  style.ItemInnerSpacing = ImVec2(8.0f, 6.0f);
+
+  ImVec4* colors = style.Colors;
+  colors[ImGuiCol_Text]                   = ImVec4(0.95f, 0.96f, 0.98f, 1.00f);
+  colors[ImGuiCol_TextDisabled]           = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+  colors[ImGuiCol_WindowBg]               = ImVec4(0.10f, 0.12f, 0.14f, 0.85f);
+  colors[ImGuiCol_ChildBg]                = ImVec4(0.13f, 0.15f, 0.18f, 0.90f);
+  colors[ImGuiCol_PopupBg]                = ImVec4(0.10f, 0.12f, 0.14f, 0.95f);
+  colors[ImGuiCol_Border]                 = ImVec4(0.20f, 0.25f, 0.30f, 1.00f);
+  colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+  colors[ImGuiCol_FrameBg]                = ImVec4(0.20f, 0.23f, 0.27f, 1.00f);
+  colors[ImGuiCol_FrameBgHovered]         = ImVec4(0.28f, 0.32f, 0.38f, 1.00f);
+  colors[ImGuiCol_FrameBgActive]          = ImVec4(0.35f, 0.40f, 0.45f, 1.00f);
+  colors[ImGuiCol_TitleBg]                = ImVec4(0.13f, 0.15f, 0.18f, 1.00f);
+  colors[ImGuiCol_TitleBgActive]          = ImVec4(0.13f, 0.15f, 0.18f, 1.00f);
+  colors[ImGuiCol_TitleBgCollapsed]       = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
+  colors[ImGuiCol_MenuBarBg]              = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+  colors[ImGuiCol_ScrollbarBg]            = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
+  colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
+  colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
+  colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
+  colors[ImGuiCol_CheckMark]              = ImVec4(0.30f, 0.70f, 0.90f, 1.00f);
+  colors[ImGuiCol_SliderGrab]             = ImVec4(0.30f, 0.70f, 0.90f, 1.00f);
+  colors[ImGuiCol_SliderGrabActive]       = ImVec4(0.35f, 0.80f, 0.95f, 1.00f);
+  colors[ImGuiCol_Button]                 = ImVec4(0.25f, 0.30f, 0.35f, 1.00f);
+  colors[ImGuiCol_ButtonHovered]          = ImVec4(0.35f, 0.40f, 0.45f, 1.00f);
+  colors[ImGuiCol_ButtonActive]           = ImVec4(0.20f, 0.25f, 0.30f, 1.00f);
+  colors[ImGuiCol_Header]                 = ImVec4(0.20f, 0.25f, 0.30f, 1.00f);
+  colors[ImGuiCol_HeaderHovered]          = ImVec4(0.28f, 0.32f, 0.38f, 1.00f);
+  colors[ImGuiCol_HeaderActive]           = ImVec4(0.35f, 0.40f, 0.45f, 1.00f);
+  colors[ImGuiCol_Separator]              = ImVec4(0.25f, 0.30f, 0.35f, 1.00f);
+  colors[ImGuiCol_SeparatorHovered]       = ImVec4(0.35f, 0.40f, 0.45f, 1.00f);
+  colors[ImGuiCol_SeparatorActive]        = ImVec4(0.45f, 0.50f, 0.55f, 1.00f);
+  colors[ImGuiCol_ResizeGrip]             = ImVec4(0.26f, 0.59f, 0.98f, 0.20f);
+  colors[ImGuiCol_ResizeGripHovered]      = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+  colors[ImGuiCol_ResizeGripActive]       = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+  colors[ImGuiCol_Tab]                    = ImVec4(0.20f, 0.25f, 0.30f, 1.00f);
+  colors[ImGuiCol_TabHovered]             = ImVec4(0.35f, 0.40f, 0.45f, 1.00f);
+  colors[ImGuiCol_TabActive]              = ImVec4(0.28f, 0.32f, 0.38f, 1.00f);
+  colors[ImGuiCol_TabUnfocused]           = ImVec4(0.15f, 0.18f, 0.22f, 1.00f);
+  colors[ImGuiCol_TabUnfocusedActive]     = ImVec4(0.20f, 0.25f, 0.30f, 1.00f);
+  colors[ImGuiCol_ModalWindowDimBg]       = ImVec4(0.05f, 0.05f, 0.05f, 0.70f);
+}
 } // namespace
 
 namespace terrain {
@@ -45,6 +99,7 @@ UIManager::UIManager(GLFWwindow* window, Callbacks callbacks)
   io.IniFilename = nullptr; // don't save layout
   std::strncpy(m_slotId.data(), "default", m_slotId.size() - 1);
   m_slotId[m_slotId.size() - 1] = '\0';
+  setupImGuiStyle();
 
   ImGui_ImplGlfw_InitForOpenGL(window, false);
   ImGui_ImplOpenGL3_Init("#version 460");
@@ -97,7 +152,10 @@ void UIManager::endFrame() {
 
 void UIManager::showMainMenu() { m_state = UIState::MainMenu; }
 void UIManager::showPauseMenu() { m_state = UIState::Paused; }
-void UIManager::showOptions() { m_state = UIState::Options; }
+void UIManager::showOptions() {
+  m_previousState = m_state;
+  m_state = UIState::Options;
+}
 void UIManager::clearUI() {
   m_state = UIState::InGame;
   m_inventoryOpen = false;
@@ -139,24 +197,47 @@ void UIManager::renderMainMenu() {
 
   float winW = ImGui::GetWindowWidth();
   float winH = ImGui::GetWindowHeight();
-  ImGui::SetCursorPos(ImVec2(winW * 0.5f - 200.0f, winH * 0.35f));
+  
+  float panelW = 400.0f;
+  float panelH = 340.0f;
+  ImGui::SetCursorPos(ImVec2((winW - panelW) * 0.5f, (winH - panelH) * 0.5f));
 
-  ImGui::BeginChild("MenuPanel", ImVec2(400, 300), ImGuiChildFlags_Border);
-  ImGui::SetCursorPosX(120);
+  ImGui::BeginChild("MenuPanel", ImVec2(panelW, panelH), ImGuiChildFlags_Border);
+  
+  ImGui::Spacing();
+  ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);
+  float titleW = ImGui::CalcTextSize("TERRAIN ENGINE").x;
+  ImGui::SetCursorPosX((panelW - titleW) * 0.5f);
   ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "TERRAIN ENGINE");
-
+  ImGui::PopFont();
+  ImGui::Separator();
   ImGui::Spacing(); ImGui::Spacing();
 
-  ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Start Game", ImVec2(200, 40))) {
-    m_state = UIState::GameModeMenu;
+  float btnW = 240.0f;
+  float btnH = 45.0f;
+  float btnStartX = (panelW - btnW) * 0.5f;
+
+  if (m_sessionActive) {
+    ImGui::SetCursorPosX(btnStartX);
+    if (ImGui::Button("Resume", ImVec2(btnW, btnH))) {
+      handleAction("resume-game");
+    }
+  } else {
+    ImGui::SetCursorPosX(btnStartX);
+    if (ImGui::Button("Start Game", ImVec2(btnW, btnH))) {
+      m_state = UIState::GameModeMenu;
+    }
   }
-  ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Options", ImVec2(200, 40))) {
+  
+  ImGui::Spacing();
+  ImGui::SetCursorPosX(btnStartX);
+  if (ImGui::Button("Options", ImVec2(btnW, btnH))) {
     showOptions();
   }
-  ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Quit", ImVec2(200, 40))) {
+  
+  ImGui::Spacing();
+  ImGui::SetCursorPosX(btnStartX);
+  if (ImGui::Button("Quit", ImVec2(btnW, btnH))) {
     if (m_callbacks.onQuit) m_callbacks.onQuit();
   }
   ImGui::EndChild();
@@ -184,16 +265,17 @@ void UIManager::renderGameModeMenu() {
   // ========== LEFT: World List ==========
   ImGui::SetCursorPos(ImVec2(leftX, startY));
   ImGui::BeginChild("WorldListPanel", ImVec2(leftPanelW, panelH), ImGuiChildFlags_Border);
-  ImGui::SetCursorPosX(leftPanelW * 0.5f - 40);
+  
+  ImGui::Spacing();
+  float textW = ImGui::CalcTextSize("Saved Worlds").x;
+  ImGui::SetCursorPosX((leftPanelW - textW) * 0.5f);
   ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Saved Worlds");
   ImGui::Separator();
 
   if (m_worldEntries.empty()) {
     ImGui::Spacing();
-    ImGui::SetCursorPosX(10);
-    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No saved worlds found.");
-    ImGui::SetCursorPosX(10);
-    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Create a new world to get started.");
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  No saved worlds found.");
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  Create a new world to get started.");
   } else {
     ImGui::BeginChild("WorldListScroll", ImVec2(0, panelH - 60), ImGuiChildFlags_None);
     for (size_t i = 0; i < m_worldEntries.size(); ++i) {
@@ -203,29 +285,66 @@ void UIManager::renderGameModeMenu() {
       ImGui::Separator();
 
       // World name
-      ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "%s", entry.name.c_str());
+      ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, 1.0f), "  %s", entry.name.c_str());
 
       // Game mode + date on second line
       const char* modeStr = (entry.gameMode == 1) ? "Creative" : "Survival";
-      ImGui::SameLine(0, 4);
-      ImGui::TextDisabled("[%s]", modeStr);
+      ImGui::TextDisabled("  [%s]", modeStr);
 
       std::string dateStr = formatTimestamp(entry.lastPlayedTimestamp);
-      ImGui::SameLine(ImGui::GetWindowWidth() - 120);
+      ImGui::SameLine(ImGui::GetWindowWidth() - 140);
       ImGui::TextDisabled("%s", dateStr.c_str());
 
-      // Load button
-      float btnW = leftPanelW - 30;
-      if (ImGui::Button("Load", ImVec2(btnW, 28))) {
+      // Buttons
+      ImGui::Spacing();
+      ImGui::SetCursorPosX(16);
+      float loadBtnW = leftPanelW - 100;
+      if (ImGui::Button("Load", ImVec2(loadBtnW, 30))) {
         if (m_callbacks.onStartWorld) {
           GameMode gm = (entry.gameMode == 1) ? GameMode::Creative : GameMode::Survival;
           m_callbacks.onStartWorld(gm, entry.slug, false);
         }
       }
+      ImGui::SameLine();
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+      ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
+      if (ImGui::Button("Delete", ImVec2(60, 30))) {
+        m_worldToDelete = entry.slug;
+        ImGui::OpenPopup("Delete World?");
+      }
+      ImGui::PopStyleColor(3);
 
       ImGui::PopID();
+      ImGui::Spacing();
     }
     ImGui::EndChild();
+  }
+
+  // Delete Confirmation Modal
+  ImGui::SetNextWindowPos(ImVec2(winW * 0.5f, winH * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  if (ImGui::BeginPopupModal("Delete World?", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+    ImGui::Text("Are you sure you want to delete this world?\nThis action cannot be undone.");
+    ImGui::Separator();
+    ImGui::Spacing();
+    
+    if (ImGui::Button("Cancel", ImVec2(120, 30))) {
+      m_worldToDelete.clear();
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
+    if (ImGui::Button("Delete", ImVec2(120, 30))) {
+      if (m_callbacks.onDeleteWorld && !m_worldToDelete.empty()) {
+        m_callbacks.onDeleteWorld(m_worldToDelete);
+      }
+      m_worldToDelete.clear();
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::PopStyleColor(3);
+    ImGui::EndPopup();
   }
 
   ImGui::EndChild();
@@ -233,7 +352,10 @@ void UIManager::renderGameModeMenu() {
   // ========== RIGHT: Create/Load Panel ==========
   ImGui::SetCursorPos(ImVec2(rightX, startY));
   ImGui::BeginChild("CreatePanel", ImVec2(rightPanelW, panelH), ImGuiChildFlags_Border);
-  ImGui::SetCursorPosX(rightPanelW * 0.5f - 50);
+  
+  ImGui::Spacing();
+  float createTextW = ImGui::CalcTextSize("Create World").x;
+  ImGui::SetCursorPosX((rightPanelW - createTextW) * 0.5f);
   ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Create World");
   ImGui::Separator();
 
@@ -336,27 +458,43 @@ void UIManager::renderPauseMenu() {
   ImGui::SetNextWindowPos(ImVec2(0, 0));
   ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
   ImGui::Begin("PauseMenu", nullptr,
-    ImGuiWindowFlags_NoDecoration);
+    ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
+    ImGuiWindowFlags_NoSavedSettings);
 
   float winW = ImGui::GetWindowWidth();
   float winH = ImGui::GetWindowHeight();
-  ImGui::SetCursorPos(ImVec2(winW * 0.5f - 200.0f, winH * 0.35f));
+  
+  float panelW = 400.0f;
+  float panelH = 340.0f;
+  ImGui::SetCursorPos(ImVec2((winW - panelW) * 0.5f, (winH - panelH) * 0.5f));
 
-  ImGui::BeginChild("PausePanel", ImVec2(400, 250), ImGuiChildFlags_Border);
-  ImGui::SetCursorPosX(150);
-  ImGui::Text("Paused");
+  ImGui::BeginChild("PausePanel", ImVec2(panelW, panelH), ImGuiChildFlags_Border);
+  
   ImGui::Spacing();
+  float titleW = ImGui::CalcTextSize("Paused").x;
+  ImGui::SetCursorPosX((panelW - titleW) * 0.5f);
+  ImGui::Text("Paused");
+  ImGui::Separator();
+  ImGui::Spacing(); ImGui::Spacing();
 
-  ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Resume", ImVec2(200, 40))) {
+  float btnW = 240.0f;
+  float btnH = 45.0f;
+  float btnStartX = (panelW - btnW) * 0.5f;
+
+  ImGui::SetCursorPosX(btnStartX);
+  if (ImGui::Button("Resume", ImVec2(btnW, btnH))) {
     handleAction("resume-game");
   }
-  ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Options", ImVec2(200, 40))) {
+  
+  ImGui::Spacing();
+  ImGui::SetCursorPosX(btnStartX);
+  if (ImGui::Button("Options", ImVec2(btnW, btnH))) {
     showOptions();
   }
-  ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Quit to Title", ImVec2(200, 40))) {
+  
+  ImGui::Spacing();
+  ImGui::SetCursorPosX(btnStartX);
+  if (ImGui::Button("Quit to Title", ImVec2(btnW, btnH))) {
     handleAction("quit-to-title");
   }
   ImGui::EndChild();
@@ -379,28 +517,38 @@ void UIManager::renderOptionsMenu() {
   ImGui::SetNextWindowPos(ImVec2(0, 0));
   ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
   ImGui::Begin("OptionsMenu", nullptr,
-    ImGuiWindowFlags_NoDecoration);
+    ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground |
+    ImGuiWindowFlags_NoSavedSettings);
 
   float winW = ImGui::GetWindowWidth();
   float winH = ImGui::GetWindowHeight();
-  ImGui::SetCursorPos(ImVec2(winW * 0.5f - 200.0f, winH * 0.3f));
+  
+  float panelW = 400.0f;
+  float panelH = 280.0f;
+  ImGui::SetCursorPos(ImVec2((winW - panelW) * 0.5f, (winH - panelH) * 0.5f));
 
-  ImGui::BeginChild("OptionsPanel", ImVec2(400, 280), ImGuiChildFlags_Border);
-  ImGui::SetCursorPosX(150);
+  ImGui::BeginChild("OptionsPanel", ImVec2(panelW, panelH), ImGuiChildFlags_Border);
+  
+  ImGui::Spacing();
+  float titleW = ImGui::CalcTextSize("Options").x;
+  ImGui::SetCursorPosX((panelW - titleW) * 0.5f);
   ImGui::Text("Options");
-  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing(); ImGui::Spacing();
 
-  ImGui::SetCursorPosX(50);
+  ImGui::SetCursorPosX(40);
   ImGui::Text("Render Distance: %d", m_renderDistance);
-  ImGui::SetCursorPosX(50);
+  ImGui::SetCursorPosX(40);
+  ImGui::PushItemWidth(320);
   ImGui::SliderInt("##rd", &m_renderDistance, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
+  ImGui::PopItemWidth();
 
-  ImGui::Spacing();
-  ImGui::SetCursorPosX(100);
-  if (ImGui::Button("Save", ImVec2(200, 40))) {
+  ImGui::Spacing(); ImGui::Spacing();
+  float btnW = 200.0f;
+  ImGui::SetCursorPosX((panelW - btnW) * 0.5f);
+  if (ImGui::Button("Back", ImVec2(btnW, 40))) {
     if (m_callbacks.onRenderDistanceChanged) m_callbacks.onRenderDistanceChanged();
-    if (m_state == UIState::Paused) showPauseMenu();
-    else showMainMenu();
+    m_state = m_previousState;
   }
   ImGui::EndChild();
 
