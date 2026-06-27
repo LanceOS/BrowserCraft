@@ -59,7 +59,8 @@ private:
   GLFWwindow* m_window;
   const GameConfig& m_config;
 
-  ShaderProgram m_terrainShader;
+  ShaderProgram m_terrainOpaqueShader;
+  ShaderProgram m_terrainTransparentShader;
   ShaderProgram m_skyShader;
   UniformBuffer m_cameraUbo;
   UniformBuffer m_timeUbo;

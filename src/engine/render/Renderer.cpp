@@ -44,6 +44,24 @@ auto loadShaderSourceFile(const std::string& relativePath) -> std::string {
   throw std::runtime_error("Failed to locate shader file: " + relativePath);
 }
 
+static auto compileOpaqueTerrainShader() -> terrain::ShaderProgram {
+  std::string vert = loadShaderSourceFile("src/render/shaders/terrain.vert");
+  std::string frag = loadShaderSourceFile("src/render/shaders/terrain.frag");
+  size_t pos = frag.find('\n');
+  if (pos != std::string::npos) {
+    frag.insert(pos + 1, "#define OPAQUE_PASS\n");
+  } else {
+    frag = "#define OPAQUE_PASS\n" + frag;
+  }
+  return terrain::ShaderProgram(vert, frag);
+}
+
+static auto compileTransparentTerrainShader() -> terrain::ShaderProgram {
+  std::string vert = loadShaderSourceFile("src/render/shaders/terrain.vert");
+  std::string frag = loadShaderSourceFile("src/render/shaders/terrain.frag");
+  return terrain::ShaderProgram(vert, frag);
+}
+
 } // namespace
 
 namespace terrain {
@@ -51,8 +69,8 @@ namespace terrain {
 Renderer::Renderer(GLFWwindow* window, const GameConfig& config,
                    ChunkMeshAllocator& meshAllocator)
   : m_window(window), m_config(config),
-    m_terrainShader(loadShaderSourceFile("src/render/shaders/terrain.vert"),
-                    loadShaderSourceFile("src/render/shaders/terrain.frag")),
+    m_terrainOpaqueShader(compileOpaqueTerrainShader()),
+    m_terrainTransparentShader(compileTransparentTerrainShader()),
     m_skyShader(shaders::skyVertex, shaders::skyFragment),
     m_cameraUbo(0, CAMERA_BLOCK_FLOATS * sizeof(float)),
     m_timeUbo(2, TIME_BLOCK_FLOATS * sizeof(float)),
@@ -63,10 +81,12 @@ Renderer::Renderer(GLFWwindow* window, const GameConfig& config,
         return std::make_unique<IndirectBatcher>(poolCap);
     }()),
     m_chunkSyncer(m_meshAllocator, *m_indirectBatcher, config),
-    m_drawDispatcher(m_terrainShader, m_skyShader, m_textures, *m_indirectBatcher, m_masterVao, m_skyVao)
+    m_drawDispatcher(m_terrainOpaqueShader, m_terrainTransparentShader, m_skyShader, m_textures, *m_indirectBatcher, m_masterVao, m_skyVao)
 {
-  m_terrainShader.bindUniformBlock("CameraBlock", 0);
-  m_terrainShader.bindUniformBlock("TimeBlock", 2);
+  m_terrainOpaqueShader.bindUniformBlock("CameraBlock", 0);
+  m_terrainOpaqueShader.bindUniformBlock("TimeBlock", 2);
+  m_terrainTransparentShader.bindUniformBlock("CameraBlock", 0);
+  m_terrainTransparentShader.bindUniformBlock("TimeBlock", 2);
   m_skyShader.bindUniformBlock("CameraBlock", 0);
   m_skyShader.bindUniformBlock("TimeBlock", 2);
 
