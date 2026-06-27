@@ -254,8 +254,11 @@ void UIManager::renderGameModeMenu() {
   float winW = ImGui::GetWindowWidth();
   float winH = ImGui::GetWindowHeight();
 
-  float panelW = 480.0f;
-  float panelH = winH * 0.7f;
+  // Dynamically calculate height to fit worlds, up to 90% of screen height
+  float requiredListH = m_worldEntries.empty() ? 100.0f : (m_worldEntries.size() * 100.0f);
+  float panelW = 540.0f;
+  float panelH = std::min(winH * 0.9f, 200.0f + requiredListH);
+  
   ImGui::SetCursorPos(ImVec2((winW - panelW) * 0.5f, (winH - panelH) * 0.5f));
 
   ImGui::BeginChild("WorldListPanel", ImVec2(panelW, panelH), ImGuiChildFlags_Border);
@@ -350,7 +353,6 @@ void UIManager::renderGameModeMenu() {
   }
 
   // Bottom action buttons
-  ImGui::SetCursorPosY(panelH - 45);
   ImGui::Separator();
   ImGui::Spacing();
   ImGui::SetCursorPosX((panelW - 100) * 0.5f);
