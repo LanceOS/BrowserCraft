@@ -55,20 +55,22 @@ struct MovementSolver {
   }
 
   auto highestGroundInFootprintFloat(const glm::vec3& probePos, float startY) -> float {
-    const int32_t minGX = static_cast<int32_t>(std::floor(probePos.x + body.aabbMin.x));
-    const int32_t maxGX = static_cast<int32_t>(std::floor(probePos.x + body.aabbMax.x));
-    const int32_t minGZ = static_cast<int32_t>(std::floor(probePos.z + body.aabbMin.z));
-    const int32_t maxGZ = static_cast<int32_t>(std::floor(probePos.z + body.aabbMax.z));
     float highest = -1.0f;
-    for (int32_t gz = minGZ; gz <= maxGZ; ++gz) {
-      for (int32_t gx = minGX; gx <= maxGX; ++gx) {
-        const float groundY = getGroundHeightFloat(
-            static_cast<float>(gx) + 0.5f,
-            static_cast<float>(gz) + 0.5f,
-            startY);
-        if (groundY > highest) highest = groundY;
-      }
+    
+    // Sample points: center and the 4 corners of the AABB footprint
+    const float pts[5][2] = {
+      {probePos.x, probePos.z},
+      {probePos.x + body.aabbMin.x, probePos.z + body.aabbMin.z},
+      {probePos.x + body.aabbMin.x, probePos.z + body.aabbMax.z},
+      {probePos.x + body.aabbMax.x, probePos.z + body.aabbMin.z},
+      {probePos.x + body.aabbMax.x, probePos.z + body.aabbMax.z},
+    };
+    
+    for (int i = 0; i < 5; ++i) {
+      const float groundY = getGroundHeightFloat(pts[i][0], pts[i][1], startY);
+      if (groundY > highest) highest = groundY;
     }
+    
     return highest;
   }
 
