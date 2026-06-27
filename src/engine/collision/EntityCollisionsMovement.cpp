@@ -209,13 +209,6 @@ struct MovementSolver {
     body.onGround = onGround ? 1 : 0;
     body.velocity = velocity;
 
-    // Failsafe: if the player is still colliding after resolution (should be extremely rare),
-    // push them out using a max-penetration-rescue.
-    int32_t safety = 8;
-    while (collisions.collidesAt(position, body) && --safety > 0) {
-      position.y += 0.05f;
-    }
-
     transform.position = position;
   }
 };

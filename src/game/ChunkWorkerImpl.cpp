@@ -52,6 +52,7 @@ struct DensitySlotContext {
   int32_t sizeX;
   int32_t sizeY;
   int32_t sizeZ;
+  float gridSpacing;
 };
 
 auto slotDensitySample(void* userData, float worldX, float worldY, float worldZ) -> float {
@@ -62,9 +63,9 @@ auto slotDensitySample(void* userData, float worldX, float worldY, float worldZ)
   const int32_t sampleXCount = sx + 2;
   const int32_t sampleZCount = sz + 2;
 
-  float localXVal = (worldX - static_cast<float>(ctx->chunkX * sx) * kGridSpacing) / kGridSpacing + 1.0f;
-  float localYVal = worldY / kGridSpacing;
-  float localZVal = (worldZ - static_cast<float>(ctx->chunkZ * sz) * kGridSpacing) / kGridSpacing + 1.0f;
+  float localXVal = (worldX - static_cast<float>(ctx->chunkX * sx) * ctx->gridSpacing) / ctx->gridSpacing + 1.0f;
+  float localYVal = worldY / ctx->gridSpacing;
+  float localZVal = (worldZ - static_cast<float>(ctx->chunkZ * sz) * ctx->gridSpacing) / ctx->gridSpacing + 1.0f;
 
   const int32_t localX = static_cast<int32_t>(std::round(localXVal));
   const int32_t localY = static_cast<int32_t>(std::round(localYVal));
@@ -103,8 +104,9 @@ auto getDensityAtReplay(int32_t gx, int32_t gy, int32_t gz,
                         int32_t chunkX, int32_t chunkZ,
                         const float* densityBuffer,
                         const WorldGenPipeline& pipeline,
-                        int32_t chunkSize, int32_t worldHeight) -> float {
-  int32_t scale = static_cast<int32_t>(1.0f / kGridSpacing);
+                        int32_t chunkSize, int32_t worldHeight,
+                        float gridSpacing) -> float {
+  int32_t scale = static_cast<int32_t>(1.0f / gridSpacing);
   const int32_t sx = chunkSize * scale;
   const int32_t sy = worldHeight * scale;
   const int32_t sz = chunkSize * scale;
@@ -128,21 +130,22 @@ auto getDensityAtReplay(int32_t gx, int32_t gy, int32_t gz,
     return densityBuffer[idx];
   }
 
-  float worldX = static_cast<float>(gx) * kGridSpacing;
-  float worldY = static_cast<float>(gy) * kGridSpacing;
-  float worldZ = static_cast<float>(gz) * kGridSpacing;
+  float worldX = static_cast<float>(gx) * gridSpacing;
+  float worldY = static_cast<float>(gy) * gridSpacing;
+  float worldZ = static_cast<float>(gz) * gridSpacing;
   return pipeline.sampleDensity(worldX, worldY, worldZ);
 }
 
 /// Replay a single terrain brush edit on a chunk slot's density buffer.
 void replayBrushEdit(int32_t chunkX, int32_t chunkZ, ChunkSlot& slot,
                      const WorldGenPipeline& pipeline, const TerrainBrush& brush,
-                     int32_t chunkSize, int32_t worldHeight) {
+                     int32_t chunkSize, int32_t worldHeight,
+                     float gridSpacing) {
   if (!intersectsChunk(chunkX, chunkZ, chunkSize, worldHeight, chunkSize, brush.center, brush.radius)) {
     return;
   }
 
-  int32_t scale = static_cast<int32_t>(1.0f / kGridSpacing);
+  int32_t scale = static_cast<int32_t>(1.0f / gridSpacing);
   const int32_t sx = chunkSize * scale;
   const int32_t sy = worldHeight * scale;
   const int32_t sz = chunkSize * scale;
@@ -156,11 +159,11 @@ void replayBrushEdit(int32_t chunkX, int32_t chunkZ, ChunkSlot& slot,
   std::vector<DensityWrite> smoothWrites;
 
   for (int32_t y = 0; y <= sy; ++y) {
-    const float worldY = static_cast<float>(y) * kGridSpacing;
+    const float worldY = static_cast<float>(y) * gridSpacing;
     for (int32_t z = -1; z <= sz; ++z) {
-      const float worldZ = static_cast<float>(chunkZ * chunkSize) + static_cast<float>(z) * kGridSpacing;
+      const float worldZ = static_cast<float>(chunkZ * chunkSize) + static_cast<float>(z) * gridSpacing;
       for (int32_t x = -1; x <= sx; ++x) {
-        const float worldX = static_cast<float>(chunkX * chunkSize) + static_cast<float>(x) * kGridSpacing;
+        const float worldX = static_cast<float>(chunkX * chunkSize) + static_cast<float>(x) * gridSpacing;
 
         const float dx = worldX - brush.center.x;
         const float dy = worldY - brush.center.y;
@@ -190,12 +193,12 @@ void replayBrushEdit(int32_t chunkX, int32_t chunkZ, ChunkSlot& slot,
           } else if (brush.type == BrushType::Smooth) {
             const float self = slot.density[idx];
             float sum = 0.0f;
-            sum += getDensityAtReplay(x - 1, y, z, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight);
-            sum += getDensityAtReplay(x + 1, y, z, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight);
-            sum += getDensityAtReplay(x, y - 1, z, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight);
-            sum += getDensityAtReplay(x, y + 1, z, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight);
-            sum += getDensityAtReplay(x, y, z - 1, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight);
-            sum += getDensityAtReplay(x, y, z + 1, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight);
+            sum += getDensityAtReplay(x - 1, y, z, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight, gridSpacing);
+            sum += getDensityAtReplay(x + 1, y, z, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight, gridSpacing);
+            sum += getDensityAtReplay(x, y - 1, z, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight, gridSpacing);
+            sum += getDensityAtReplay(x, y + 1, z, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight, gridSpacing);
+            sum += getDensityAtReplay(x, y, z - 1, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight, gridSpacing);
+            sum += getDensityAtReplay(x, y, z + 1, chunkX, chunkZ, slot.density, pipeline, chunkSize, worldHeight, gridSpacing);
             const float avg = sum / 6.0f;
 
             const float falloff = 1.0f - (dist / brush.radius);
@@ -218,9 +221,10 @@ void replayBrushEdit(int32_t chunkX, int32_t chunkZ, ChunkSlot& slot,
 /// Replay all terrain edits from history on a chunk slot's density buffer.
 void replayAllTerrainEdits(int32_t chunkX, int32_t chunkZ, ChunkSlot& slot,
                            const WorldGenPipeline& pipeline, const std::vector<TerrainEdit>& edits,
-                           int32_t chunkSize, int32_t worldHeight) {
+                           int32_t chunkSize, int32_t worldHeight,
+                           float gridSpacing) {
   for (const auto& edit : edits) {
-    replayBrushEdit(chunkX, chunkZ, slot, pipeline, edit.brush, chunkSize, worldHeight);
+    replayBrushEdit(chunkX, chunkZ, slot, pipeline, edit.brush, chunkSize, worldHeight, gridSpacing);
   }
 }
 
@@ -239,7 +243,7 @@ void ChunkWorkerImpl::generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ
     auto slot = m_pool.view(slotIndex);
 
     // Initialize density buffer
-    int32_t scale = static_cast<int32_t>(1.0f / kGridSpacing);
+    int32_t scale = static_cast<int32_t>(1.0f / m_config.gridSpacing);
     const int32_t sx = m_config.chunkSize * scale;
     const int32_t sy = m_config.worldHeight * scale;
     const int32_t sz = m_config.chunkSize * scale;
@@ -250,11 +254,11 @@ void ChunkWorkerImpl::generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ
     const int32_t sampleMinZ = -1;
 
     for (int32_t y = 0; y < sampleYCount; ++y) {
-      const float worldY = static_cast<float>(y) * kGridSpacing;
+      const float worldY = static_cast<float>(y) * m_config.gridSpacing;
       for (int32_t z = 0; z < sampleZCount; ++z) {
-        const float worldZ = static_cast<float>(chunkZ * m_config.chunkSize) + static_cast<float>(sampleMinZ + z) * kGridSpacing;
+        const float worldZ = static_cast<float>(chunkZ * m_config.chunkSize) + static_cast<float>(sampleMinZ + z) * m_config.gridSpacing;
         for (int32_t x = 0; x < sampleXCount; ++x) {
-          const float worldX = static_cast<float>(chunkX * m_config.chunkSize) + static_cast<float>(sampleMinX + x) * kGridSpacing;
+          const float worldX = static_cast<float>(chunkX * m_config.chunkSize) + static_cast<float>(sampleMinX + x) * m_config.gridSpacing;
           const size_t idx = (static_cast<size_t>(y) * sampleZCount + z) * sampleXCount + x;
           slot.density[idx] = m_pipeline.sampleDensity(worldX, worldY, worldZ);
         }
@@ -264,7 +268,7 @@ void ChunkWorkerImpl::generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ
 
     // Replay all manual terrain edits on the generated density field
     const auto edits = m_controller.world().editHistory().getEdits();
-    replayAllTerrainEdits(chunkX, chunkZ, slot, m_pipeline, edits, m_config.chunkSize, m_config.worldHeight);
+    replayAllTerrainEdits(chunkX, chunkZ, slot, m_pipeline, edits, m_config.chunkSize, m_config.worldHeight, m_config.gridSpacing);
 
     *slot.status = static_cast<int32_t>(ChunkSlotStatus::DENSITY_READY);
     m_controller.onGenCompleted(slotIndex);
@@ -295,7 +299,7 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     }
 
     mesh::SurfaceNetsConfig scfg;
-    int32_t scale = static_cast<int32_t>(1.0f / kGridSpacing);
+    int32_t scale = static_cast<int32_t>(1.0f / m_config.gridSpacing);
     scfg.sizeX = m_config.chunkSize * scale;
     scfg.sizeY = m_config.worldHeight * scale;
     scfg.sizeZ = m_config.chunkSize * scale;
@@ -305,6 +309,7 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     scfg.originX = static_cast<float>(chunkX * m_config.chunkSize);
     scfg.originY = 0.0f;
     scfg.originZ = static_cast<float>(chunkZ * m_config.chunkSize);
+    scfg.gridSpacing = m_config.gridSpacing;
 
     // Ensure density buffer is initialized (e.g. if loaded from disk)
     if (*slot.densityInitialized == 0) {
@@ -318,11 +323,11 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
       const int32_t sampleMinZ = -1;
 
       for (int32_t y = 0; y < sampleYCount; ++y) {
-        const float worldY = static_cast<float>(y) * kGridSpacing;
+        const float worldY = static_cast<float>(y) * m_config.gridSpacing;
         for (int32_t z = 0; z < sampleZCount; ++z) {
-          const float worldZ = static_cast<float>(chunkZ * m_config.chunkSize) + static_cast<float>(sampleMinZ + z) * kGridSpacing;
+          const float worldZ = static_cast<float>(chunkZ * m_config.chunkSize) + static_cast<float>(sampleMinZ + z) * m_config.gridSpacing;
           for (int32_t x = 0; x < sampleXCount; ++x) {
-            const float worldX = static_cast<float>(chunkX * m_config.chunkSize) + static_cast<float>(sampleMinX + x) * kGridSpacing;
+            const float worldX = static_cast<float>(chunkX * m_config.chunkSize) + static_cast<float>(sampleMinX + x) * m_config.gridSpacing;
             const size_t idx = (static_cast<size_t>(y) * sampleZCount + z) * sampleXCount + x;
             slot.density[idx] = m_pipeline.sampleDensity(worldX, worldY, worldZ);
           }
@@ -332,7 +337,7 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
 
       // Replay all manual terrain edits on the generated density field
       const auto edits = m_controller.world().editHistory().getEdits();
-      replayAllTerrainEdits(chunkX, chunkZ, slot, m_pipeline, edits, m_config.chunkSize, m_config.worldHeight);
+      replayAllTerrainEdits(chunkX, chunkZ, slot, m_pipeline, edits, m_config.chunkSize, m_config.worldHeight, m_config.gridSpacing);
     }
 
     DensitySlotContext dctx{};
@@ -342,6 +347,7 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     dctx.sizeX = m_config.chunkSize * scale;
     dctx.sizeY = m_config.worldHeight * scale;
     dctx.sizeZ = m_config.chunkSize * scale;
+    dctx.gridSpacing = m_config.gridSpacing;
 
     mesh::DensitySampler sampler{};
     sampler.userData = &dctx;

@@ -16,6 +16,7 @@ struct SurfaceNetsConfig {
   float originX = 0.0f;
   float originY = 0.0f;
   float originZ = 0.0f;
+  float gridSpacing = 1.0f;
 };
 
 /// C-style density callback used by the Surface Nets mesher.

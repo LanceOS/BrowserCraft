@@ -15,7 +15,7 @@ namespace terrain {
 namespace {
 
 static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
-  int32_t scale = static_cast<int32_t>(1.0f / kGridSpacing);
+  int32_t scale = static_cast<int32_t>(1.0f / cfg.gridSpacing);
   return {cfg.chunkSize * scale, cfg.worldHeight * scale, cfg.chunkSize * scale,
           cfg.maxVertsPerChunk, cfg.maxIndicesPerChunk, cfg.vertexStrideFloats};
 }

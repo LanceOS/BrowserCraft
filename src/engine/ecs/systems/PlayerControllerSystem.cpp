@@ -133,7 +133,6 @@ void PlayerControllerSystem::update(TickContext& ctx) {
   if (!canControl) {
     body.velocity.x = 0.0f;
     body.velocity.z = 0.0f;
-    syncCameraFromPlayer();
     return;
   }
 
@@ -163,13 +162,11 @@ void PlayerControllerSystem::update(TickContext& ctx) {
                                                         : player.walkSpeed;
     transform.position += moveDir * speed * ctx.dt;
     body.velocity = glm::vec3(0.0f);
-    syncCameraFromPlayer();
     return;
   }
 
   applyMovement(ctx.dt, transform, body, player, moveDir);
   handleTerrainInteraction(transform, body, player);
-  syncCameraFromPlayer();
 }
 
 void PlayerControllerSystem::handleInventoryToggle() {
