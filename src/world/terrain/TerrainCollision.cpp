@@ -338,7 +338,7 @@ void sweepSphereTriangle(const glm::vec3& eOrigin, const glm::vec3& eVel,
   float signedDistToPlane = glm::dot(eOrigin, normal) + planeD;
   float normalDotVel = glm::dot(normal, eVel);
 
-  if (normalDotVel == 0.0f) {
+  if (std::abs(normalDotVel) < 1e-5f) {
     if (std::abs(signedDistToPlane) >= 1.0f) {
       return;
     }

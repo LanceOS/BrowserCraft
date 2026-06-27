@@ -125,15 +125,20 @@ void MovementSolver::resolve(float dx, float dy, float dz, cmp::Transform& trans
       break;
     }
 
-    // 5. Collision detected! Move the sphere up to the exact point of impact.
+    // 5. Collision detected!
     float t = bestContact.t;
-    eOrigin += eVel * t;
     
-    // Nudge the sphere away from the collision surface by a tiny epsilon.
-    // Pushing out along the normal (instead of backing up along velocity) guarantees 
-    // we won't get stuck in a t=0 infinite collision loop with the same triangle.
-    const float epsilon = 0.005f;
-    eOrigin += bestContact.normal * epsilon;
+    // We want to stop slightly before the actual point of impact to prevent
+    // floating-point inaccuracies from embedding us in the triangle.
+    const float veryCloseDistance = 0.005f;
+    
+    // If we are moving far enough this frame, we safely move up to the point just before impact.
+    if (t * velLen > veryCloseDistance) {
+      float safeT = t - (veryCloseDistance / velLen);
+      eOrigin += eVel * safeT;
+    }
+    // If we are already extremely close, we do not move eOrigin this frame,
+    // we just project the velocity to slide along the surface on the next bump.
 
     // Check if the surface normal points upwards (to determine if we landed on the ground).
     // The normal must be transformed back to world space for an accurate Y-axis check.
