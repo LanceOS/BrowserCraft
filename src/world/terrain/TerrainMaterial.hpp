@@ -18,6 +18,9 @@ enum class MaterialId : uint8_t {
   Dirt  = 1,
   Stone = 2,
   Sand  = 3,
+  Gravel = 4,
+  Clay = 5,
+  CrackedStone = 6,
 };
 
 /// Material selection result for a terrain vertex.

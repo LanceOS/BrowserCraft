@@ -16,7 +16,11 @@
         "diamond_ore": "diamond_ore.png",
         "powerstone_ore": "powerstone_ore.png",
         "tall_grass": "tall_grass.png",
-        "fern": "fern.png"
+        "fern": "fern.png",
+        "sand": "sand.png",
+        "gravel": "gravel.png",
+        "clay": "clay.png",
+        "cracked_stone": "cracked_stone.png"
     },
     "blocks": [
         {
@@ -58,7 +62,7 @@
             "hardness": 0.5,
             "blast_resistance": 0.5,
             "faces": {
-                "all": "dirt"
+                "all": "sand"
             }
         },
         {
@@ -208,6 +212,36 @@
             "blast_resistance": 0.0,
             "faces": {
                 "all": "fern"
+            }
+        },
+        {
+            "id": 19,
+            "name": "Gravel",
+            "is_opaque": true,
+            "hardness": 0.6,
+            "blast_resistance": 0.6,
+            "faces": {
+                "all": "gravel"
+            }
+        },
+        {
+            "id": 20,
+            "name": "Clay",
+            "is_opaque": true,
+            "hardness": 0.6,
+            "blast_resistance": 0.6,
+            "faces": {
+                "all": "clay"
+            }
+        },
+        {
+            "id": 21,
+            "name": "Cracked Stone",
+            "is_opaque": true,
+            "hardness": 1.5,
+            "blast_resistance": 6.0,
+            "faces": {
+                "all": "cracked_stone"
             }
         }
     ]

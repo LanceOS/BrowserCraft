@@ -35,13 +35,15 @@ out vec4 fragColor;
 
 int terrainLayer(int materialId) {
   // Layer indices based on alphabetical sorting of keys in assets/blocks.json
-  // 2 = dirt, 6 = grass_top, 14 = stone
   switch (materialId) {
-    case 0: return 6; // grass_top
-    case 1: return 2; // dirt
-    case 2: return 14; // stone
-    case 3: return 2; // sand fallback to dirt until a dedicated sand atlas exists
-    default: return 14;
+    case 0: return 8; // grass_top
+    case 1: return 4; // dirt
+    case 2: return 18; // stone
+    case 3: return 17; // sand
+    case 4: return 9; // gravel
+    case 5: return 0; // clay
+    case 6: return 2; // cracked_stone
+    default: return 18; // stone
   }
 }
 
