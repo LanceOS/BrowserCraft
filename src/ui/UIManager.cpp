@@ -277,6 +277,7 @@ void UIManager::renderGameModeMenu() {
   ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Saved Worlds");
   ImGui::Separator();
 
+  bool openDeletePopup = false;
   if (m_worldEntries.empty()) {
     ImGui::Spacing();
     ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  No saved worlds found.");
@@ -316,7 +317,7 @@ void UIManager::renderGameModeMenu() {
       ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
       if (ImGui::Button("Delete", ImVec2(70, 30))) {
         m_worldToDelete = entry.slug;
-        ImGui::OpenPopup("Delete World?");
+        openDeletePopup = true;
       }
       ImGui::PopStyleColor(3);
 
@@ -324,6 +325,10 @@ void UIManager::renderGameModeMenu() {
       ImGui::Spacing();
     }
     ImGui::EndChild();
+  }
+
+  if (openDeletePopup) {
+    ImGui::OpenPopup("Delete World?");
   }
 
   // Delete Confirmation Modal
