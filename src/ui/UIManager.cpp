@@ -254,30 +254,32 @@ void UIManager::renderGameModeMenu() {
   float winW = ImGui::GetWindowWidth();
   float winH = ImGui::GetWindowHeight();
 
-  // Split the menu into left panel (world list) and right panel (create/load)
-  float leftPanelW = winW * 0.35f;
-  float rightPanelW = winW * 0.35f;
-  float panelH = winH * 0.55f;
-  float startY = winH * 0.25f;
-  float leftX = winW * 0.15f;
-  float rightX = winW * 0.52f;
+  float panelW = 480.0f;
+  float panelH = winH * 0.7f;
+  ImGui::SetCursorPos(ImVec2((winW - panelW) * 0.5f, (winH - panelH) * 0.5f));
 
-  // ========== LEFT: World List ==========
-  ImGui::SetCursorPos(ImVec2(leftX, startY));
-  ImGui::BeginChild("WorldListPanel", ImVec2(leftPanelW, panelH), ImGuiChildFlags_Border);
+  ImGui::BeginChild("WorldListPanel", ImVec2(panelW, panelH), ImGuiChildFlags_Border);
   
   ImGui::Spacing();
+  ImGui::SetCursorPosX((panelW - 240) * 0.5f);
+  if (ImGui::Button("Create New World", ImVec2(240, 35))) {
+    ImGui::OpenPopup("Create World");
+  }
+  ImGui::Spacing();
+  ImGui::Separator();
+  ImGui::Spacing();
+  
   float textW = ImGui::CalcTextSize("Saved Worlds").x;
-  ImGui::SetCursorPosX((leftPanelW - textW) * 0.5f);
+  ImGui::SetCursorPosX((panelW - textW) * 0.5f);
   ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Saved Worlds");
   ImGui::Separator();
 
   if (m_worldEntries.empty()) {
     ImGui::Spacing();
     ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  No saved worlds found.");
-    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  Create a new world to get started.");
+    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "  Click 'Create New World' to get started.");
   } else {
-    ImGui::BeginChild("WorldListScroll", ImVec2(0, panelH - 60), ImGuiChildFlags_None);
+    ImGui::BeginChild("WorldListScroll", ImVec2(0, -60.0f), ImGuiChildFlags_None);
     for (size_t i = 0; i < m_worldEntries.size(); ++i) {
       const auto& entry = m_worldEntries[i];
 
@@ -292,13 +294,13 @@ void UIManager::renderGameModeMenu() {
       ImGui::TextDisabled("  [%s]", modeStr);
 
       std::string dateStr = formatTimestamp(entry.lastPlayedTimestamp);
-      ImGui::SameLine(ImGui::GetWindowWidth() - 140);
+      ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 120);
       ImGui::TextDisabled("%s", dateStr.c_str());
 
       // Buttons
       ImGui::Spacing();
       ImGui::SetCursorPosX(16);
-      float loadBtnW = leftPanelW - 100;
+      float loadBtnW = ImGui::GetContentRegionAvail().x - 100;
       if (ImGui::Button("Load", ImVec2(loadBtnW, 30))) {
         if (m_callbacks.onStartWorld) {
           GameMode gm = (entry.gameMode == 1) ? GameMode::Creative : GameMode::Survival;
@@ -309,7 +311,7 @@ void UIManager::renderGameModeMenu() {
       ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 0.8f));
       ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
       ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
-      if (ImGui::Button("Delete", ImVec2(60, 30))) {
+      if (ImGui::Button("Delete", ImVec2(70, 30))) {
         m_worldToDelete = entry.slug;
         ImGui::OpenPopup("Delete World?");
       }
@@ -347,86 +349,77 @@ void UIManager::renderGameModeMenu() {
     ImGui::EndPopup();
   }
 
-  ImGui::EndChild();
-
-  // ========== RIGHT: Create/Load Panel ==========
-  ImGui::SetCursorPos(ImVec2(rightX, startY));
-  ImGui::BeginChild("CreatePanel", ImVec2(rightPanelW, panelH), ImGuiChildFlags_Border);
-  
-  ImGui::Spacing();
-  float createTextW = ImGui::CalcTextSize("Create World").x;
-  ImGui::SetCursorPosX((rightPanelW - createTextW) * 0.5f);
-  ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Create World");
+  // Bottom action buttons
+  ImGui::SetCursorPosY(panelH - 45);
   ImGui::Separator();
-
-  // Game mode selection
   ImGui::Spacing();
-  ImGui::SetCursorPosX(20);
-  ImGui::Text("Game Mode");
-  ImGui::SetCursorPosX(20);
-  ImGui::RadioButton("Survival##create_mode", &m_gameModeIndex, 0);
-  ImGui::SameLine();
-  ImGui::RadioButton("Creative##create_mode", &m_gameModeIndex, 1);
-
-  // World name input
-  ImGui::Spacing();
-  ImGui::SetCursorPosX(20);
-  ImGui::Text("World Name");
-  ImGui::SetCursorPosX(20);
-  ImGui::InputText("##world_name", m_slotId.data(), m_slotId.size());
-
-  const std::string slotId = sanitizeSlotId(std::string(m_slotId.data()));
-  const bool hasValidSlot = !slotId.empty();
-  const GameMode mode = m_gameModeIndex == 1 ? GameMode::Creative : GameMode::Survival;
-
-  // Validation messages
-  ImGui::Spacing();
-  if (!hasValidSlot) {
-    ImGui::SetCursorPosX(20);
-    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "World name cannot be blank");
-  } else if (slotId != std::string(m_slotId.data())) {
-    ImGui::SetCursorPosX(20);
-    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "Invalid characters replaced with '_'");
-  }
-
-  // Custom error message from outside (e.g., name collision)
-  if (!m_worldErrorMsg.empty()) {
-    ImGui::SetCursorPosX(20);
-    ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_worldErrorMsg.c_str());
-  }
-
-  // Buttons
-  ImGui::Spacing();
-  ImGui::SetCursorPosX(20);
-  if (!hasValidSlot) ImGui::BeginDisabled();
-
-  // "Start New World" button
-  if (ImGui::Button("Start New World", ImVec2(rightPanelW - 40, 40))) {
-    m_worldErrorMsg.clear();
-    if (m_callbacks.onStartWorld) {
-      m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, true);
-    }
-  }
-
-  // "Load World" button — loads by explicit name, reloads existing world data
-  if (ImGui::Button("Load World by Name", ImVec2(rightPanelW - 40, 40))) {
-    m_worldErrorMsg.clear();
-    if (m_callbacks.onStartWorld) {
-      m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, false);
-    }
-  }
-
-  if (!hasValidSlot) ImGui::EndDisabled();
-
-  ImGui::Spacing();
-  ImGui::Separator();
-  ImGui::SetCursorPosX(rightPanelW * 0.5f - 30);
-  if (ImGui::Button("Back", ImVec2(80, 30))) {
+  ImGui::SetCursorPosX((panelW - 100) * 0.5f);
+  if (ImGui::Button("Back", ImVec2(100, 30))) {
     m_state = UIState::MainMenu;
   }
 
-  ImGui::EndChild();
+  // Create World Modal
+  ImGui::SetNextWindowPos(ImVec2(winW * 0.5f, winH * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  if (ImGui::BeginPopupModal("Create World", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
+    float modalW = 400.0f;
+    ImGui::Dummy(ImVec2(modalW, 0)); // enforce width
+    
+    // Game mode selection
+    ImGui::Text("Game Mode");
+    ImGui::RadioButton("Survival##create_mode", &m_gameModeIndex, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Creative##create_mode", &m_gameModeIndex, 1);
+    
+    ImGui::Spacing(); ImGui::Spacing();
 
+    // World name input
+    ImGui::Text("World Name");
+    ImGui::PushItemWidth(modalW);
+    ImGui::InputText("##world_name", m_slotId.data(), m_slotId.size());
+    ImGui::PopItemWidth();
+
+    const std::string slotId = sanitizeSlotId(std::string(m_slotId.data()));
+    const bool hasValidSlot = !slotId.empty();
+    const GameMode mode = m_gameModeIndex == 1 ? GameMode::Creative : GameMode::Survival;
+
+    // Validation messages
+    ImGui::Spacing();
+    if (!hasValidSlot) {
+      ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "World name cannot be blank");
+    } else if (slotId != std::string(m_slotId.data())) {
+      ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "Invalid characters replaced with '_'");
+    } else {
+      ImGui::Text(" "); // placeholder to prevent jitter
+    }
+
+    if (!m_worldErrorMsg.empty()) {
+      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", m_worldErrorMsg.c_str());
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::Button("Cancel", ImVec2(120, 35))) {
+      m_worldErrorMsg.clear();
+      ImGui::CloseCurrentPopup();
+    }
+    
+    ImGui::SameLine(modalW - 120 + 8); // 8 is padding roughly
+    if (!hasValidSlot) ImGui::BeginDisabled();
+    if (ImGui::Button("Start World", ImVec2(120, 35))) {
+      m_worldErrorMsg.clear();
+      if (m_callbacks.onStartWorld) {
+        m_callbacks.onStartWorld(mode, slotId.empty() ? "default" : slotId, true);
+        ImGui::CloseCurrentPopup();
+      }
+    }
+    if (!hasValidSlot) ImGui::EndDisabled();
+
+    ImGui::EndPopup();
+  }
+
+  ImGui::EndChild();
   ImGui::End();
 }
 
