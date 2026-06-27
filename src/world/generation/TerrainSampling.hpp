@@ -119,6 +119,7 @@ public:
 
   /// Sample signed density. Negative = solid, positive = air, zero = surface.
   [[nodiscard]] auto sampleDensity(float worldX, float worldY, float worldZ) const -> float;
+  [[nodiscard]] auto sampleDensity(float worldX, float worldY, float worldZ, const TerrainSample& terrain) const -> float;
 
   /// Sample the terrain material for a world coordinate.
   /// Returns blended terrain material hints derived from slope, depth, and
@@ -182,8 +183,7 @@ inline auto TerrainSampler::sampleTerrain(float worldX, float worldZ) const -> T
   return sample;
 }
 
-inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worldZ) const -> float {
-  const auto terrain = sampleTerrain(worldX, worldZ);
+inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worldZ, const TerrainSample& terrain) const -> float {
   float density = worldY - terrain.surfaceHeight;
 
   const auto& cfg = m_config;
@@ -203,6 +203,10 @@ inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worl
   }
 
   return density;
+}
+
+inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worldZ) const -> float {
+  return sampleDensity(worldX, worldY, worldZ, sampleTerrain(worldX, worldZ));
 }
 
 inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float worldZ) const -> TerrainMaterial {

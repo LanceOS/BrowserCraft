@@ -253,14 +253,17 @@ void ChunkWorkerImpl::generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ
     const int32_t sampleMinX = -1;
     const int32_t sampleMinZ = -1;
 
-    for (int32_t y = 0; y < sampleYCount; ++y) {
-      const float worldY = static_cast<float>(y) * m_config.gridSpacing;
-      for (int32_t z = 0; z < sampleZCount; ++z) {
-        const float worldZ = static_cast<float>(chunkZ * m_config.chunkSize) + static_cast<float>(sampleMinZ + z) * m_config.gridSpacing;
-        for (int32_t x = 0; x < sampleXCount; ++x) {
-          const float worldX = static_cast<float>(chunkX * m_config.chunkSize) + static_cast<float>(sampleMinX + x) * m_config.gridSpacing;
+    for (int32_t z = 0; z < sampleZCount; ++z) {
+      const float worldZ = static_cast<float>(chunkZ * m_config.chunkSize) + static_cast<float>(sampleMinZ + z) * m_config.gridSpacing;
+      for (int32_t x = 0; x < sampleXCount; ++x) {
+        const float worldX = static_cast<float>(chunkX * m_config.chunkSize) + static_cast<float>(sampleMinX + x) * m_config.gridSpacing;
+
+        const auto terrain = m_pipeline.sampleTerrain(worldX, worldZ);
+
+        for (int32_t y = 0; y < sampleYCount; ++y) {
+          const float worldY = static_cast<float>(y) * m_config.gridSpacing;
           const size_t idx = (static_cast<size_t>(y) * sampleZCount + z) * sampleXCount + x;
-          slot.density[idx] = m_pipeline.sampleDensity(worldX, worldY, worldZ);
+          slot.density[idx] = m_pipeline.sampleDensity(worldX, worldY, worldZ, terrain);
         }
       }
     }
@@ -322,14 +325,17 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
       const int32_t sampleMinX = -1;
       const int32_t sampleMinZ = -1;
 
-      for (int32_t y = 0; y < sampleYCount; ++y) {
-        const float worldY = static_cast<float>(y) * m_config.gridSpacing;
-        for (int32_t z = 0; z < sampleZCount; ++z) {
-          const float worldZ = static_cast<float>(chunkZ * m_config.chunkSize) + static_cast<float>(sampleMinZ + z) * m_config.gridSpacing;
-          for (int32_t x = 0; x < sampleXCount; ++x) {
-            const float worldX = static_cast<float>(chunkX * m_config.chunkSize) + static_cast<float>(sampleMinX + x) * m_config.gridSpacing;
+      for (int32_t z = 0; z < sampleZCount; ++z) {
+        const float worldZ = static_cast<float>(chunkZ * m_config.chunkSize) + static_cast<float>(sampleMinZ + z) * m_config.gridSpacing;
+        for (int32_t x = 0; x < sampleXCount; ++x) {
+          const float worldX = static_cast<float>(chunkX * m_config.chunkSize) + static_cast<float>(sampleMinX + x) * m_config.gridSpacing;
+
+          const auto terrain = m_pipeline.sampleTerrain(worldX, worldZ);
+
+          for (int32_t y = 0; y < sampleYCount; ++y) {
+            const float worldY = static_cast<float>(y) * m_config.gridSpacing;
             const size_t idx = (static_cast<size_t>(y) * sampleZCount + z) * sampleXCount + x;
-            slot.density[idx] = m_pipeline.sampleDensity(worldX, worldY, worldZ);
+            slot.density[idx] = m_pipeline.sampleDensity(worldX, worldY, worldZ, terrain);
           }
         }
       }
