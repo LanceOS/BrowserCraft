@@ -2,7 +2,7 @@
 
 #include "TerrainBrush.hpp"
 
-namespace voxel {
+namespace terrain {
 
 class World;
 class WorldGenPipeline;
@@ -16,4 +16,4 @@ public:
   static void applyBrush(World& world, const WorldGenPipeline& pipeline, const TerrainBrush& brush);
 };
 
-} // namespace voxel
+} // namespace terrain

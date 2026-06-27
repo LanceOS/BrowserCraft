@@ -1,6 +1,6 @@
 #include "Texture2DArray.hpp"
 
-namespace voxel {
+namespace terrain {
 
 bool Texture2DArray::supportsHighBitDepthTextures() {
   // GL_RGBA16 is core in OpenGL 3.0+. We target 4.6, so it is always
@@ -80,4 +80,4 @@ void Texture2DArray::bind(uint32_t unit) const {
   gl::BindTexture(GL_TEXTURE_2D_ARRAY, m_texture);
 }
 
-} // namespace voxel
+} // namespace terrain

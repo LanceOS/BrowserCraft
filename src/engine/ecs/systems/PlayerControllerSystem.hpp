@@ -12,17 +12,13 @@
 #include "game/GameSession.hpp"
 #include <GLFW/glfw3.h>
 
-namespace voxel {
+namespace terrain {
 
-class BlockInteractionAudio;
-class BlockRegistry;
+class WorldGenPipeline;
+class WorldController;
 
 /// Handles first-person player controls: mouse look, WASD movement,
 /// gravity, collision, jumping, flying, and camera synchronisation.
-///
-/// Reads from InputState and the player's ECS components each frame,
-/// writes position/velocity to the RigidBody and Transform, and
-/// updates the CameraView for rendering.
 class PlayerControllerSystem final : public System {
 public:
   PlayerControllerSystem(
@@ -31,9 +27,8 @@ public:
     ComponentStore<cmp::Transform>& transforms,
     ComponentStore<cmp::RigidBody>& bodies,
     ComponentStore<cmp::Player>& players,
-    World& world,
-    BlockRegistry& blocks,
-    BlockInteractionAudio* blockAudio,
+    WorldController& worldController,
+    WorldGenPipeline& pipeline,
     CameraView& camera,
     const GameConfig& config,
     UIManager& ui,
@@ -51,32 +46,31 @@ public:
 private:
   void applyMouseLook(float dt);
   void applyMovement(float dt, cmp::Transform& transform, cmp::RigidBody& body, cmp::Player& player, const glm::vec3& moveDir);
-  void handleBlockInteraction(const cmp::Transform& transform, const cmp::RigidBody& body, const cmp::Player& player);
+  void handleTerrainInteraction(const cmp::Transform& transform, const cmp::RigidBody& body, const cmp::Player& player);
   void syncCameraFromPlayer();
   void handleInventoryToggle();
-  [[nodiscard]] auto selectedHotbarBlockId(const cmp::Player& player) const -> uint8_t;
 
   static constexpr float kMouseSensitivity = 0.0025f;
   static constexpr float kMaxPitch = 1.553343f; // ~89 degrees
   static constexpr float kJumpSpeed = 8.0f;
   static constexpr float kSwimSpeed = 3.5f;
-  static constexpr float kReachDistance = 6.0f;
+  static constexpr float kReachDistance = 15.0f; // extended for better terrain editing
 
   GLFWwindow* m_window;
   InputState& m_input;
   ComponentStore<cmp::Transform>& m_transforms;
   ComponentStore<cmp::RigidBody>& m_bodies;
   ComponentStore<cmp::Player>& m_players;
+  WorldController& m_worldController;
   World& m_world;
-  BlockRegistry& m_blocks;
-  BlockInteractionAudio* m_blockAudio;
+  WorldGenPipeline& m_pipeline;
   CameraView& m_camera;
   UIManager& m_ui;
   GameSession& m_session;
   bool& m_cameraDirty;
   int32_t m_cachedPlayerIndex = -1;
-  bool m_prevOnGround = true; // previous frame's grounded state (from proximity check, not body.onGround). Used for auto-jump on landing. Initialised true so the first frame after spawn doesn't false-trigger justLanded.
+  bool m_prevOnGround = true;
   EntityCollisions m_collisions;
 };
 
-} // namespace voxel
+} // namespace terrain

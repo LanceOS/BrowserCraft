@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace voxel {
+namespace terrain {
 
 /// Find entities that have ALL specified component types.
 /// Returns a vector of matching entity indices.
@@ -38,4 +38,4 @@ auto queryEntities(Stores&... stores) -> std::vector<int32_t> {
   return result;
 }
 
-} // namespace voxel
+} // namespace terrain

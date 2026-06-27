@@ -1,6 +1,6 @@
 #include "UniformBuffer.hpp"
 
-namespace voxel {
+namespace terrain {
 
 UniformBuffer::UniformBuffer(uint32_t binding, size_t byteSize)
   : m_binding(binding), m_byteSize(byteSize) {
@@ -36,4 +36,4 @@ void UniformBuffer::upload(const void* data, size_t size) const {
   gl::BindBufferBase(GL_UNIFORM_BUFFER, m_binding, m_buffer);
 }
 
-} // namespace voxel
+} // namespace terrain

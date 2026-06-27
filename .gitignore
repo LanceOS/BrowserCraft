@@ -1,4 +1,4 @@
 # Build output
 build/
-saves/*
+saves/
 build-debug/

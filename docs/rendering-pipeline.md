@@ -1,23 +1,23 @@
 # Rendering Pipeline
 
-> **C++ Port:** This engine now uses OpenGL 4.6 Core instead of WebGL2. See `cpp-voxel/src/engine/render/` for the current implementation.
+> **C++ Port:** This engine now uses OpenGL 4.6 Core instead of WebGL2. See `cpp-terrain/src/engine/render/` for the current implementation.
 
 This document describes how the current renderer turns chunk data into a frame on screen.
 
 The core files are:
 
-- [`cpp-voxel/src/game/Game.hpp`](../cpp-voxel/src/game/Game.hpp)
-- [`cpp-voxel/src/engine/render/Renderer.hpp`](../cpp-voxel/src/engine/render/Renderer.hpp)
-- [`cpp-voxel/src/engine/render/ChunkMesh.hpp`](../cpp-voxel/src/engine/render/ChunkMesh.hpp)
-- [`cpp-voxel/src/engine/render/Texture2DArray.hpp`](../cpp-voxel/src/engine/render/Texture2DArray.hpp)
-- [`cpp-voxel/src/engine/math/Frustum.hpp`](../cpp-voxel/src/engine/math/Frustum.hpp)
-- [`cpp-voxel/src/engine/render/shaders/ShaderSources.hpp`](../cpp-voxel/src/engine/render/shaders/ShaderSources.hpp)
-- [`cpp-voxel/src/engine/render/shaders/ShaderSources.hpp`](../cpp-voxel/src/engine/render/shaders/ShaderSources.hpp)
+- [`cpp-terrain/src/game/Game.hpp`](../cpp-terrain/src/game/Game.hpp)
+- [`cpp-terrain/src/engine/render/Renderer.hpp`](../cpp-terrain/src/engine/render/Renderer.hpp)
+- [`cpp-terrain/src/engine/render/ChunkMesh.hpp`](../cpp-terrain/src/engine/render/ChunkMesh.hpp)
+- [`cpp-terrain/src/engine/render/Texture2DArray.hpp`](../cpp-terrain/src/engine/render/Texture2DArray.hpp)
+- [`cpp-terrain/src/engine/math/Frustum.hpp`](../cpp-terrain/src/engine/math/Frustum.hpp)
+- [`cpp-terrain/src/engine/render/shaders/ShaderSources.hpp`](../cpp-terrain/src/engine/render/shaders/ShaderSources.hpp)
+- [`cpp-terrain/src/engine/render/shaders/ShaderSources.hpp`](../cpp-terrain/src/engine/render/shaders/ShaderSources.hpp)
 - (removed, time UBO handled by Renderer)
 
 ## Frame Entry Point
 
-Rendering begins in [`Game.render()`](../cpp-voxel/src/game/Game.hpp):
+Rendering begins in [`Game.render()`](../cpp-terrain/src/game/Game.hpp):
 
 1. sync UI state
 2. resize the canvas to its display size
@@ -26,7 +26,7 @@ Rendering begins in [`Game.render()`](../cpp-voxel/src/game/Game.hpp):
 5. render particles
 6. render the inventory HUD
 
-The main 3D draw call path is all inside [`Renderer.render()`](../cpp-voxel/src/engine/render/Renderer.hpp).
+The main 3D draw call path is all inside [`Renderer.render()`](../cpp-terrain/src/engine/render/Renderer.hpp).
 
 ## Renderer Responsibilities
 
@@ -45,11 +45,11 @@ It does not own world generation, meshing, or gameplay state. It consumes comple
 
 > **Architecture Note:** Textures are currently generated in code via hardcoded enumerations, which violates data-driven design principles. A centralized **Asset Manager** is planned to replace this.
 
-Currently, [`Renderer`](../cpp-voxel/src/engine/render/Renderer.hpp):
+Currently, [`Renderer`](../cpp-terrain/src/engine/render/Renderer.hpp):
 
-- defines a `LAYER_COLORS` map keyed by [`Tex`](../cpp-voxel/src/world/BlockDefinition.hpp)
+- defines a `LAYER_COLORS` map keyed by [`Tex`](../cpp-terrain/src/world/MaterialDefinition.hpp)
 - synthesizes 16x16 RGBA layers with `makeLayer(...)`
-- uploads every layer into a [`Texture2DArray`](../cpp-voxel/src/engine/render/Texture2DArray.hpp)
+- uploads every layer into a [`Texture2DArray`](../cpp-terrain/src/engine/render/Texture2DArray.hpp)
 - generates mipmaps once after seeding
 
 This means that adding a new block texture layer currently requires C++ changes. The planned refactor will migrate to a system where textures and materials are loaded from JSON/PNG files at startup, so adding a new texture requires zero code changes.
@@ -74,11 +74,11 @@ The renderer binds two std140 uniform blocks:
 - camera right vector
 - camera up vector
 
-The data is assembled in [`uploadCameraBlock()`](../cpp-voxel/src/engine/render/Renderer.hpp).
+The data is assembled in [`uploadCameraBlock()`](../cpp-terrain/src/engine/render/Renderer.hpp).
 
 ### Time Block
 
-(Time UBO is now handled by `Renderer` directly — see [`Renderer`](../cpp-voxel/src/engine/render/Renderer.hpp).)
+(Time UBO is now handled by `Renderer` directly — see [`Renderer`](../cpp-terrain/src/engine/render/Renderer.hpp).)
 
 - elapsed time
 - sun angle
@@ -101,7 +101,7 @@ The current layout is:
 4. `a_texLayer` as `float`
 5. `a_lightData` as `float`
 
-[`ChunkMesh.upload()`](../cpp-voxel/src/engine/render/ChunkMesh.hpp) binds these as vertex attributes `0` through `4`.
+[`ChunkMesh.upload()`](../cpp-terrain/src/engine/render/ChunkMesh.hpp) binds these as vertex attributes `0` through `4`.
 
 `a_lightData` is stored as a float on the CPU side, then rounded back to an integer in the vertex shader and passed through as `flat uint v_packedLight`.
 
@@ -157,7 +157,7 @@ In the persistent mapped architecture, worker threads will write their meshes di
 
 > **Optimization Note:** CPU culling will be replaced by GPU Compute Shader culling to prepare for Multi-Draw Indirect.
 
-Currently, `Renderer` uses the frustum culler (see [`Frustum`](../cpp-voxel/src/engine/math/Frustum.hpp)) to reject chunk AABBs before drawing.
+Currently, `Renderer` uses the frustum culler (see [`Frustum`](../cpp-terrain/src/engine/math/Frustum.hpp)) to reject chunk AABBs before drawing.
 
 For each chunk:
 
@@ -168,7 +168,7 @@ The culler extracts six planes from the camera matrix and tests each chunk AABB 
 
 ## Sky Pass
 
-The sky uses a dedicated shader pair (see [`ShaderSources`](../cpp-voxel/src/engine/render/shaders/ShaderSources.hpp)).
+The sky uses a dedicated shader pair (see [`ShaderSources`](../cpp-terrain/src/engine/render/shaders/ShaderSources.hpp)).
 
 The renderer creates a fullscreen triangle once at startup. Each frame it:
 

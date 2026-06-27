@@ -6,14 +6,18 @@
 #include <memory>
 
 #include "SimplexNoise.hpp"
+#include "biomes/MountainGenerator.hpp"
+#include "biomes/PlainsGenerator.hpp"
+#include "biomes/RiverGenerator.hpp"
+#include "biomes/LakeGenerator.hpp"
 #include "content/biomes/BiomeFactory.hpp"
 #include "content/biomes/BiomeSampler.hpp"
 #include "world/terrain/TerrainMaterial.hpp"
 
 #include <glm/glm.hpp>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 /// Configuration for world generation noise layering.
 /// Terrain height is computed as:
@@ -27,18 +31,24 @@ struct WorldGenerationConfig {
   float baseHeight = 64.0f;
 
   /// Continental (large-scale) noise — controls basic land/sea shape.
-  float continentalScale = 0.008f;
-  float continentalAmplitude = 40.0f;
+  float continentalScale = 0.0005f;
+  float continentalAmplitude = 12.0f;
 
   /// Regional / detail noise — adds hills, valleys, small bumps.
-  /// Higher scale and amplitude than continental to break up flat terraces
-  /// caused by int32_t truncation of slowly-varying noise.
-  float detailScale = 0.05f;
-  float detailAmplitude = 14.0f;
+  float detailScale = 0.002f;
+  float detailAmplitude = 4.0f;
 
   /// Mountain amplification — extra high-frequency noise in cold regions.
-  float mountainScale = 0.02f;
-  float mountainAmplitude = 28.0f;
+  float mountainScale = 0.001f;
+  float mountainAmplitude = 10.0f;
+
+  /// River carving (ridged noise)
+  float riverScale = 0.001f;
+  float riverDepth = 8.0f;
+
+  /// Lake basins
+  float lakeScale = 0.003f;
+  float lakeDepth = 12.0f;
 
   /// Sea level (for filling water).
   int32_t seaLevel = 64;
@@ -55,7 +65,7 @@ using TerrainMaterial = terrain::TerrainMaterial;
 
 /// Continuous terrain state for a single world-space x/z column.
 /// `surfaceHeight` is the unclamped float surface used by the smooth mesher.
-/// `surfaceY` mirrors the legacy voxel column logic.
+/// `surfaceY` mirrors the legacy terrain column logic.
 /// `biome` points at the dominant biome for the column.
 /// `biomeId`, `temperature`, and `humidity` carry the climate context into the
 /// terrain material system.
@@ -82,9 +92,11 @@ public:
   explicit TerrainSampler(uint32_t seed, const WorldGenerationConfig& config = {})
     : m_ownedSampler(std::make_unique<biome::BiomeSampler>(seed)),
       m_climateSource(m_ownedSampler.get()),
-      m_continentalNoise(seed ^ 0x1a2b3cu),
-      m_detailNoise(seed ^ 0x4d5e6fu),
       m_densityNoise(seed),
+      m_plainsGenerator(seed),
+      m_mountainGenerator(seed),
+      m_riverGenerator(seed),
+      m_lakeGenerator(seed),
       m_config(config)
   {}
 
@@ -94,9 +106,11 @@ public:
                           const WorldGenerationConfig& config = {})
     : m_ownedSampler(nullptr),
       m_climateSource(&climateSource),
-      m_continentalNoise(seed ^ 0x1a2b3cu),
-      m_detailNoise(seed ^ 0x4d5e6fu),
       m_densityNoise(seed),
+      m_plainsGenerator(seed),
+      m_mountainGenerator(seed),
+      m_riverGenerator(seed),
+      m_lakeGenerator(seed),
       m_config(config)
   {}
 
@@ -120,80 +134,40 @@ public:
   [[nodiscard]] auto config() const -> const WorldGenerationConfig& { return m_config; }
 
 private:
-  [[nodiscard]] static auto fractalNoise2D(const SimplexNoise& noise,
-                                           float x, float z,
-                                           int octaves,
-                                           float lacunarity,
-                                           float persistence) -> float;
-
   std::unique_ptr<biome::BiomeSampler> m_ownedSampler;
   biome::IClimateSource* m_climateSource;
-  SimplexNoise m_continentalNoise;
-  SimplexNoise m_detailNoise;
   SimplexNoise m_densityNoise;
+  PlainsGenerator m_plainsGenerator;
+  MountainGenerator m_mountainGenerator;
+  RiverGenerator m_riverGenerator;
+  LakeGenerator m_lakeGenerator;
   WorldGenerationConfig m_config;
 };
 
-inline auto TerrainSampler::fractalNoise2D(const SimplexNoise& noise,
-                                           float x, float z,
-                                           int octaves,
-                                           float lacunarity,
-                                           float persistence) -> float {
-  float value = 0.0f;
-  float amplitude = 1.0f;
-  float frequency = 1.0f;
-  float maxAmplitude = 0.0f;
-
-  for (int i = 0; i < octaves; ++i) {
-    value += amplitude * noise.noise3D(x * frequency, 0.0f, z * frequency);
-    maxAmplitude += amplitude;
-    frequency *= lacunarity;
-    amplitude *= persistence;
-  }
-
-  // Normalise to roughly [-1, 1]
-  return maxAmplitude > 0.0f ? value / maxAmplitude : 0.0f;
-}
+// removed fractalNoise2D
 
 inline auto TerrainSampler::sampleTerrain(float worldX, float worldZ) const -> TerrainSample {
   const auto& cfg = m_config;
 
-  float continental = fractalNoise2D(
-      m_continentalNoise,
-      worldX * cfg.continentalScale,
-      worldZ * cfg.continentalScale,
-      3,
-      2.0f,
-      0.5f);
-
-  float detail = fractalNoise2D(
-      m_detailNoise,
-      worldX * cfg.detailScale,
-      worldZ * cfg.detailScale,
-      2,
-      2.0f,
-      0.5f);
+  float baseTerrainHeight = m_plainsGenerator.sample(worldX, worldZ, cfg);
 
   auto climate = m_climateSource->sampleClimate(worldX, worldZ);
   auto climateEval = biome::BiomeFactory::evaluate(climate);
   const auto* activeBiome = climateEval.dominantBiome;
 
-  float mountainExtra = climateEval.mountainWeight * fractalNoise2D(
-      m_continentalNoise,
-      worldX * cfg.mountainScale,
-      worldZ * cfg.mountainScale,
-      3,
-      2.5f,
-      0.6f) * cfg.mountainAmplitude;
-  if (mountainExtra < 0.0f) mountainExtra *= -0.6f;
+  float mountainExtra = m_mountainGenerator.sample(worldX, worldZ, climateEval.mountainWeight, cfg);
+  
+  float riverCarve = m_riverGenerator.sample(worldX, worldZ, cfg);
+  float lakeCarve = m_lakeGenerator.sample(worldX, worldZ, cfg);
 
   TerrainSample sample;
   sample.surfaceHeight =
       cfg.baseHeight
-      + continental * cfg.continentalAmplitude
-      + detail * cfg.detailAmplitude
+      + baseTerrainHeight
       + climateEval.blendedHeightBias
-      + mountainExtra;
+      + mountainExtra
+      + riverCarve
+      + lakeCarve;
   sample.surfaceY = static_cast<int32_t>(sample.surfaceHeight);
   sample.biome = activeBiome;
   sample.biomeId = activeBiome ? activeBiome->id() : biome::BiomeId::Plains;
@@ -251,4 +225,4 @@ inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float wor
   return terrain::resolveTerrainMaterial(ctx);
 }
 
-} // namespace voxel
+} // namespace terrain

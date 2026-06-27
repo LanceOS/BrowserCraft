@@ -1,6 +1,6 @@
 #pragma once
 
-namespace voxel::shaders {
+namespace terrain::shaders {
 
 // OpenGL 4.6 core GLSL — ported from WebGL2
 
@@ -265,4 +265,4 @@ void main() {
 }
 )glsl";
 
-} // namespace voxel::shaders
+} // namespace terrain::shaders

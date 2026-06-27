@@ -1,6 +1,6 @@
 #include "VertexArray.hpp"
 
-namespace voxel {
+namespace terrain {
 
 VertexArray::VertexArray() {
   gl::GenVertexArrays(1, &m_vao);
@@ -27,4 +27,4 @@ void VertexArray::bind() const {
   gl::BindVertexArray(m_vao);
 }
 
-} // namespace voxel
+} // namespace terrain

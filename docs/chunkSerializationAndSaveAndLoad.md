@@ -1,4 +1,4 @@
-# Voxel Engine Technical Design Document: Chunk Serialization & Save/Load
+# Terrain engine Technical Design Document: Chunk Serialization & Save/Load
 
 
 
@@ -9,7 +9,7 @@
 
 ## 1. System Overview
 
-Saving a voxel world requires persisting millions of block states to disk (browser storage). If we save the raw `Uint8Array` for every chunk (65,536 bytes for voxels + 65,536 bytes for light), a render distance of 16 would consume \~125MB per save.
+Saving a terrain world requires persisting millions of block states to disk (browser storage). If we save the raw `Uint8Array` for every chunk (65,536 bytes for density data + 65,536 bytes for light), a render distance of 16 would consume \~125MB per save.
 
 To solve this, the `SaveManager` groups chunks into **32x32 Region Files** (mirroring classic Minecraft `.mca` format concepts). Each region file is compressed using a custom, allocation-free **Run-Length Encoding (RLE)** algorithm.
 
@@ -56,7 +56,7 @@ This algorithm compresses a `Uint8Array` into a pre-allocated `ArrayBuffer` usin
  * Compresses a Uint8Array using RLE.
  * O(N) complexity. Zero allocations.
  * 
- * @param src The raw voxel/light data.
+ * @param src The raw terrain/light data.
  * @param dst The pre-allocated destination buffer.
  * @returns The number of bytes written to dst.
  */
@@ -218,7 +218,7 @@ interface SaveWorkerMessage {
 
 ## 4. Main Thread SaveManager (DOD Orchestrator)
 
-The `SaveManager` runs on the main thread. It maintains a **Dirty Queue** of chunks modified by the player. Every N seconds, it dequeues a batch of dirty chunks, extracts their voxel data from the `SharedArrayBuffer`, and transfers it to the SaveWorker.
+The `SaveManager` runs on the main thread. It maintains a **Dirty Queue** of chunks modified by the player. Every N seconds, it dequeues a batch of dirty chunks, extracts their terrain data from the `SharedArrayBuffer`, and transfers it to the SaveWorker.
 
 ```typescript
 // /src/engine/save/SaveManager.ts
@@ -263,7 +263,7 @@ export class SaveManager {
       const transferView = new Uint8Array(transferBuffer);
       const slot = this.sharedPool.view(chunk.slotIndex);
       
-      // Copy voxel data (light data omitted for brevity, but usually saved too)
+      // Copy terrain data (light data omitted for brevity, but usually saved too)
       transferView.set(new Uint8Array(slot.buffer, slot.baseByteOffset + 32, 65536));
 
       // 2. Calculate Region coordinates (32x32 chunks per region)

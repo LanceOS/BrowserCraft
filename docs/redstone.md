@@ -1,4 +1,4 @@
-# Voxel Engine Technical Design Document: Redstone & Logic Gates
+# Terrain engine Technical Design Document: Redstone & Logic Gates
 
 
 
@@ -147,16 +147,16 @@ The `RedstoneSystem` runs on a fixed accumulator (100ms). When an update is dequ
       const x = packed & 0x1F;
 
       const slot = this.sharedPool.view(slotIndex);
-      const voxels = slot.voxels;
+      const density data = slot.density data;
       const redstone = slot.redstone;
       const idx = (y * 16 + z) * 16 + x;
 
-      const blockId = voxels[idx];
+      const materialId = density data[idx];
       const currentPacked = redstone[idx];
       const currentPower = getPower(currentPacked);
 
       // Evaluate component logic (Wire, Torch, Repeater)
-      const evaluatedPower = this.evaluateComponent(blockId, x, y, z, newPower, slot);
+      const evaluatedPower = this.evaluateComponent(materialId, x, y, z, newPower, slot);
 
       if (evaluatedPower !== currentPower) {
         // State changed! Update array and enqueue neighbors.
@@ -179,14 +179,14 @@ Each redstone component has specific rules mirroring 1.5.2 mechanics.
 
 ```typescript
   private evaluateComponent(
-    blockId: number, x: number, y: number, z: number, 
+    materialId: number, x: number, y: number, z: number, 
     incomingPower: number, slot: ChunkSlot
   ): number {
-    const voxels = slot.voxels;
+    const density data = slot.density data;
     const redstone = slot.redstone;
     const idx = (y * 16 + z) * 16 + x;
     
-    switch (blockId) {
+    switch (materialId) {
       case 55: { // Redstone Wire
         // Wire receives power from neighbor. It drops by 1.
         const wirePower = Math.max(0, incomingPower - 1);
@@ -194,7 +194,7 @@ Each redstone component has specific rules mirroring 1.5.2 mechanics.
         // Wires also draw power from adjacent wires. We must check all 4 sides
         // to find the maximum power feeding into this wire.
         let maxNeighborPower = wirePower;
-        const neighbors = this.getRedstoneNeighbors(x, y, z, voxels, redstone);
+        const neighbors = this.getRedstoneNeighbors(x, y, z, density data, redstone);
         for (const n of neighbors) {
            if (n.id === 55) maxNeighborPower = Math.max(maxNeighborPower, n.power - 1);
            else if (n.id === 76 || n.id === 75) maxNeighborPower = 15; // Torch adjacent
@@ -263,21 +263,21 @@ When the `MesherWorker` processes a chunk, it reads the `redstone` array to sele
 For example, a Redstone Lamp (ID 123) uses texture layer 50 when unpowered, and layer 51 when power > 0.
 
 ```typescript
-// /src/engine/workers/mesher/GreedyMesher.ts (Excerpt)
+// /src/engine/workers/mesher/SurfaceNetsMesher.ts (Excerpt)
 
 // Inside the face emission logic:
-const blockId = Math.abs(c);
-const def = blocks.get(blockId);
+const materialId = Math.abs(c);
+const def = blocks.get(materialId);
 let texLayer = sign > 0
   ? (d === Axis.Y ? def.textures.top : def.textures.side)
   : (d === Axis.Y ? def.textures.bottom : def.textures.side);
 
 // Redstone visual override
-if (blockId === 55) { // Wire
+if (materialId === 55) { // Wire
   const power = getPower(slot.redstone[idx]);
   // Map power 0-15 to texture layers 60-75 (16 states of wire brightness)
   texLayer = 60 + power; 
-} else if (blockId === 123) { // Lamp
+} else if (materialId === 123) { // Lamp
   const power = getPower(slot.redstone[idx]);
   texLayer = power > 0 ? 51 : 50;
 }

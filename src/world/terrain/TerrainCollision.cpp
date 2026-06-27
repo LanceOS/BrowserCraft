@@ -3,7 +3,7 @@
 #include <cmath>
 #include <limits>
 
-namespace voxel {
+namespace terrain {
 
 // ============================================================================
 // Intersection Helper Functions
@@ -360,4 +360,4 @@ bool TerrainChunkCollision::raycastRecursive(int32_t nodeIdx, const glm::vec3& o
   return hitAny;
 }
 
-} // namespace voxel
+} // namespace terrain

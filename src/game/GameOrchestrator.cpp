@@ -2,8 +2,7 @@
 #include "game/ChunkWorkerImpl.hpp"
 #include "engine/core/RenderDistanceLimits.hpp"
 #include "engine/alloc/SharedPool.hpp"
-#include "world/blocks/VanillaBlockFactory.hpp"
-#include "content/flora/DefaultFlora.hpp"
+#include "engine/assets/AssetManager.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -11,13 +10,28 @@
 #include <utility>
 #include <thread>
 
-namespace voxel {
+namespace terrain {
 
 namespace {
 
 static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
   return {cfg.chunkSize, cfg.worldHeight, cfg.chunkSize,
           cfg.maxVertsPerChunk, cfg.maxIndicesPerChunk, cfg.vertexStrideFloats};
+}
+
+static void waitForChunkWorkers(WorkerThreadPool* genPool, WorkerThreadPool* meshPool) {
+  if (genPool) {
+    genPool->waitIdle();
+  }
+  if (meshPool) {
+    meshPool->waitIdle();
+  }
+}
+
+static void waitForSaveWorkers(WorkerThreadPool* ioPool) {
+  if (ioPool) {
+    ioPool->waitIdle();
+  }
 }
 
 } // namespace
@@ -27,33 +41,24 @@ void GameOrchestrator::buildRuntimeStack(Game& game) {
   game.m_pool = SharedPool::create(poolCap, makeDims(game.m_config));
   game.m_meshAllocator = std::make_unique<ChunkMeshAllocator>(game.m_config, poolCap);
 
-  game.m_worldController = std::make_unique<WorldController>(*game.m_pool, game.m_blocks, game.m_config);
+  game.m_worldController = std::make_unique<WorldController>(*game.m_pool, game.m_config);
   game.m_chunkWorker = std::make_unique<ChunkWorkerImpl>(
     *game.m_genPool, *game.m_meshPool, *game.m_pool, game.m_worldGenPipeline,
-    game.m_config, *game.m_worldController, game.m_blocks, *game.m_meshAllocator);
+    game.m_config, *game.m_worldController, *game.m_meshAllocator);
   // Persistence is attached later by configureSaveWorld.
   game.m_worldController->createWorld(*game.m_chunkWorker, nullptr);
 
-  game.m_renderer = std::make_unique<Renderer>(game.m_window, game.m_blocks, game.m_config,
+  game.m_renderer = std::make_unique<Renderer>(game.m_window, game.m_config,
                                                *game.m_meshAllocator);
 }
 
 void GameOrchestrator::initialize(Game& game, GLFWwindow* window, const Game::Options& options) {
-  {
-    VanillaBlockFactory factory;
-    factory.registerAll(game.m_blocks);
-  }
-
-  // Flora system — registers additional blocks and provides metadata
-  game.m_flora = flora::createDefaultFloraRegistry();
-  game.m_flora->registerAllBlocks(game.m_blocks);
-
   // Thread pool (use hardware concurrency, min 1)
   int32_t threads = std::max(1u, std::thread::hardware_concurrency());
   int32_t halfThreads = std::max(1, threads / 2);
   game.m_genPool = std::make_unique<WorkerThreadPool>(halfThreads);
   game.m_meshPool = std::make_unique<WorkerThreadPool>(halfThreads);
-  // Dedicated I/O pool for async chunk loading (1-2 threads; disk I/O is serial-bound)
+  // Dedicated I/O pool for async chunk loading
   game.m_ioPool = std::make_unique<WorkerThreadPool>(std::max(1, threads / 4));
 
   game.m_saveDir = options.saveDir;
@@ -62,18 +67,21 @@ void GameOrchestrator::initialize(Game& game, GLFWwindow* window, const Game::Op
   // Initialize save system orchestrator
   game.m_saveOrchestrator = std::make_unique<SaveOrchestrator>(game.m_saveDir);
 
-  // Load saved settings before building the runtime stack so the chunk pool,
-  // world, and renderer all agree on render distance from the first frame.
+  // Load saved settings before building the runtime stack
   auto saved = game.m_saveOrchestrator->loadSettings();
   int32_t savedRd = saved.renderDistance;
   game.m_config.renderDistance = savedRd;
   game.m_session.setRenderDistance(savedRd);
 
+  // Load block definitions and texture layers before constructing the renderer,
+  // otherwise the terrain texture array stays empty and all terrain fragments
+  // get discarded by the shader.
+  AssetManager::get().loadAssets();
+
   buildRuntimeStack(game);
   game.m_worldController->configureSaveWorld(game.m_saveDir, game.m_currentSaveSlug, false, game.m_ioPool.get());
 
   game.m_audioRegistry.seedBuiltinSounds();
-  game.m_blockAudio = std::make_unique<BlockInteractionAudio>(game.m_audioEngine, game.m_audioRegistry, game.m_blocks);
 
   game.m_ui = std::make_unique<UIManager>(window, UIManager::Callbacks{
     .onStartWorld = [&game](GameMode mode, const std::string& slotId, bool startFresh) {
@@ -115,50 +123,51 @@ void GameOrchestrator::initialize(Game& game, GLFWwindow* window, const Game::Op
 }
 
 void GameOrchestrator::shutdown(Game& game) {
-  // Persist runtime settings and flush chunk saves
   if (game.m_saveOrchestrator) {
     game.m_saveOrchestrator->saveSettings(game.m_config.renderDistance, game.m_ui ? game.m_ui->isFpsVisible() : false);
     if (game.m_worldController) {
       game.m_saveOrchestrator->onWorldClosed(game.m_worldController->saveManager());
     }
   }
+
+  // Drain background work before the terrain pipeline disappears during Game destruction.
+  waitForChunkWorkers(game.m_genPool.get(), game.m_meshPool.get());
+  waitForSaveWorkers(game.m_ioPool.get());
+  if (game.m_chunkWorker) {
+    game.m_chunkWorker.reset();
+  }
+  game.m_ioPool.reset();
+  game.m_meshPool.reset();
+  game.m_genPool.reset();
 }
 
 void GameOrchestrator::applyRenderDistance(Game& game, int32_t newRd) {
-  // Clamp to valid range
   newRd = std::clamp(newRd, MIN_RENDER_DISTANCE, MAX_RENDER_DISTANCE);
   if (newRd == game.m_config.renderDistance) return;
 
-  // 1. Flush pending saves and detach persistence
+  waitForChunkWorkers(game.m_genPool.get(), game.m_meshPool.get());
+
   if (game.m_worldController->saveManager()) {
     game.m_saveOrchestrator->onWorldClosed(game.m_worldController->saveManager());
   }
 
-  // 2. Clear systems (they hold references to World)
   game.m_systems.clear();
   game.m_playerController = nullptr;
 
-  // 3. Destroy render-dependent objects in reverse creation order
   game.m_renderer.reset();
   game.m_chunkWorker.reset();
   game.m_worldController.reset();
   game.m_pool.reset();
 
-  // 4. Update config and session (will revert if allocation fails).
   int32_t oldRd = game.m_config.renderDistance;
   game.m_config.renderDistance = newRd;
   game.m_session.setRenderDistance(newRd);
 
-  // 5. Try to recreate pool, world, and renderer. If allocation fails,
-  //    revert to the previous working render distance.
   try {
     buildRuntimeStack(game);
-
-    // Allocation succeeded — persist the new render distance.
     game.m_saveOrchestrator->settings().setInt("renderDistance", newRd);
     game.m_ui->setRenderDistance(newRd);
   } catch (const std::bad_alloc&) {
-    // Allocation failed — revert to the old render distance and recreate.
     game.m_renderer.reset();
     game.m_chunkWorker.reset();
     game.m_worldController.reset();
@@ -169,23 +178,18 @@ void GameOrchestrator::applyRenderDistance(Game& game, int32_t newRd) {
     game.m_session.setRenderDistance(oldRd);
 
     buildRuntimeStack(game);
-
-    // Restore UI to old value (setting didn't take effect).
     game.m_ui->setRenderDistance(oldRd);
     return;
   }
 
-  // 6. Reconfigure save (re-attach persistence)
   game.m_worldController->configureSaveWorld(game.m_saveDir, game.m_currentSaveSlug, false, game.m_ioPool.get());
   if (auto* sm = game.m_worldController->saveManager()) {
     game.m_saveOrchestrator->finalizeWorldStart(*sm, game.m_currentSaveSlug, game.m_currentSaveSlug,
                                            game.m_config.worldSeed, game.m_session.gameMode());
   }
 
-  // 7. Rebuild systems (they reference the new World)
   initSystems(game);
 
-  // 8. Reset player state
   game.m_spawnedToSurface = false;
   game.m_cameraDirty = true;
   syncPlayerWithCamera(game);
@@ -221,20 +225,21 @@ void GameOrchestrator::initSystems(Game& game) {
   // --- Player controller ---
   auto controller = std::make_unique<PlayerControllerSystem>(
     game.m_window, game.m_input, game.m_transforms, game.m_bodies, game.m_players,
-    game.m_worldController->world(), game.m_blocks, game.m_blockAudio.get(), game.m_camera,
+    *game.m_worldController, game.m_worldGenPipeline, game.m_camera,
     game.m_config, *game.m_ui, game.m_session, game.m_cameraDirty);
-  // Keep a non-owning pointer for direct access (e.g. pushPlayerOutOfBlocks).
   game.m_playerController = controller.get();
   game.m_systems.add(std::move(controller));
 
-  // --- Player spawn (runs once when terrain is ready) ---
+  // --- Player spawn ---
   game.m_systems.add(std::make_unique<PlayerSpawnSystem>(
-    game.m_transforms, game.m_bodies, game.m_worldController->world(), game.m_config,
+    game.m_transforms, game.m_bodies, game.m_worldController->world(), game.m_worldGenPipeline, game.m_config,
     game.m_spawnedToSurface, game.m_cameraDirty, &game.m_playerController->collisions()));
 }
 
 void GameOrchestrator::startWorld(Game& game, GameMode mode, const std::string& slotId, bool startFresh) {
-  // 1. Resolve slug and prepare world parameters via the orchestrator
+  waitForChunkWorkers(game.m_genPool.get(), game.m_meshPool.get());
+  waitForSaveWorkers(game.m_ioPool.get());
+
   std::string displayName = slotId;
   std::string slug;
   uint32_t seed = game.m_config.worldSeed;
@@ -260,19 +265,20 @@ void GameOrchestrator::startWorld(Game& game, GameMode mode, const std::string& 
 
   game.m_currentSaveSlug = slug;
 
-  // 2. Configure the world (creates SaveManager, sets up chunk persistence)
   game.m_worldController->configureSaveWorld(game.m_saveDir, slug, startFresh, game.m_ioPool.get());
 
-  // 3. Finalize metadata via the orchestrator
   if (auto* sm = game.m_worldController->saveManager()) {
+    if (!startFresh) {
+      seed = sm->metadata().seed;
+      game.m_config.worldSeed = seed;
+      game.m_worldGenPipeline = WorldGenPipeline(seed);
+    }
     game.m_saveOrchestrator->finalizeWorldStart(*sm, displayName, slug, seed, mode);
   }
 
-  // 4. Transition session state
   game.m_session.startSingleplayer(mode);
   game.m_dayNightCycle.setTime(daynight::kMiddayTimeSeconds);
 
-  // 5. Reset player / camera
   game.m_spawnedToSurface = false;
   game.m_camera.position = glm::vec3(0.0f, 80.0f, 50.0f);
   game.m_cameraDirty = true;
@@ -292,12 +298,10 @@ void GameOrchestrator::startWorld(Game& game, GameMode mode, const std::string& 
     player.selectedHotbarSlot = 0;
   }
 
-  // 6. Switch UI to in-game
   game.m_ui->clearUI();
   game.m_ui->setInventoryOpen(false);
   glfwSetInputMode(game.m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-  // 7. Refresh world list
   game.m_saveOrchestrator->refreshWorldList();
 }
 
@@ -325,7 +329,6 @@ void GameOrchestrator::update(Game& game, float dt) {
     game.m_worldController->processSavePending();
     game.m_worldController->world().update(game.m_camera.position);
 
-    // Build tick context and run ECS systems
     TickContext ctx{
       .input = game.m_input,
       .world = game.m_worldController->world(),
@@ -377,10 +380,6 @@ void GameOrchestrator::run(Game& game) {
   GameLoop loop(60.0f,
     [&game](float dt) { GameOrchestrator::update(game, dt); },
     [&game, &loop](float, float time) {
-      // Clear frame state BEFORE polling events so that mouse delta accumulated
-      // during glfwPollEvents survives until the next frame's update() call.
-      // (update() runs before render() in the GameLoop, so clearing here ensures
-      //  the delta from this frame's poll is consumed by update next frame.)
       game.m_input.clearFrameState();
       glfwPollEvents();
       if (glfwWindowShouldClose(game.m_window) || !game.m_running) { loop.stop(); return; }
@@ -414,4 +413,4 @@ void GameOrchestrator::run(Game& game) {
   loop.run();
 }
 
-} // namespace voxel
+} // namespace terrain

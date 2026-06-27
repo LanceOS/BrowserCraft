@@ -2,7 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <algorithm>
 
-namespace voxel {
+namespace terrain {
 
 GameLoop::GameLoop(float targetFps, UpdateFn update, RenderFn render)
   : m_fixedStep(1.0f / targetFps),
@@ -38,4 +38,4 @@ void GameLoop::stop() {
   m_running = false;
 }
 
-} // namespace voxel
+} // namespace terrain

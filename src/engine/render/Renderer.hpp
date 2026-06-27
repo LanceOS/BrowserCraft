@@ -11,7 +11,6 @@
 #include "../math/Frustum.hpp"
 #include "../math/AABB.hpp"
 #include "../../world/World.hpp"
-#include "../../world/BlockRegistry.hpp"
 #include "../../engine/core/Config.hpp"
 #include <GLFW/glfw3.h>
 #include <unordered_map>
@@ -20,9 +19,9 @@
 #include <array>
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
-/// Main OpenGL renderer for the voxel engine.
+/// Main OpenGL renderer for the terrain engine.
 /// Manages shaders, uniforms, textures, and per-chunk meshes.
 class Renderer {
 public:
@@ -30,7 +29,7 @@ public:
   static constexpr int32_t CAMERA_BLOCK_FLOATS = 80;
   static constexpr int32_t TIME_BLOCK_FLOATS = 20;
 
-  Renderer(GLFWwindow* window, BlockRegistry& blocks, const GameConfig& config,
+  Renderer(GLFWwindow* window, const GameConfig& config,
            ChunkMeshAllocator& meshAllocator);
   ~Renderer();
 
@@ -61,7 +60,6 @@ private:
   const GameConfig& m_config;
 
   ShaderProgram m_terrainShader;
-  ShaderProgram m_chunkShader;
   ShaderProgram m_skyShader;
   UniformBuffer m_cameraUbo;
   UniformBuffer m_timeUbo;
@@ -86,4 +84,4 @@ private:
   int32_t m_fbHeight = 1;
 };
 
-} // namespace voxel
+} // namespace terrain

@@ -1,8 +1,8 @@
 #include "DayNightCycle.hpp"
 #include <algorithm>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 namespace daynight {
 
 namespace {
@@ -130,4 +130,4 @@ auto DayNightCycle::wrapTime(float timeSeconds, float dayLengthSeconds) -> float
 }
 
 } // namespace daynight
-} // namespace voxel
+} // namespace terrain

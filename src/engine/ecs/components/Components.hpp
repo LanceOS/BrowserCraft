@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <cstdint>
 
-namespace voxel::cmp {
+namespace terrain::cmp {
 
 /// Position, rotation, scale.
 struct Transform {
@@ -53,4 +53,4 @@ struct Health {
   float max = 20.0f;
 };
 
-} // namespace voxel::cmp
+} // namespace terrain::cmp

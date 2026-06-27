@@ -1,6 +1,6 @@
 #include "Frustum.hpp"
 
-namespace voxel {
+namespace terrain {
 
 void Frustum::extractFrom(const glm::mat4& vp) {
   // Left plane
@@ -71,4 +71,4 @@ auto Frustum::intersectsAABB(float minX, float minY, float minZ,
   return true;
 }
 
-} // namespace voxel
+} // namespace terrain

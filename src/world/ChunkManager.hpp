@@ -5,8 +5,8 @@
 #include <optional>
 #include <cstdint>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 /// Manages the set of active chunks around the player.
 class ChunkManager {
@@ -80,4 +80,4 @@ private:
   std::unordered_map<int64_t, Chunk> m_chunks;
 };
 
-} // namespace voxel
+} // namespace terrain

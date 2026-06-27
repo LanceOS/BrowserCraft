@@ -211,7 +211,7 @@ Caves are carved using the classic "worm" approach. A cursor starts at a random 
 import { SimplexNoise } from "./SimplexNoise";
 
 /**
- * Carves winding caves into the voxel array.
+ * Carves winding caves into the terrain array.
  * Uses a 3D noise field to steer a "worm" through the chunk volume.
  * 
  * Complexity: O(numWorms * wormLength * radius^3).
@@ -234,7 +234,7 @@ export class CaveCarver {
   }
 
   public carve(
-    voxels: Uint8Array,
+    density data: Uint8Array,
     baseX: number, baseZ: number,
     sizeX: number, sizeY: number, sizeZ: number
   ): void {
@@ -267,13 +267,13 @@ export class CaveCarver {
         
         // Carve a sphere of radius 1.5 at the worm's head
         const radius = 1.5 + this.noise.noise3D(worldX * 0.1, worldY * 0.1, worldZ * 0.1) * 0.5;
-        this.carveSphere(voxels, x, y, z, radius, sizeX, sizeY, sizeZ);
+        this.carveSphere(density data, x, y, z, radius, sizeX, sizeY, sizeZ);
       }
     }
   }
 
   private carveSphere(
-    voxels: Uint8Array,
+    density data: Uint8Array,
     cx: number, cy: number, cz: number, r: number,
     sizeX: number, sizeY: number, sizeZ: number
   ): void {
@@ -294,8 +294,8 @@ export class CaveCarver {
           if (dx*dx + dy*dy + dz*dz <= rSq) {
             const idx = (y * sizeZ + z) * sizeX + x;
             // Only carve solid blocks (don't replace air, to prevent carving into ungenerated areas)
-            if (voxels[idx] !== 0) {
-              voxels[idx] = 0; // Air
+            if (density data[idx] !== 0) {
+              density data[idx] = 0; // Air
             }
           }
         }
@@ -313,7 +313,7 @@ Ores scatter in pockets using a small random walk per vein type, restricted by Y
 // /src/engine/workers/worldgen/OreDistributor.ts
 
 interface OreConfig {
-  blockId: number;
+  materialId: number;
   minY: number;
   maxY: number;
   veinsPerChunk: number;
@@ -321,10 +321,10 @@ interface OreConfig {
 }
 
 const ORE_CONFIGS: OreConfig[] = [
-  { blockId: 16, minY: 5,  maxY: 64, veinsPerChunk: 20, veinSize: 8 }, // Coal
-  { blockId: 15, minY: 5,  maxY: 32, veinsPerChunk: 10, veinSize: 6 }, // Iron
-  { blockId: 14, minY: 5,  maxY: 16, veinsPerChunk: 4,  veinSize: 4 }, // Gold
-  { blockId: 56, minY: 5,  maxY: 12, veinsPerChunk: 2,  veinSize: 4 }, // Diamond
+  { materialId: 16, minY: 5,  maxY: 64, veinsPerChunk: 20, veinSize: 8 }, // Coal
+  { materialId: 15, minY: 5,  maxY: 32, veinsPerChunk: 10, veinSize: 6 }, // Iron
+  { materialId: 14, minY: 5,  maxY: 16, veinsPerChunk: 4,  veinSize: 4 }, // Gold
+  { materialId: 56, minY: 5,  maxY: 12, veinsPerChunk: 2,  veinSize: 4 }, // Diamond
 ];
 
 export class OreDistributor {
@@ -340,7 +340,7 @@ export class OreDistributor {
 
   /** Distributes ore veins. O(veins * veinSize). */
   public distribute(
-    voxels: Uint8Array,
+    density data: Uint8Array,
     sizeX: number, sizeY: number, sizeZ: number
   ): void {
     for (const cfg of ORE_CONFIGS) {
@@ -362,8 +362,8 @@ export class OreDistributor {
           
           const idx = (y * sizeZ + z) * sizeX + x;
           // Only replace stone (id=1)
-          if (voxels[idx] === 1) {
-            voxels[idx] = cfg.blockId;
+          if (density data[idx] === 1) {
+            density data[idx] = cfg.materialId;
           }
         }
       }
@@ -407,11 +407,11 @@ export class WorldGenPipeline {
   }
 
   /**
-   * Main generation pipeline. Fills the SharedArrayBuffer voxel data.
+   * Main generation pipeline. Fills the SharedArrayBuffer terrain data.
    * Complexity: O(sizeX * sizeY * sizeZ) for terrain, plus cave/ore overhead.
    */
   public generate(slot: ChunkSlot, dims: ChunkDimensions): void {
-    const vox = slot.voxels;
+    const vox = slot.density data;
     const { sizeX, sizeY, sizeZ } = dims;
     const chunkX = Atomics.load(slot.chunkX, 0);
     const chunkZ = Atomics.load(slot.chunkZ, 0);
@@ -488,6 +488,6 @@ export class WorldGenPipeline {
 1. **3D Noise Terrain**: Instead of flat 2D heightmaps, we calculate a `depthFactor` and modulate it with `SimplexNoise.noise3D()`. This creates 3D overhangs, floating blocks, and underground air pockets seamlessly.
 2. **Biome-driven Surface Rules**: `BiomeSampler` maps Temperature/Humidity to a `BiomeId`, which is then used to lookup `BiomeSurfaceRule` from a strictly-typed table (O(1) lookup). This determines if the top block is Grass (Plains), Sand (Desert), or Stone (Mountains).
 3. **Zero-Copy Worker Boundary**: The `WorldGenPipeline.generate()` method takes a `ChunkSlot` that is merely a collection of `TypedArray` views directly into the `SharedArrayBuffer`. It mutates memory visible to the main thread without ever triggering `postMessage` serialization.
-4. **No OOP Bloat in Workers**: No `class Voxel` or `class Chunk` objects exist. Voxel data is a flat `Uint8Array` (`vox`), iterated via integer math (`(y * sizeZ + z) * sizeX + x`). This keeps the CPU cache lines perfectly saturated during generation.
+4. **No OOP Bloat in Workers**: No `class Terrain` or `class Chunk` objects exist. Terrain data is a flat `Uint8Array` (`vox`), iterated via integer math (`(y * sizeZ + z) * sizeX + x`). This keeps the CPU cache lines perfectly saturated during generation.
 
 

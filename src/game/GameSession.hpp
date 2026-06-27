@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-namespace voxel {
+namespace terrain {
 
 /// Tracks the high-level game session state (menu, playing, paused, etc.).
 class GameSession {
@@ -34,4 +34,4 @@ private:
   int32_t m_startRequestId = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

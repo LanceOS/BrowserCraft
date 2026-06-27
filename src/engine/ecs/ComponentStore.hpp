@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace voxel {
+namespace terrain {
 
 /// Generic component store with sparse/dense mapping for O(1) lookup.
 /// T must be default-constructible and movable.
@@ -117,4 +117,4 @@ private:
   int32_t m_denseCount = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

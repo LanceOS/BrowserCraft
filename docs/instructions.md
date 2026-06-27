@@ -1,6 +1,6 @@
-# Voxel Sandbox Engine — Architectural Blueprint
+# Terrain Sandbox Engine — Architectural Blueprint
 
-Below is the foundational architecture for a Minecraft 1.3.2/1.5.2-era voxel sandbox built strictly on TypeScript + WebGL2 (GLSL 300 ES). The design adheres to: DOD-based ECS with SoA TypedArray storage, zero-copy worker boundaries via `SharedArrayBuffer`/`Atomics`, WebGL2 VAO/VBO/UBO/`TEXTURE_2D_ARRAY`, greedy meshing, and an abstract factory for block content.
+Below is the foundational architecture for a Minecraft 1.3.2/1.5.2-era terrain sandbox built strictly on TypeScript + WebGL2 (GLSL 300 ES). The design adheres to: DOD-based ECS with SoA TypedArray storage, zero-copy worker boundaries via `SharedArrayBuffer`/`Atomics`, WebGL2 VAO/VBO/UBO/`TEXTURE_2D_ARRAY`, SurfaceNets meshing, and an abstract factory for block content.
 
 
 ---
@@ -37,8 +37,8 @@ Below is the foundational architecture for a Minecraft 1.3.2/1.5.2-era voxel san
 │   │   │   ├── RenderableMob.ts      // vaoId, instanceOffset, skeletonId
 │   │   │   └── HostileTag.ts / FriendlyTag.ts
 │   │   └── /systems
-│   │       ├── PhysicsSystem.ts      // swept-AABB vs voxel grid
-│   │       ├── PathfindingSystem.ts  // A* over chunk-local voxel walkability
+│   │       ├── PhysicsSystem.ts      // swept-AABB vs terrain grid
+│   │       ├── PathfindingSystem.ts  // A* over chunk-local terrain walkability
 │   │       ├── AISystem.ts           // behavior trees -> intent -> path requests
 │   │       ├── MobRenderSystem.ts    // batches mob VAOs per shader
 │   │       └── HealthSystem.ts
@@ -61,14 +61,14 @@ Below is the foundational architecture for a Minecraft 1.3.2/1.5.2-era voxel san
 │   └── /workers
 │       ├── WorkerSpawner.ts          // Inline worker bootstrap via Blob URL (no bundler split)
 │       ├── /worldgen
-│       │   ├── WorldGenWorker.ts     // Entry; consumes SharedPool slot, fills voxels
+│       │   ├── WorldGenWorker.ts     // Entry; consumes SharedPool slot, fills density data
 │       │   ├── SimplexNoise.ts       // 3D gradient noise (Alois Schlosser-style)
 │       │   ├── BiomeSampler.ts       // temperature × humidity -> biome lookup
 │       │   ├── CaveCarver.ts         // 3D Perlin worm carver w/ random walk
 │       │   └── OreDistributor.ts     // Poisson-disc per-ore per-chunk
 │       └── /mesher
-│           ├── MesherWorker.ts       // Reads voxels from SharedPool, writes mesh
-│           ├── GreedyMesher.ts       // The algorithm (provided below)
+│           ├── MesherWorker.ts       // Reads density data from SharedPool, writes mesh
+│           ├── SurfaceNetsMesher.ts       // The algorithm (provided below)
 │           ├── AmbientOcclusion.ts   // 4-corner AO sampling
 │           └── FaceCuller.ts         // Opaque vs transparent neighbor test
 │
@@ -77,10 +77,10 @@ Below is the foundational architecture for a Minecraft 1.3.2/1.5.2-era voxel san
 │   ├── ChunkManager.ts               // LRU chunk cache keyed by (x,z) packed Int32
 │   ├── Chunk.ts                      // Pure-data: ref to SharedPool slot + GPU handles
 │   ├── ChunkColumn.ts                // 16x16x256 vertical column; biome table
-│   ├── BlockRegistry.ts              // Singleton; id -> BlockDefinition
-│   ├── BlockFactory.ts               // Abstract Factory pattern (provided below)
+│   ├── MaterialRegistry.ts              // Singleton; id -> MaterialDefinition
+│   ├── MaterialFactory.ts               // Abstract Factory pattern (provided below)
 │   └── /blocks
-│       ├── BlockDefinition.ts        // Interface for block content
+│       ├── MaterialDefinition.ts        // Interface for block content
 │       ├── BlockMaterial.ts          // Flags: opaque, transparent, liquid, foliage
 │       ├── VanillaBlocks.ts          // 128+ block registrations (dirt, stone, logs, ores...)
 │       └── AABB.ts                   // Per-block collision hull (slabs, fences differ)
@@ -93,7 +93,7 @@ Below is the foundational architecture for a Minecraft 1.3.2/1.5.2-era voxel san
 │   └── /mobs
 │       ├── MobFactory.ts             // Spawns ECS entity w/ archetype tag
 │       ├── Pig.ts Zombie.ts Skeleton.ts Creeper.ts
-│       └── MobModel.ts               // Cube-based geometry reference
+│       └── MobModel.ts               // Density-based geometry reference
 │
 ├── /game
 │   ├── Game.ts                       // Composition root; wires ECS, renderer, workers
@@ -114,10 +114,10 @@ Each chunk needs to migrate across three threads:
 
 
 1. **Main thread** — allocates a slot, dispatches coords
-2. **WorldGen worker** — fills `voxels` + `biomes`
-3. **Mesher worker** — consumes voxels, produces interleaved vertex/index bytes
+2. **WorldGen worker** — fills `density data` + `biomes`
+3. **Mesher worker** — consumes density data, produces interleaved vertex/index bytes
 
-`postMessage` with structured cloning would copy \~64 KiB of voxel data per chunk, multiplied by render distance squared — completely untenable at 32 chunks. Instead, every chunk lives in a fixed-size **slot** carved from a single pre-allocated `SharedArrayBuffer`. State transitions are guarded by `Atomics.compareExchange`, giving lock-free SPSC semantics for each phase.
+`postMessage` with structured cloning would copy \~64 KiB of terrain data per chunk, multiplied by render distance squared — completely untenable at 32 chunks. Instead, every chunk lives in a fixed-size **slot** carved from a single pre-allocated `SharedArrayBuffer`. State transitions are guarded by `Atomics.compareExchange`, giving lock-free SPSC semantics for each phase.
 
 ### 2.2 Slot memory map
 
@@ -130,7 +130,7 @@ Each chunk needs to migrate across three threads:
 | 16 | `chunkZ` | `Int32` | World-space chunk Z |
 | 20 | `genSeed` | `Uint32` | Hash of (x,z,worldSeed) for deterministic noise |
 | 24 | `pad` | `Uint32[2]` | Align next field to 32 |
-| 32 | `voxels` | `Uint8[CHUNK_VOL]` | Block IDs (16×16×256 = 65 536) |
+| 32 | `density data` | `Uint8[CHUNK_VOL]` | Block IDs (16×16×256 = 65 536) |
 | 32+V | `light` | `Uint8[CHUNK_VOL]` | Packed sky/block light nibbles |
 | 32+V+L | `vertices` | `Float32[MAX_VERTS × STRIDE]` | Interleaved mesh data |
 | 32+V+L+M | `indices` | `Uint32[MAX_INDICES]` | Triangle indices |
@@ -145,11 +145,11 @@ Each chunk needs to migrate across three threads:
 /**
  * Chunk slot synchronization states. Transitions are enforced via
  * Atomics.compareExchange, which guarantees that exactly one thread "owns"
- * the right to mutate the heavy payload (voxels / mesh) at any moment.
+ * the right to mutate the heavy payload (density data / mesh) at any moment.
  *
  *       FREE ──(main dispatch)──▶ GENERATING
  *         ▲                            │
- *         │                            │ (worker writes voxels)
+ *         │                            │ (worker writes density data)
  *         │                            ▼
  *   GPU_UPLOADED ◀──(main upload)── MESH_READY
  *                                  ▲
@@ -194,7 +194,7 @@ export interface ChunkSlot {
   readonly chunkZ: Int32Array;        // length 1
   readonly genSeed: Uint32Array;      // length 1
   // --- Payload ---
-  readonly voxels: Uint8Array;        // CHUNK_VOL
+  readonly density data: Uint8Array;        // CHUNK_VOL
   readonly light: Uint8Array;         // CHUNK_VOL
   readonly vertices: Float32Array;    // maxVerts * stride
   readonly indices: Uint32Array;      // maxIndices
@@ -209,7 +209,7 @@ export interface ChunkSlot {
  *     dispatches are pure ID/coord messages — sub-microsecond.
  *
  * Memory footprint at defaults (16×256×16, 65k verts, 130k indices):
- *   header  + voxels  + light   + verts         + indices
+ *   header  + density data  + light   + verts         + indices
  *   32 B    + 64 KiB  + 64 KiB  + 2 080 KiB     + 520 KiB  ≈ 2.7 MiB per slot
  *   At render distance 16 (1021 chunks): ~2.8 GiB. Tunable via Config.
  *
@@ -294,7 +294,7 @@ export class SharedPool {
       chunkX:       new Int32Array(b, base + 12, 1),
       chunkZ:       new Int32Array(b, base + 16, 1),
       genSeed:      new Uint32Array(b, base + 20, 1),
-      voxels:       new Uint8Array(b, base + this.headerBytes,                this.voxelsBytes),
+      density data:       new Uint8Array(b, base + this.headerBytes,                this.voxelsBytes),
       light:        new Uint8Array(b, base + this.headerBytes + this.voxelsBytes,  this.lightBytes),
       vertices:     new Float32Array(b, base + this.headerBytes + this.voxelsBytes + this.lightBytes,
                                                        this.dims.maxVertsPerChunk * this.dims.vertexStrideFloats),
@@ -360,9 +360,9 @@ ctx.onmessage = (e: MessageEvent<{ buffer: SharedArrayBuffer; dims: ChunkDimensi
   Atomics.store(slot.chunkZ, 0, job.chunkZ);
   Atomics.store(slot.genSeed, 0, job.seed);
 
-  // --- Hot path: fill voxels (no allocations) ---
+  // --- Hot path: fill density data (no allocations) ---
   const { sizeX, sizeY, sizeZ } = pool!.dimensions;
-  const vox = slot.voxels;
+  const vox = slot.density data;
   const baseX = job.chunkX * sizeX;
   const baseZ = job.chunkZ * sizeZ;
 
@@ -391,7 +391,7 @@ ctx.onmessage = (e: MessageEvent<{ buffer: SharedArrayBuffer; dims: ChunkDimensi
 
 ---
 
-## 3. WebGL2 Greedy Mesher
+## 3. WebGL2 SurfaceNets mesher
 
 ### 3.1 Vertex layout (interleaved, 32 bytes / vertex)
 
@@ -410,16 +410,16 @@ For readability below I use **8 ×** `f32` (32 bytes): `pos.xyz, normal.xyz, uv.
 For one chunk of side `N` (here `N=16` for X/Z, `H=256` for Y):
 
 * 3 axis sweeps × `N` slices × `N×N` mask = **O(N²·H) = O(V) per chunk**.
-* Greedy merge: amortized **O(mask_size)** because each cell is consumed once.
+* SurfaceNets merge: amortized **O(mask_size)** because each cell is consumed once.
 * Total: **O(V)** per chunk — strictly linear in chunk volume.
 
 ### 3.3 Implementation
 
 ```typescript
-// /src/engine/workers/mesher/GreedyMesher.ts
+// /src/engine/workers/mesher/SurfaceNetsMesher.ts
 
 import type { ChunkSlot } from "../../alloc/SharedPool";
-import type { BlockRegistry } from "../../../world/BlockRegistry";
+import type { MaterialRegistry } from "../../../world/MaterialRegistry";
 
 /** Axis index constants — kept as `const enum` for inlining. */
 const enum Axis { X = 0, Y = 1, Z = 2 }
@@ -429,7 +429,7 @@ const STRIDE = 8;
 const INDICES_PER_QUAD = 6;
 
 /**
- * Greedy meshing implementation.
+ * SurfaceNets meshing implementation.
  *
  * Terminology (matches the canonical "0fps" article by Mikola Lysenko):
  *   - "d" is the sweep axis (0,1,2)
@@ -447,14 +447,14 @@ const INDICES_PER_QUAD = 6;
 export function greedyMeshChunk(
   slot: ChunkSlot,
   dims: { sizeX: number; sizeY: number; sizeZ: number },
-  blocks: BlockRegistry,
+  blocks: MaterialRegistry,
   neighborVoxels: { px: Uint8Array | null; nx: Uint8Array | null;
                     pz: Uint8Array | null; nz: Uint8Array | null },
 ): boolean {
   const { sizeX, sizeY, sizeZ } = dims;
   // Treat the chunk as a 3D volume indexed [y][z][x].
   const vol = sizeX * sizeY * sizeZ;
-  const vox = slot.voxels;
+  const vox = slot.density data;
 
   // Pre-allocate mesh cursors into the SharedArrayBuffer-backed arrays.
   const verts = slot.vertices;
@@ -464,7 +464,7 @@ export function greedyMeshChunk(
   const maxV = verts.length / STRIDE;
   const maxI = idx.length;
 
-  /** Sample helper: returns voxel id at integer coords, with neighbor spillover. */
+  /** Sample helper: returns terrain id at integer coords, with neighbor spillover. */
   const get = (x: number, y: number, z: number): number => {
     if (y < 0 || y >= sizeY) return 0;              // outside vertical = air
     if (x >= 0 && x < sizeX && z >= 0 && z < sizeZ) {
@@ -479,7 +479,7 @@ export function greedyMeshChunk(
   };
 
   /**
-   * Determines whether the face between `a` (current voxel) and `b` (next voxel
+   * Determines whether the face between `a` (current terrain) and `b` (next terrain
    * along +d) should be rendered, and which side owns it.
    *
    * Returns 0 (no face), +a (face owned by a, normal +d), -b (face owned by b, normal -d).
@@ -508,7 +508,7 @@ export function greedyMeshChunk(
    *   - Two side-occluders => fully dark (0)
    *   - Otherwise: 3 - (s1 + s2 + corner)  ∈ {0,1,2,3}
    *
-   * The four vertices of a face sample the three voxels diagonal to that corner.
+   * The four vertices of a face sample the three density data diagonal to that corner.
    */
   const vertexAO = (s1: number, s2: number, c: number): number => {
     if (s1 !== 0 && s2 !== 0) return 0;
@@ -528,7 +528,7 @@ export function greedyMeshChunk(
   const mask = new Int32Array(maxMask);  // Int32 to allow negative sign
 
   /** Iterates the three axis sweeps. Order matters for cache behavior
-   *  on the voxel array (Y-major is best since voxels are Y-strided). */
+   *  on the terrain array (Y-major is best since density data are Y-strided). */
   const axes: ReadonlyArray<{ d: Axis; u: Axis; v: Axis; sizeD: number; sizeU: number; sizeV: number; }> = [
     { d: Axis.X, u: Axis.Y, v: Axis.Z, sizeD: sizeX, sizeU: sizeY, sizeV: sizeZ },
     { d: Axis.Y, u: Axis.X, v: Axis.Z, sizeD: sizeY, sizeU: sizeX, sizeV: sizeZ },
@@ -542,14 +542,14 @@ export function greedyMeshChunk(
     const q = [0, 0, 0];
     q[d] = 1;
 
-    // Sweep along d. We compare voxel[x] vs voxel[x+q].
+    // Sweep along d. We compare terrain[x] vs terrain[x+q].
     for (x[d] = -1; x[d] < sizeD;) {
       // ---- Compute mask for this slice ----
       let n = 0;
       for (x[v] = 0; x[v] < sizeV; x[v]++) {
         for (x[u] = 0; x[u] < sizeU; x[u]++) {
-          // Note: when x[d] === -1, get() returns 0 for "voxel at x" — that's correct
-          // because the boundary voxel is in the neighbor column (handled by get()).
+          // Note: when x[d] === -1, get() returns 0 for "terrain at x" — that's correct
+          // because the boundary terrain is in the neighbor column (handled by get()).
           const a = (x[d] >= 0) ? get(x[0], x[1], x[2]) : 0;
           const b = (x[d] + 1 < sizeD) ? get(x[0] + q[0], x[1] + q[1], x[2] + q[2]) : 0;
           mask[n++] = faceMaskValue(a, b);
@@ -557,7 +557,7 @@ export function greedyMeshChunk(
       }
       x[d]++;  // advance to the slice where faces actually live
 
-      // ---- Greedy merge + emit ----
+      // ---- SurfaceNets merge + emit ----
       n = 0;
       for (let j = 0; j < sizeV; j++) {
         for (let i = 0; i < sizeU;) {
@@ -580,7 +580,7 @@ export function greedyMeshChunk(
 
             // -------- Emit one quad (w × h) --------
             // 4 corner vertices + 6 indices. Compute per-corner AO from the
-            // three voxels diagonally adjacent to that corner.
+            // three density data diagonally adjacent to that corner.
 
             // Origin in 3D space.
             const du = [0, 0, 0]; du[u] = w;
@@ -594,14 +594,14 @@ export function greedyMeshChunk(
             const sign = c > 0 ? 1 : -1;
             const normal = [0, 0, 0];
             normal[d] = sign;
-            const blockId = Math.abs(c);
-            const def = blocks.get(blockId);
-            // Texture layer: face direction selects top/side/bottom from BlockDefinition.
+            const materialId = Math.abs(c);
+            const def = blocks.get(materialId);
+            // Texture layer: face direction selects top/side/bottom from MaterialDefinition.
             const layer = sign > 0
               ? (d === Axis.Y ? def.textures.top    : def.textures.side)
               : (d === Axis.Y ? def.textures.bottom : def.textures.side);
 
-            // Compute per-corner AO by sampling the three "above-face" voxels.
+            // Compute per-corner AO by sampling the three "above-face" density data.
             // The "above" direction is the normal; we step back to the air side.
             const aoSamples = computeCornerAO(get, x, du, dv, d, u, v, sign, w, h);
 
@@ -664,14 +664,14 @@ export function greedyMeshChunk(
 }
 
 /**
- * Samples the 3 voxels needed per corner for AO.
+ * Samples the 3 density data needed per corner for AO.
  *
  * For a face with normal `sign * e_d`:
- *   - The face plane is at coordinate (x[d]) on the +d side of voxel x.
+ *   - The face plane is at coordinate (x[d]) on the +d side of terrain x.
  *   - Each of the 4 corners of the quad touches a different "corner" of the
  *     air cell adjacent to that face.
  *   - At each corner we sample side1 (along +u), side2 (along +v), and corner
- *     (diagonal +u,+v) of the *air* cell — i.e. voxels at offsets
+ *     (diagonal +u,+v) of the *air* cell — i.e. density data at offsets
  *     (x + sign*q, x + sign*q + e_u, x + sign*q + e_v, x + sign*q + e_u + e_v).
  */
 function computeCornerAO(
@@ -683,9 +683,9 @@ function computeCornerAO(
 ): [number, number, number, number] {
   // Step from face plane toward the air side.
   const stepBack = [0, 0, 0];
-  stepBack[d] = sign < 0 ? -1 : 0;  // we are on the +d side of voxel; air is at x[d] + sign
-  // Actually: for sign=+1 the face is on the +d side of voxel x; air is at x + q.
-  // For sign=-1 the face is on the -d side of voxel x+q; air is at x.
+  stepBack[d] = sign < 0 ? -1 : 0;  // we are on the +d side of terrain; air is at x[d] + sign
+  // Actually: for sign=+1 the face is on the +d side of terrain x; air is at x + q.
+  // For sign=-1 the face is on the -d side of terrain x+q; air is at x.
   // stepBack takes us from face-origin into the air cell.
   const airOffset = sign > 0 ? 1 : 0;  // 1 means "+q"; 0 means "stay"
 
@@ -700,7 +700,7 @@ function computeCornerAO(
     // s2 = neighbor in +v direction
     // c  = diagonal neighbor (+u, +v)
     // Which physical neighbor depends on the sign of duOff, dvOff relative
-    // to the corner. We precompute absolute voxel coords.
+    // to the corner. We precompute absolute terrain coords.
     const cu = duOff > 0 ? w : 0;
     const cv = dvOff > 0 ? h : 0;
     const corner = [origin[0] + (du[0] / w) * cu + (dv[0] / h) * cv,
@@ -1062,7 +1062,7 @@ export const AIStateDesc = {
 // /src/engine/ecs/systems/PhysicsSystem.ts
 
 /**
- * Swept-AABB physics against the voxel grid.
+ * Swept-AABB physics against the terrain grid.
  *
  * Iterates every entity that has BOTH Transform and RigidBody.
  * Because both stores are SoA with parallel dense arrays, iteration touches
@@ -1075,7 +1075,7 @@ export class PhysicsSystem {
     private readonly em: EntityManager,
     private readonly transforms: ComponentStore<typeof TransformDesc>,
     private readonly bodies:     ComponentStore<typeof RigidBodyDesc>,
-    private readonly world: World, // voxel query API
+    private readonly world: World, // terrain query API
   ) {}
 
   update(dt: number): void {
@@ -1114,7 +1114,7 @@ export class PhysicsSystem {
     }
   }
 
-  /** AABB-vs-voxels query; reads block solidity from the world. */
+  /** AABB-vs-density data query; reads block solidity from the world. */
   private collides(row: number, pos: Float32Array, bMin: Float32Array, bMax: Float32Array): boolean {
     const base = row * 3;
     const minX = Math.floor(pos[base + 0] + bMin[base + 0]);
@@ -1160,10 +1160,10 @@ export class SystemManager {
 
 ---
 
-## 5. Block Registry — Abstract Factory
+## 5. Material registry — Abstract Factory
 
 ```typescript
-// /src/world/blocks/BlockDefinition.ts
+// /src/world/blocks/MaterialDefinition.ts
 
 export interface BlockTextures {
   readonly top: number;    // index into TEXTURE_2D_ARRAY
@@ -1179,7 +1179,7 @@ export interface BlockMaterial {
 }
 export interface AABB { readonly minX: number; readonly minY: number; readonly minZ: number;
                         readonly maxX: number; readonly maxY: number; readonly maxZ: number; }
-export interface BlockDefinition {
+export interface MaterialDefinition {
   readonly id: number;          // 0..127 (legacy) or 0..4095 (modern)
   readonly name: string;
   readonly textures: BlockTextures;
@@ -1187,7 +1187,7 @@ export interface BlockDefinition {
   readonly collision: AABB;     // full cube by default; slabs/fences differ
 }
 
-// /src/world/BlockFactory.ts
+// /src/world/MaterialFactory.ts
 
 /**
  * Abstract Factory contract: subclasses decide HOW block definitions are
@@ -1196,12 +1196,12 @@ export interface BlockDefinition {
  * The Registry is the singleton lookup; the Factory is the producer that
  * populates it at startup.
  */
-export interface BlockFactory {
-  registerAll(registry: BlockRegistry): void;
+export interface MaterialFactory {
+  registerAll(registry: MaterialRegistry): void;
 }
 
-export class VanillaBlockFactory implements BlockFactory {
-  registerAll(registry: BlockRegistry): void {
+export class VanillaBlockFactory implements MaterialFactory {
+  registerAll(registry: MaterialRegistry): void {
     // Each call is an O(1) insertion into a fixed-size array indexed by id.
     registry.register({
       id: 1,  name: "stone",
@@ -1221,21 +1221,21 @@ export class VanillaBlockFactory implements BlockFactory {
   }
 }
 
-// /src/world/BlockRegistry.ts
+// /src/world/MaterialRegistry.ts
 
-export class BlockRegistry {
-  private readonly defs: (BlockDefinition | null)[];
+export class MaterialRegistry {
+  private readonly defs: (MaterialDefinition | null)[];
   private readonly byName = new Map<string, number>();
   constructor(readonly capacity: number = 4096) {
     this.defs = new Array(capacity).fill(null);
   }
-  register(def: BlockDefinition): void {
+  register(def: MaterialDefinition): void {
     if (this.defs[def.id]) throw new Error(`Block id ${def.id} already registered`);
     this.defs[def.id] = def;
     this.byName.set(def.name, def.id);
   }
   /** O(1) by ID — the hot path used by the mesher. */
-  get(id: number): BlockDefinition {
+  get(id: number): MaterialDefinition {
     const d = this.defs[id];
     if (!d) throw new Error(`Unknown block id ${id}`);
     return d;
@@ -1344,7 +1344,7 @@ export class Game {
     // Cross-origin isolation is REQUIRED for SharedArrayBuffer.
     if (typeof SharedArrayBuffer === "undefined") throw new Error("COOP/COEP not configured");
 
-    const blocks = new BlockRegistry(4096);
+    const blocks = new MaterialRegistry(4096);
     new VanillaBlockFactory().registerAll(blocks);
 
     const pool = new SharedPool(/* slots */ (cfg.renderDistance * 2 + 1) ** 2, {
@@ -1381,7 +1381,7 @@ export class Game {
 | Operation | Complexity | Notes |
 |----|----|----|
 | Chunk terrain generation | O(V) per chunk | Single 3D-noise + cave-carve sweep |
-| Greedy meshing | O(V) per chunk | 3 axis sweeps, each O(V) |
+| SurfaceNets meshing | O(V) per chunk | 3 axis sweeps, each O(V) |
 | Frustum cull | O(RD²) per frame | 6-plane AABB test per chunk |
 | Entity allocate/destroy | O(1) | Free-list stack |
 | Component add/remove | O(1) amortized | Sparse-set + swap-pop |

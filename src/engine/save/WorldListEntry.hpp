@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-namespace voxel {
+namespace terrain {
 
 /// A lightweight representation of a saved world for menus and persistence.
 struct WorldEntry {
@@ -14,4 +14,4 @@ struct WorldEntry {
   int64_t lastPlayedTimestamp = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

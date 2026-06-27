@@ -1,11 +1,10 @@
 #include "game/GameOrchestrator.hpp"
 
-namespace voxel {
+namespace terrain {
 
 Game::Game(GLFWwindow* window, const GameConfig& config, Options options)
   : m_window(window), m_config(config),
     m_session(config.renderDistance),
-    m_blocks(4096),
     m_worldGenPipeline(config.worldSeed),
     m_transforms(m_entityManager.capacity()),
     m_bodies(m_entityManager.capacity()),
@@ -39,4 +38,4 @@ void Game::run() {
   GameOrchestrator::run(*this);
 }
 
-} // namespace voxel
+} // namespace terrain

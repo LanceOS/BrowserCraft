@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace voxel {
+namespace terrain {
 
 /// Camera view data passed to the renderer.
 struct CameraView {
@@ -17,4 +17,4 @@ struct CameraView {
   glm::mat4 inverseViewProjectionMatrix{1.0f};
 };
 
-} // namespace voxel
+} // namespace terrain

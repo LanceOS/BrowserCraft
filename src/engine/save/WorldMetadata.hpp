@@ -7,7 +7,7 @@
 #include <fstream>
 #include <filesystem>
 
-namespace voxel {
+namespace terrain {
 
 /// Persistent metadata for a saved world.
 /// Stored as a binary file (<saveDir>/<slug>/world.meta) with magic + version
@@ -82,4 +82,4 @@ struct WorldMetadata {
   void touch() { lastPlayedTimestamp = static_cast<int64_t>(std::time(nullptr)); }
 };
 
-} // namespace voxel
+} // namespace terrain

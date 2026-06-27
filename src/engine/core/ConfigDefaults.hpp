@@ -2,7 +2,7 @@
 
 #include "Config.hpp"
 
-namespace voxel {
+namespace terrain {
 
 /// Default runtime configuration used by the standalone entry point.
 inline auto makeDefaultGameConfig() -> GameConfig {
@@ -17,4 +17,4 @@ inline auto makeDefaultGameConfig() -> GameConfig {
   return cfg;
 }
 
-} // namespace voxel
+} // namespace terrain

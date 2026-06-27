@@ -1,13 +1,13 @@
 To complete the game's content layer, we will implement the **Block Abstract Factory** and the **Mob ECS Factory**.
 
-Both systems are designed to populate the DOD-based `ComponentStore`s and the `BlockRegistry` without allocating per-instance objects during the game loop. Mobs are not classes; they are simply Entity IDs with a specific configuration of components injected into tightly packed `TypedArray`s.
+Both systems are designed to populate the DOD-based `ComponentStore`s and the `MaterialRegistry` without allocating per-instance objects during the game loop. Mobs are not classes; they are simply Entity IDs with a specific configuration of components injected into tightly packed `TypedArray`s.
 
 
 ---
 
 ### 1. Block Types (Abstract Factory & Texture Array Mapping)
 
-We define a strict mapping for the `TEXTURE_2D_ARRAY` layers, then use the `VanillaBlockFactory` to populate the `BlockRegistry` with 1.5.2-era blocks (IDs closely matching classic Minecraft).
+We define a strict mapping for the `TEXTURE_2D_ARRAY` layers, then use the `VanillaBlockFactory` to populate the `MaterialRegistry` with 1.5.2-era blocks (IDs closely matching classic Minecraft).
 
 ```typescript
 // /src/world/blocks/TextureLayers.ts
@@ -33,14 +33,14 @@ export const enum Tex {
 }
 
 // /src/world/blocks/VanillaBlockFactory.ts
-import { BlockFactory, BlockRegistry, BlockDefinition, AABB } from "./BlockDefinition";
+import { MaterialFactory, MaterialRegistry, MaterialDefinition, AABB } from "./MaterialDefinition";
 import { Tex } from "./TextureLayers";
 
 const FULL_CUBE: AABB = { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 };
 const EMPTY_AABB: AABB = { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
 
-export class VanillaBlockFactory implements BlockFactory {
-  registerAll(registry: BlockRegistry): void {
+export class VanillaBlockFactory implements MaterialFactory {
+  registerAll(registry: MaterialRegistry): void {
     // --- Helpers to keep registration strictly typed and DRY ---
     const opaque = (id: number, name: string, tex: { top: number; bottom: number; side: number }, collision: AABB = FULL_CUBE): void => {
       registry.register({ id, name, textures: tex, material: { opaque: true, transparent: false, liquid: false, foliage: false, lightEmission: 0 }, collision });
@@ -245,7 +245,7 @@ export class MobFactory {
 
 1. **Strict DOD**: Mobs are not `class Pig extends Mob`. They are integer Entity IDs. Data like hitpoints, position, and AABB size is shattered into parallel `Float32Array`s via `ComponentStore`. The CPU prefetcher perfectly streams this memory during `PhysicsSystem` and `AISystem` updates.
 2. **No GC Pressure**: The `MobFactory.spawn` method mutates pre-allocated arrays. The only allocation is the integer ID from the EntityManager's recycled free-list.
-3. **Abstract Factory Pattern**: Blocks use a `BlockFactory` interface that decouples content registration (`VanillaBlockFactory`) from the `BlockRegistry` engine core.
+3. **Abstract Factory Pattern**: Blocks use a `MaterialFactory` interface that decouples content registration (`VanillaBlockFactory`) from the `MaterialRegistry` engine core.
 4. **Partial AABBs**: Demonstrated by the Cactus block and the centered mob collision hulls, enabling precise swept-AABB physics without OOP vector objects.
 
 

@@ -1,4 +1,4 @@
-# Voxel Engine Technical Design Document: Audio Engine
+# Terrain engine Technical Design Document: Audio Engine
 
 
 
@@ -313,16 +313,16 @@ export class BlockInteractionSystem {
     private readonly ctx: AudioContext,
     private readonly pool: AudioNodePool,
     private readonly registry: AudioRegistry,
-    private readonly blocks: BlockRegistry
+    private readonly blocks: MaterialRegistry
   ) {}
 
-  public onBlockBroken(x: number, y: number, z: number, blockId: number): void {
-    const def = this.blocks.get(blockId);
+  public onBlockBroken(x: number, y: number, z: number, materialId: number): void {
+    const def = this.blocks.get(materialId);
     let soundId: SoundId;
 
     // Map block material to sound
-    if (def.material.opaque && blockId === 1) soundId = SoundId.STONE_BREAK;
-    else if (blockId === 2 || blockId === 3) soundId = SoundId.GRASS_BREAK;
+    if (def.material.opaque && materialId === 1) soundId = SoundId.STONE_BREAK;
+    else if (materialId === 2 || materialId === 3) soundId = SoundId.GRASS_BREAK;
     else soundId = SoundId.STONE_BREAK; // Fallback
 
     const buffer = this.registry.get(soundId);

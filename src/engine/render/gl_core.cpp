@@ -1,6 +1,6 @@
 #include "gl_core.hpp"
 
-namespace voxel::gl {
+namespace terrain::gl {
 
 #define LOAD(name) do { \
     name = reinterpret_cast<decltype(name)>(glfwGetProcAddress("gl" #name)); \
@@ -142,4 +142,4 @@ void loadGLFunctions() {
 
 #undef LOAD
 
-} // namespace voxel::gl
+} // namespace terrain::gl

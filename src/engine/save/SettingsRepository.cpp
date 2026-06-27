@@ -3,7 +3,7 @@
 #include <mutex>
 #include <sstream>
 
-namespace voxel {
+namespace terrain {
 
 SettingsRepository::SettingsRepository(std::filesystem::path dbPath)
   : m_dbPath(std::move(dbPath)) {
@@ -199,4 +199,4 @@ void SettingsRepository::flush() {
   sqlite3_exec(m_db, "PRAGMA wal_checkpoint(TRUNCATE);", nullptr, nullptr, nullptr);
 }
 
-} // namespace voxel
+} // namespace terrain

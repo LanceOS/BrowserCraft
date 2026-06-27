@@ -2,7 +2,7 @@
 #include "engine/alloc/ScratchArena.hpp"
 
 TEST_CASE("ScratchArena basic allocation", "[alloc]") {
-  voxel::ScratchArena arena(1024);
+  terrain::ScratchArena arena(1024);
 
   auto* floats = arena.alloc<float>(100);
   REQUIRE(floats != nullptr);
@@ -17,7 +17,7 @@ TEST_CASE("ScratchArena basic allocation", "[alloc]") {
 }
 
 TEST_CASE("ScratchArena alignment", "[alloc]") {
-  voxel::ScratchArena arena(1024);
+  terrain::ScratchArena arena(1024);
 
   // Allocate 1 byte type, then a 4-byte type — should be aligned
   auto* bytes = arena.alloc<uint8_t>(1);
@@ -30,7 +30,7 @@ TEST_CASE("ScratchArena alignment", "[alloc]") {
 }
 
 TEST_CASE("ScratchArena reset", "[alloc]") {
-  voxel::ScratchArena arena(1024);
+  terrain::ScratchArena arena(1024);
 
   auto* a = arena.alloc<float>(50);
   float* ptrA = a;
@@ -42,7 +42,7 @@ TEST_CASE("ScratchArena reset", "[alloc]") {
 }
 
 TEST_CASE("ScratchArena overflow throws", "[alloc]") {
-  voxel::ScratchArena arena(64);
+  terrain::ScratchArena arena(64);
 
   REQUIRE_THROWS(arena.alloc<float>(1000));
 }

@@ -3,8 +3,8 @@
 #include <cmath>
 #include <cstdint>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 /// Utility: world coordinate → chunk coordinate.
 inline auto worldToChunk(float coord, int32_t size) -> int32_t {
@@ -23,4 +23,4 @@ inline auto mod(int32_t value, int32_t size) -> int32_t {
   return r < 0 ? r + size : r;
 }
 
-} // namespace voxel
+} // namespace terrain

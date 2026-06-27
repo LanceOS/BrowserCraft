@@ -2,7 +2,7 @@
 #include "engine/alloc/LockFreeRingBuffer.hpp"
 
 TEST_CASE("WorkerCompletionQueue push and poll", "[alloc]") {
-  voxel::WorkerCompletionQueue q(4);
+  terrain::WorkerCompletionQueue q(4);
 
   REQUIRE_FALSE(q.poll().has_value());
 
@@ -15,7 +15,7 @@ TEST_CASE("WorkerCompletionQueue push and poll", "[alloc]") {
 }
 
 TEST_CASE("WorkerCompletionQueue full rejects", "[alloc]") {
-  voxel::WorkerCompletionQueue q(2);
+  terrain::WorkerCompletionQueue q(2);
 
   REQUIRE(q.push(1));
   REQUIRE(q.push(2));
@@ -28,7 +28,7 @@ TEST_CASE("WorkerCompletionQueue full rejects", "[alloc]") {
 }
 
 TEST_CASE("WorkerCompletionQueue wrap-around", "[alloc]") {
-  voxel::WorkerCompletionQueue q(4);
+  terrain::WorkerCompletionQueue q(4);
 
   for (int i = 0; i < 100; ++i) {
     REQUIRE(q.push(i));

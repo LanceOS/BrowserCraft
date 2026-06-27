@@ -7,7 +7,7 @@
 
 struct sqlite3;
 
-namespace voxel {
+namespace terrain {
 
 /// Lightweight SQLite-backed key-value store for user settings.
 /// Thread-safe: uses WAL mode with a single mutex for writes.
@@ -69,4 +69,4 @@ private:
   mutable std::mutex m_mutex;
 };
 
-} // namespace voxel
+} // namespace terrain

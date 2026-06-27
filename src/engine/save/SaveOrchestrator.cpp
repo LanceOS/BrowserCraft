@@ -2,7 +2,7 @@
 #include "engine/core/RenderDistanceLimits.hpp"
 #include <algorithm>
 
-namespace voxel {
+namespace terrain {
 
 SaveOrchestrator::SaveOrchestrator(std::filesystem::path saveDir)
   : m_saveDir(std::move(saveDir)),
@@ -121,4 +121,4 @@ void SaveOrchestrator::onWorldClosed(SaveManager* saveMgr) {
   m_worldList->refresh();
 }
 
-} // namespace voxel
+} // namespace terrain

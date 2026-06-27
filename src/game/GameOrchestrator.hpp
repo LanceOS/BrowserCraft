@@ -2,7 +2,7 @@
 
 #include "game/Game.hpp"
 
-namespace voxel {
+namespace terrain {
 
 class GameOrchestrator {
 public:
@@ -24,4 +24,4 @@ private:
   static void updateCamera(Game& game);
 };
 
-} // namespace voxel
+} // namespace terrain

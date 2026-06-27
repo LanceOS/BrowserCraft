@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
 class InputState;
 class World;
@@ -11,8 +11,6 @@ class UIManager;
 class GameSession;
 
 /// Per-frame context passed to ECS systems instead of a direct Game reference.
-/// This decouples systems from the full Game object, making dependencies
-/// explicit and testable.
 struct TickContext {
   InputState& input;
   World& world;
@@ -30,4 +28,4 @@ struct TickContext {
   float dt = 0.0f;
 };
 
-} // namespace voxel
+} // namespace terrain

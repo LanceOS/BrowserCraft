@@ -4,7 +4,7 @@
 #include <iostream>
 #include <ctime>
 
-namespace voxel {
+namespace terrain {
 
 namespace {
 
@@ -136,4 +136,4 @@ auto TerrainSaveData::append(const std::string& filePath, const TerrainEdit& edi
   return file.good();
 }
 
-} // namespace voxel
+} // namespace terrain

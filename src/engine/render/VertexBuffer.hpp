@@ -3,7 +3,7 @@
 #include "gl_core.hpp"
 #include <cstdint>
 
-namespace voxel {
+namespace terrain {
 
 /// Wrapper around an OpenGL buffer object (VBO or EBO).
 class VertexBuffer {
@@ -24,4 +24,4 @@ private:
   uint32_t m_target;
 };
 
-} // namespace voxel
+} // namespace terrain

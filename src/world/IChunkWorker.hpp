@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 /// Interface for asynchronous chunk generation and meshing.
 /// Implementations wire to thread pools or other execution backends.
@@ -12,10 +12,10 @@ class IChunkWorker {
 public:
   virtual ~IChunkWorker() = default;
 
-  /// Generate voxel data for a chunk. Called on a worker thread.
+  /// Generate terrain data for a chunk. Called on a worker thread.
   virtual void generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t seed) = 0;
 
-  /// Build mesh from voxel data. Called on a worker thread.
+  /// Build mesh from terrain data. Called on a worker thread.
   /// The implementation should write vertex/index data directly to the
   /// persistently mapped GPU VBO/IBO at the computed slot offset.
   virtual void mesh(int32_t slotIndex) = 0;
@@ -27,4 +27,4 @@ public:
                              uint32_t* iboPtr, size_t iboMaxBytes) = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

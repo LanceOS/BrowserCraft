@@ -1,7 +1,7 @@
 #include "ShaderProgram.hpp"
 #include <stdexcept>
 
-namespace voxel {
+namespace terrain {
 
 ShaderProgram::ShaderProgram(const std::string& vertexSource, const std::string& fragmentSource) {
   uint32_t vs = compile(GL_VERTEX_SHADER, vertexSource);
@@ -80,4 +80,4 @@ auto ShaderProgram::compile(uint32_t type, const std::string& source) -> uint32_
   return shader;
 }
 
-} // namespace voxel
+} // namespace terrain

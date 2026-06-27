@@ -8,7 +8,7 @@
 #include <vector>
 #include <ctime>
 
-namespace voxel {
+namespace terrain {
 
 namespace {
 
@@ -218,4 +218,4 @@ void TerrainEditAPI::applyBrush(World& world, const WorldGenPipeline& pipeline, 
   }
 }
 
-} // namespace voxel
+} // namespace terrain

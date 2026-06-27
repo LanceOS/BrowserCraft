@@ -1,6 +1,6 @@
 #include "LockFreeRingBuffer.hpp"
 
-namespace voxel {
+namespace terrain {
 
 WorkerCompletionQueue::WorkerCompletionQueue(int32_t capacity)
   : m_capacity(capacity), m_data(capacity, 0) {}
@@ -23,4 +23,4 @@ auto WorkerCompletionQueue::poll() -> std::optional<int32_t> {
   return slotIndex;
 }
 
-} // namespace voxel
+} // namespace terrain

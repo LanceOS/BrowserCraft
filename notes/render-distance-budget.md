@@ -12,10 +12,10 @@ With the current `SharedPool` and compact mesh allocator, a large value like `40
 - The current ceiling is `24`, which gives a bit more headroom without reintroducing the old startup spike.
 
 ## Related functions
-- `voxel::GameOrchestrator::initialize`
-- `voxel::GameOrchestrator::buildRuntimeStack`
-- `voxel::GameOrchestrator::applyRenderDistance`
-- `voxel::SaveOrchestrator::loadSettings`
-- `voxel::GameSession::clampRenderDistance`
-- `voxel::Renderer::Renderer`
-- `voxel::World::ensureVisibleRadius`
+- `terrain::GameOrchestrator::initialize`
+- `terrain::GameOrchestrator::buildRuntimeStack`
+- `terrain::GameOrchestrator::applyRenderDistance`
+- `terrain::SaveOrchestrator::loadSettings`
+- `terrain::GameSession::clampRenderDistance`
+- `terrain::Renderer::Renderer`
+- `terrain::World::ensureVisibleRadius`

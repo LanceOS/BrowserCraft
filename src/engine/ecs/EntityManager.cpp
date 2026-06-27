@@ -1,6 +1,6 @@
 #include "EntityManager.hpp"
 
-namespace voxel {
+namespace terrain {
 
 EntityManager::EntityManager(int32_t capacity)
   : m_capacity(capacity), m_generation(capacity, 0), m_freeIndices(capacity) {
@@ -33,4 +33,4 @@ auto EntityManager::isAlive(int32_t id) const -> bool {
   return static_cast<uint8_t>(id >> ENTITY_GEN_SHIFT) == m_generation[idx];
 }
 
-} // namespace voxel
+} // namespace terrain

@@ -5,7 +5,7 @@
 using Catch::Approx;
 
 TEST_CASE("SimplexNoise produces values in range [-1,1]", "[noise]") {
-  voxel::SimplexNoise noise(42);
+  terrain::SimplexNoise noise(42);
 
   float minVal = 999.0f, maxVal = -999.0f;
   for (float x = 0; x < 10.0f; x += 0.5f) {
@@ -20,8 +20,8 @@ TEST_CASE("SimplexNoise produces values in range [-1,1]", "[noise]") {
 }
 
 TEST_CASE("SimplexNoise is deterministic", "[noise]") {
-  voxel::SimplexNoise a(12345);
-  voxel::SimplexNoise b(12345);
+  terrain::SimplexNoise a(12345);
+  terrain::SimplexNoise b(12345);
 
   for (int i = 0; i < 20; ++i) {
     float x = i * 0.5f;
@@ -31,8 +31,8 @@ TEST_CASE("SimplexNoise is deterministic", "[noise]") {
 }
 
 TEST_CASE("SimplexNoise different seeds produce different values", "[noise]") {
-  voxel::SimplexNoise a(1);
-  voxel::SimplexNoise b(9999);
+  terrain::SimplexNoise a(1);
+  terrain::SimplexNoise b(9999);
 
   int different = 0;
   for (int i = 0; i < 20; ++i) {
@@ -44,7 +44,7 @@ TEST_CASE("SimplexNoise different seeds produce different values", "[noise]") {
 }
 
 TEST_CASE("SimplexNoise 3D produces values in range", "[noise]") {
-  voxel::SimplexNoise noise(7);
+  terrain::SimplexNoise noise(7);
 
   float minVal = 999.0f, maxVal = -999.0f;
   for (float x = 0; x < 5.0f; x += 1.0f) {

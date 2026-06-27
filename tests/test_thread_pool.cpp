@@ -3,7 +3,7 @@
 #include <atomic>
 
 TEST_CASE("WorkerThreadPool executes jobs", "[threading]") {
-  voxel::WorkerThreadPool pool(2);
+  terrain::WorkerThreadPool pool(2);
   REQUIRE(pool.threadCount() == 2);
 
   std::atomic<int> counter{0};
@@ -17,14 +17,14 @@ TEST_CASE("WorkerThreadPool executes jobs", "[threading]") {
 }
 
 TEST_CASE("WorkerThreadPool returns results", "[threading]") {
-  voxel::WorkerThreadPool pool(2);
+  terrain::WorkerThreadPool pool(2);
 
   auto f = pool.submit([]() -> int { return 42; });
   REQUIRE(f.get() == 42);
 }
 
 TEST_CASE("WorkerThreadPool handles many jobs", "[threading]") {
-  voxel::WorkerThreadPool pool(4);
+  terrain::WorkerThreadPool pool(4);
 
   std::atomic<int> counter{0};
   constexpr int N = 100;

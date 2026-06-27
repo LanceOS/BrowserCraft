@@ -2,7 +2,7 @@
 
 #include <glm/glm.hpp>
 
-namespace voxel {
+namespace terrain {
 
 /// Axis-aligned bounding box for frustum culling and collision.
 struct AABB {
@@ -23,4 +23,4 @@ struct AABB {
   }
 };
 
-} // namespace voxel
+} // namespace terrain

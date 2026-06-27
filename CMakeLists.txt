@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(voxel-engine VERSION 0.1.0 LANGUAGES C CXX)
+project(terrain-engine VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -114,7 +114,7 @@ target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/
 target_link_libraries(imgui PUBLIC ${GLFW_TARGET} OpenGL::GL)
 
 # ---- Engine library ----
-add_library(voxel_engine STATIC
+add_library(terrain_engine STATIC
   src/engine/math/AABB.cpp
   src/engine/math/Frustum.cpp
   src/engine/alloc/RingBuffer.cpp
@@ -129,9 +129,6 @@ add_library(voxel_engine STATIC
   src/engine/ecs/systems/PlayerControllerSystem.cpp
   src/engine/ecs/systems/PlayerSpawnSystem.cpp
   src/engine/assets/AssetManager.cpp
-  src/world/BlockRegistry.cpp
-  src/world/blocks/VanillaBlockFactory.cpp
-  src/world/VoxelStore.cpp
   src/world/ChunkJobQueue.cpp
   src/world/Chunk.cpp
   src/world/ChunkManager.cpp
@@ -163,18 +160,16 @@ add_library(voxel_engine STATIC
   src/engine/save/SettingsRepository.cpp
   src/engine/save/SaveOrchestrator.cpp
   src/world/generation/SimplexNoise.cpp
-  src/world/generation/CaveCarver.cpp
-  src/world/generation/OreDistributor.cpp
+  src/world/generation/biomes/MountainGenerator.cpp
+  src/world/generation/biomes/PlainsGenerator.cpp
+  src/world/generation/biomes/RiverGenerator.cpp
+  src/world/generation/biomes/LakeGenerator.cpp
   src/world/generation/WorldGenPipeline.cpp
-  src/engine/workers/mesher/GreedyMesher.cpp
   src/engine/workers/mesher/SmoothTerrainMesher.cpp
   src/world/mesh/SurfaceNetsMesher.cpp
   src/content/biomes/BiomeSampler.cpp
   src/content/biomes/BiomeClassifier.cpp
   src/content/biomes/BiomeFactory.cpp
-  src/content/flora/FloraRegistry.cpp
-  src/content/flora/GrassFactory.cpp
-  src/content/flora/DefaultFlora.cpp
   src/game/GameOrchestrator.cpp
   src/game/ChunkWorkerImpl.cpp
   src/game/GameSession.cpp
@@ -183,9 +178,9 @@ add_library(voxel_engine STATIC
   src/ui/UIManager.cpp
 )
 
-target_include_directories(voxel_engine PUBLIC src ${SQLITE3_INCLUDE_DIRS})
+target_include_directories(terrain_engine PUBLIC src ${SQLITE3_INCLUDE_DIRS})
 
-target_link_libraries(voxel_engine PUBLIC
+target_link_libraries(terrain_engine PUBLIC
   glm::glm
   ${GLFW_TARGET}
   OpenGL::GL
@@ -194,7 +189,7 @@ target_link_libraries(voxel_engine PUBLIC
 )
 
 # Precompiled headers (per-target to avoid -Winvalid-pch due to differing flags)
-target_precompile_headers(voxel_engine PRIVATE src/pch.hpp)
+target_precompile_headers(terrain_engine PRIVATE src/pch.hpp)
 
 # Release-specific optimizations (global — keeps PCH flags consistent across all targets)
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -203,13 +198,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 # ---- Main executable ----
-add_executable(voxel_app src/main.cpp)
-target_link_libraries(voxel_app PRIVATE voxel_engine ${GLFW_TARGET} OpenGL::GL imgui)
-target_precompile_headers(voxel_app PRIVATE src/pch.hpp)
+add_executable(terrain_app src/main.cpp)
+target_link_libraries(terrain_app PRIVATE terrain_engine ${GLFW_TARGET} OpenGL::GL imgui)
+target_precompile_headers(terrain_app PRIVATE src/pch.hpp)
 
 # ---- Tests ----
 enable_testing()
-add_executable(voxel_tests
+add_executable(terrain_tests
   tests/main.cpp
   tests/test_aabb.cpp
   tests/test_frustum.cpp
@@ -221,9 +216,6 @@ add_executable(voxel_tests
   tests/test_component_store.cpp
   tests/test_query.cpp
   tests/test_system_manager.cpp
-  tests/test_block_registry.cpp
-  tests/test_vanilla_block_factory.cpp
-  tests/test_flora.cpp
   tests/test_world.cpp
   tests/test_terrain_physics.cpp
   tests/test_simplex_noise.cpp
@@ -233,10 +225,9 @@ add_executable(voxel_tests
   tests/test_save_services.cpp
   tests/test_thread_pool.cpp
   tests/test_player_controller.cpp
-  tests/test_mesher.cpp
   tests/test_smooth_terrain_mesher.cpp
   tests/test_surface_nets_mesher.cpp
 )
-target_link_libraries(voxel_tests PRIVATE voxel_engine Catch2::Catch2WithMain)
-target_precompile_headers(voxel_tests PRIVATE src/pch.hpp)
-catch_discover_tests(voxel_tests)
+target_link_libraries(terrain_tests PRIVATE terrain_engine Catch2::Catch2WithMain)
+target_precompile_headers(terrain_tests PRIVATE src/pch.hpp)
+catch_discover_tests(terrain_tests)

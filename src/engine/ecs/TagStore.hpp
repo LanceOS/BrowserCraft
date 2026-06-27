@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace voxel {
+namespace terrain {
 
 /// Tag component store - no data, just presence/absence.
 class TagStore {
@@ -49,4 +49,4 @@ private:
   int32_t m_denseCount = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <chrono>
 
-namespace voxel {
+namespace terrain {
 
 WorldListService::WorldListService(std::filesystem::path saveDir)
   : m_saveDir(std::move(saveDir))
@@ -52,4 +52,4 @@ auto WorldListService::findBySlug(std::string_view slug) const -> const WorldMet
   return nullptr;
 }
 
-} // namespace voxel
+} // namespace terrain

@@ -10,7 +10,7 @@
 #include <vector>
 #include <GLFW/glfw3.h>
 
-namespace voxel {
+namespace terrain {
 
 enum class UIState {
   MainMenu,
@@ -135,4 +135,4 @@ private:
   std::string m_worldErrorMsg;
 };
 
-} // namespace voxel
+} // namespace terrain

@@ -4,7 +4,7 @@
 #include "engine/ecs/components/Components.hpp"
 
 TEST_CASE("ComponentStore add and get", "[ecs]") {
-  voxel::ComponentStore<voxel::cmp::Transform> store(100);
+  terrain::ComponentStore<terrain::cmp::Transform> store(100);
 
   int32_t row = store.add(5);
   REQUIRE(row >= 0);
@@ -18,7 +18,7 @@ TEST_CASE("ComponentStore add and get", "[ecs]") {
 }
 
 TEST_CASE("ComponentStore remove and swap", "[ecs]") {
-  voxel::ComponentStore<voxel::cmp::Transform> store(100);
+  terrain::ComponentStore<terrain::cmp::Transform> store(100);
 
   store.add(10);
   store.add(20);
@@ -35,11 +35,11 @@ TEST_CASE("ComponentStore remove and swap", "[ecs]") {
 }
 
 TEST_CASE("ComponentStore forEach iteration", "[ecs]") {
-  voxel::ComponentStore<voxel::cmp::Health> store(100);
+  terrain::ComponentStore<terrain::cmp::Health> store(100);
 
-  store.add(1, voxel::cmp::Health{10.0f, 20.0f});
-  store.add(3, voxel::cmp::Health{5.0f, 10.0f});
-  store.add(7, voxel::cmp::Health{100.0f, 100.0f});
+  store.add(1, terrain::cmp::Health{10.0f, 20.0f});
+  store.add(3, terrain::cmp::Health{5.0f, 10.0f});
+  store.add(7, terrain::cmp::Health{100.0f, 100.0f});
 
   float sum = 0.0f;
   store.forEach([&](int32_t row, int32_t entity, auto& h) {
@@ -51,7 +51,7 @@ TEST_CASE("ComponentStore forEach iteration", "[ecs]") {
 }
 
 TEST_CASE("TagStore add has remove", "[ecs]") {
-  voxel::TagStore tags(100);
+  terrain::TagStore tags(100);
 
   REQUIRE_FALSE(tags.has(42));
   tags.add(42);
@@ -61,7 +61,7 @@ TEST_CASE("TagStore add has remove", "[ecs]") {
 }
 
 TEST_CASE("ComponentStore tryGet returns pointer", "[ecs]") {
-  voxel::ComponentStore<voxel::cmp::Player> store(100);
+  terrain::ComponentStore<terrain::cmp::Player> store(100);
 
   store.add(7);
   REQUIRE(store.tryGet(7) != nullptr);

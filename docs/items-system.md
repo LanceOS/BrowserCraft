@@ -1,4 +1,4 @@
-# Voxel Engine Technical Design Document: Items System
+# Terrain engine Technical Design Document: Items System
 
 **Version:** 1.0  
 **Scope:** Item classification, abstract factories, item metadata/durability, tool mechanics, consumable effects, block/item duality, inventory integration, and interaction system.  
@@ -25,7 +25,7 @@ itemId (Int16, 0-32767)
   └── ... other categories
 ```
 
-Items that are also placeable blocks use the same numeric ID as the block definition in `BlockRegistry`. This allows the existing `setBlockIdAt` path to work without translation. Non-block items use IDs outside the block range.
+Items that are also placeable blocks use the same numeric ID as the block definition in `MaterialRegistry`. This allows the existing `setBlockIdAt` path to work without translation. Non-block items use IDs outside the block range.
 
 ### Current Codebase Context
 
@@ -718,7 +718,7 @@ Block items are the item representation of placeable blocks. They use the same I
 
 import type { ItemProperties } from "./ItemTypes.js";
 import { ItemCategory, MaxStackSize, Rarity, UseAction } from "./ItemTypes.js";
-import type { BlockRegistry } from "../../world/BlockRegistry.js";
+import type { MaterialRegistry } from "../../world/MaterialRegistry.js";
 
 /**
  * Block items wrap BlockDefinitions into ItemProperties.
@@ -727,7 +727,7 @@ import type { BlockRegistry } from "../../world/BlockRegistry.js";
 export class BlockItemFactory implements ItemCategoryFactory {
   readonly categoryName = "blocks";
 
-  constructor(private readonly blocks: BlockRegistry) {}
+  constructor(private readonly blocks: MaterialRegistry) {}
 
   registerItems(registry: ItemRegistry): void {
     for (const block of this.blocks.values()) {
@@ -1089,7 +1089,7 @@ Harvest Level Table:
 
 import type { ItemRegistry } from "../../content/items/ItemRegistry.js";
 import type { ToolProperties } from "../../content/items/ToolFactory.js";
-import type { BlockRegistry } from "../../world/BlockRegistry.js";
+import type { MaterialRegistry } from "../../world/MaterialRegistry.js";
 
 export const BLOCK_HARDNESS: Record<number, { hardness: number; harvestLevel: number; requiredTool: boolean }> = {
   // Stone tier
@@ -1124,10 +1124,10 @@ export const BLOCK_HARDNESS: Record<number, { hardness: number; harvestLevel: nu
  * Returns Infinity if unbreakable.
  */
 export function calculateBreakTime(
-  blockId: number,
+  materialId: number,
   toolProperties?: ToolProperties,
 ): number {
-  const block = BLOCK_HARDNESS[blockId];
+  const block = BLOCK_HARDNESS[materialId];
   if (!block) return 0.75; // default fallback
   if (block.hardness < 0) return Infinity; // unbreakable
 
@@ -1135,8 +1135,8 @@ export function calculateBreakTime(
   let canHarvest = true;
 
   if (toolProperties) {
-    const isProperTool = toolProperties.requiredBlocks.includes(blockId);
-    const isEffective = toolProperties.effectiveBlocks.includes(blockId);
+    const isProperTool = toolProperties.requiredBlocks.includes(materialId);
+    const isEffective = toolProperties.effectiveBlocks.includes(materialId);
 
     if (isProperTool || isEffective) {
       speed = toolProperties.miningSpeed;
@@ -1233,12 +1233,12 @@ import { ArmorFactory } from "./ArmorFactory.js";
 import { FoodFactory } from "./FoodFactory.js";
 import { MaterialFactory } from "./MaterialFactory.js";
 import { InteractableFactory } from "./InteractableFactory.js";
-import type { BlockRegistry } from "../../world/BlockRegistry.js";
+import type { MaterialRegistry } from "../../world/MaterialRegistry.js";
 
-export const createDefaultItemRegistry = (blocks?: BlockRegistry): ItemRegistry => {
+export const createDefaultItemRegistry = (blocks?: MaterialRegistry): ItemRegistry => {
   const registry = new ItemRegistry();
 
-  // Order matters: block items depend on BlockRegistry being populated first.
+  // Order matters: block items depend on MaterialRegistry being populated first.
   if (blocks) {
     registry.registerCategory(new BlockItemFactory(blocks));
   }
@@ -1325,7 +1325,7 @@ export class ItemAtlas {
 | Range          | Category      | Description |
 |:---------------|:--------------|:------------|
 | 0              | —             | Air / Empty |
-| 1-127          | Block Items   | Placeable blocks (matches BlockRegistry) |
+| 1-127          | Block Items   | Placeable blocks (matches MaterialRegistry) |
 | 256-271        | Tools         | Pickaxes (Wood, Stone, Iron, Gold, Diamond) |
 | 272-287        | Tools         | Axes (Wood, Stone, Iron, Gold, Diamond) |
 | 288-303        | Tools         | Shovels (Wood, Stone, Iron, Gold, Diamond) |

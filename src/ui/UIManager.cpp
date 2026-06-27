@@ -34,7 +34,7 @@ auto sanitizeSlotId(std::string slotId) -> std::string {
 }
 } // namespace
 
-namespace voxel {
+namespace terrain {
 
 UIManager::UIManager(GLFWwindow* window, Callbacks callbacks)
   : m_window(window), m_callbacks(std::move(callbacks)) {
@@ -143,7 +143,7 @@ void UIManager::renderMainMenu() {
 
   ImGui::BeginChild("MenuPanel", ImVec2(400, 300), ImGuiChildFlags_Border);
   ImGui::SetCursorPosX(120);
-  ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "VOXEL ENGINE");
+  ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "TERRAIN ENGINE");
 
   ImGui::Spacing(); ImGui::Spacing();
 
@@ -462,4 +462,4 @@ void UIManager::renderInventory(bool open) {
   ImGui::End();
 }
 
-} // namespace voxel
+} // namespace terrain

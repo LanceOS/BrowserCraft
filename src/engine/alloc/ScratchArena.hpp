@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <cstring>
 
-namespace voxel {
+namespace terrain {
 
 /// Linear bump allocator backed by a byte buffer.
 /// All allocations are aligned to 4 bytes. Call reset() to free all at once.
@@ -44,4 +44,4 @@ private:
   size_t m_offset = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

@@ -4,8 +4,8 @@
 
 #include <memory>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain {
 
 class TerrainChunkCollision;
 
@@ -14,7 +14,7 @@ enum class ChunkState {
   LoadingFromDisk,
   QueuedGen,
   Generating,
-  VoxelsReady,
+  DensityReady,
   QueuedMesh,
   Meshing,
   MeshReady,
@@ -67,4 +67,4 @@ struct Chunk {
   }
 };
 
-} // namespace voxel
+} // namespace terrain

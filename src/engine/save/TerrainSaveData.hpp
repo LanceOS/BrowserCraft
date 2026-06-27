@@ -3,7 +3,7 @@
 #include "world/terrain/TerrainEditHistory.hpp"
 #include <string>
 
-namespace voxel {
+namespace terrain {
 
 /// Handles serialization, deserialization, and appending of TerrainEditHistory to/from a compact binary format.
 class TerrainSaveData {
@@ -22,4 +22,4 @@ public:
   static auto append(const std::string& filePath, const TerrainEdit& edit) -> bool;
 };
 
-} // namespace voxel
+} // namespace terrain

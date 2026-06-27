@@ -7,8 +7,8 @@
 #include <limits>
 #include <vector>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel::mesh {
+// @deprecated Legacy terrain-world code retained during the render-only migration to triangle meshes.
+namespace terrain::mesh {
 
 namespace {
 
@@ -460,4 +460,4 @@ auto surfaceNetsMesh(
   return true;
 }
 
-} // namespace voxel::mesh
+} // namespace terrain::mesh

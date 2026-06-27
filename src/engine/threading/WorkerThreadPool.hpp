@@ -9,7 +9,7 @@
 #include <atomic>
 #include <future>
 
-namespace voxel {
+namespace terrain {
 
 /// Simple thread pool for running world-gen and mesh jobs in parallel.
 class WorkerThreadPool {
@@ -53,12 +53,17 @@ public:
     return !m_tasks.empty();
   }
 
+  /// Block until all queued work has finished executing.
+  void waitIdle();
+
 private:
   std::vector<std::thread> m_threads;
   std::queue<std::function<void()>> m_tasks;
   mutable std::mutex m_mutex;
   std::condition_variable m_cv;
+  std::condition_variable m_idleCv;
+  size_t m_activeTasks = 0;
   std::atomic<bool> m_stop{false};
 };
 
-} // namespace voxel
+} // namespace terrain

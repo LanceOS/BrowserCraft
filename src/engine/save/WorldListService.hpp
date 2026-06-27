@@ -5,7 +5,7 @@
 #include <string>
 #include <filesystem>
 
-namespace voxel {
+namespace terrain {
 
 /// Scans the saves directory for available worlds and provides sorted results.
 /// Caches metadata for performance; call refresh() to rescan.
@@ -39,4 +39,4 @@ private:
   std::vector<WorldMetadata> m_worlds;
 };
 
-} // namespace voxel
+} // namespace terrain

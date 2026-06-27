@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <optional>
 
-namespace voxel {
+namespace terrain {
 
 /// Lock-free SPSC (Single Producer, Single Consumer) completion queue.
 /// The producer (worker thread) calls push(), the consumer (main thread) calls poll().
@@ -30,4 +30,4 @@ private:
   char m_padding[64]{};
 };
 
-} // namespace voxel
+} // namespace terrain

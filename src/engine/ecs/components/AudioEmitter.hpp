@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace voxel::cmp {
+namespace terrain::cmp {
 
 /// Audio emitter component for the ECS.
 struct AudioEmitter {
@@ -11,4 +11,4 @@ struct AudioEmitter {
   float volume = 1.0f;
 };
 
-} // namespace voxel::cmp
+} // namespace terrain::cmp

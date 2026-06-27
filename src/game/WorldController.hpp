@@ -12,10 +12,8 @@
 #include <mutex>
 #include <string>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+namespace terrain {
 
-class BlockRegistry;
 class TerrainChunkCollision;
 
 /// Manages world lifecycle: creation, save/load, and completion-job processing.
@@ -23,7 +21,7 @@ class TerrainChunkCollision;
 /// that worker threads use to signal finished gen/mesh jobs.
 class WorldController {
 public:
-  WorldController(SharedPool& pool, BlockRegistry& blocks, const GameConfig& config);
+  WorldController(SharedPool& pool, const GameConfig& config);
 
   /// Create the World with the given worker and persistence interfaces.
   void createWorld(IChunkWorker& worker, IChunkPersistence* persistence);
@@ -65,7 +63,6 @@ private:
   };
 
   SharedPool& m_pool;
-  BlockRegistry& m_blocks;
   const GameConfig& m_config;
 
   std::unique_ptr<World> m_world;
@@ -77,4 +74,4 @@ private:
   std::mutex m_completionMutex;
 };
 
-} // namespace voxel
+} // namespace terrain

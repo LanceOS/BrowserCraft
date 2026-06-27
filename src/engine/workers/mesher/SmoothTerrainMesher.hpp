@@ -1,26 +1,26 @@
 #pragma once
 
-#include "GreedyMesher.hpp"
 #include <cstdint>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+namespace terrain {
 
-class BlockRegistry;
 class WorldGenPipeline;
 
 namespace mesher {
 
+struct MesherConfig {
+  int32_t sizeX;
+  int32_t sizeY;
+  int32_t sizeZ;
+  int32_t maxVertices;
+  int32_t maxIndices;
+  int32_t strideFloats;
+};
+
 /// Build a smooth terrain mesh for a chunk using the continuous terrain
-/// density field. The output uses the same vertex layout as the greedy voxel
-/// mesher so the renderer can choose between block and terrain shaders without
-/// changing the buffer layout.
-///
-/// The mesh is flat-shaded for now. Each triangle gets a single normal and a
-/// terrain material sample derived from slope, depth, and biome context.
+/// density field.
 bool smoothTerrainMesh(
     const WorldGenPipeline& pipeline,
-    const BlockRegistry& blocks,
     const MesherConfig& cfg,
     int32_t chunkX,
     int32_t chunkZ,
@@ -32,4 +32,4 @@ bool smoothTerrainMesh(
     uint32_t* transparentIndexCountOut = nullptr);
 
 } // namespace mesher
-} // namespace voxel
+} // namespace terrain

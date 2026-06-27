@@ -1,6 +1,6 @@
 #pragma once
 
-// Minimal OpenGL 4.6 Core loader for the voxel engine.
+// Minimal OpenGL 4.6 Core loader for the terrain engine.
 // Loads the subset of GL functions we use via GLFW.
 
 #include <GLFW/glfw3.h>
@@ -8,7 +8,7 @@
 #include <string>
 #include <cstdint>
 
-namespace voxel::gl {
+namespace terrain::gl {
 
 // ---- Explicit function pointer types ----
 using GLenum = unsigned int;
@@ -191,4 +191,4 @@ void loadGLFunctions();
 #define GL_UNPACK_ALIGNMENT 0x0CF5
 #endif
 
-} // namespace voxel::gl
+} // namespace terrain::gl

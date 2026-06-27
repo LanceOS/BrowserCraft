@@ -2,9 +2,8 @@
 
 #include <cstdint>
 #include <array>
-#include "world/BlockIds.hpp"
 
-namespace voxel::biome {
+namespace terrain::biome {
 
 /// A single temperature+humidity sample at a world position.
 /// Bundling both values avoids redundant noise evaluations when
@@ -93,4 +92,4 @@ inline constexpr std::array ALL_BIOME_IDS = {
   BiomeId::Ocean,
 };
 
-} // namespace voxel::biome
+} // namespace terrain::biome

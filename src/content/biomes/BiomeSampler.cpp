@@ -1,6 +1,6 @@
 #include "BiomeSampler.hpp"
 
-namespace voxel::biome {
+namespace terrain::biome {
 
 BiomeSampler::BiomeSampler(uint32_t seed)
   : m_tempNoise(seed ^ 0xa10beu),
@@ -33,4 +33,4 @@ auto BiomeSampler::blendedHeightBias(float worldX, float worldZ) const -> float 
   return BiomeFactory::blendedHeightBias(sampleClimate(worldX, worldZ));
 }
 
-} // namespace voxel::biome
+} // namespace terrain::biome

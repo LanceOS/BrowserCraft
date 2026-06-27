@@ -2,7 +2,7 @@
 
 #include <glm/glm.hpp>
 
-namespace voxel {
+namespace terrain {
 
 /// Supported terrain editing brush actions.
 enum class BrushType {
@@ -21,4 +21,4 @@ struct TerrainBrush {
   glm::vec3 planeNormal = glm::vec3(0.0f, 1.0f, 0.0f); // Used by the Flatten brush
 };
 
-} // namespace voxel
+} // namespace terrain

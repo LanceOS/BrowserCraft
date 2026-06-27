@@ -2,11 +2,7 @@
 #include "engine/alloc/SharedPool.hpp"
 #include "engine/render/ChunkMeshAllocator.hpp"
 #include "engine/threading/WorkerThreadPool.hpp"
-#include "engine/workers/mesher/GreedyMesher.hpp"
-#include "engine/workers/mesher/LightPropagator.hpp"
-#include "engine/workers/mesher/LightSampling.hpp"
 #include "game/WorldController.hpp"
-#include "world/BlockRegistry.hpp"
 #include "world/generation/WorldGenPipeline.hpp"
 #include "world/mesh/SurfaceNetsMesher.hpp"
 #include "world/terrain/TerrainCollision.hpp"
@@ -16,15 +12,11 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <glm/glm.hpp>
 
-// @deprecated Legacy voxel-world code retained during the render-only migration to triangle meshes.
-namespace voxel {
+namespace terrain {
 
 namespace {
-
-auto slotHasVoxelData(int32_t status) -> bool {
-  return status >= static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
-}
 
 struct MeshScratchBuffers {
   std::vector<float> vertices;
@@ -32,41 +24,6 @@ struct MeshScratchBuffers {
 };
 
 thread_local MeshScratchBuffers g_meshScratch;
-
-auto gatherNeighborVoxels(const SharedPool& pool, int32_t slotIndex,
-                          int32_t chunkX, int32_t chunkZ) -> mesher::NeighborVoxelViews {
-  mesher::NeighborVoxelViews neighbors{};
-
-  for (int32_t i = 0; i < pool.capacity(); ++i) {
-    if (i == slotIndex) continue;
-
-    auto candidate = pool.view(i);
-    if (!slotHasVoxelData(*candidate.status)) continue;
-
-    const int32_t cx = *candidate.chunkX;
-    const int32_t cz = *candidate.chunkZ;
-    if (cx == chunkX + 1 && cz == chunkZ) {
-      neighbors.px = candidate.voxels;
-    } else if (cx == chunkX - 1 && cz == chunkZ) {
-      neighbors.nx = candidate.voxels;
-    } else if (cx == chunkX && cz == chunkZ + 1) {
-      neighbors.pz = candidate.voxels;
-    } else if (cx == chunkX && cz == chunkZ - 1) {
-      neighbors.nz = candidate.voxels;
-    }
-
-    if (neighbors.px && neighbors.nx && neighbors.pz && neighbors.nz) {
-      break;
-    }
-  }
-
-  return neighbors;
-}
-
-auto surfaceDensitySample(void* userData, float worldX, float worldY, float worldZ) -> float {
-  auto* pipeline = static_cast<WorldGenPipeline*>(userData);
-  return pipeline->sampleDensity(worldX, worldY, worldZ);
-}
 
 void annotateSurfaceNetsVertices(const WorldGenPipeline& pipeline,
                                  const mesh::SurfaceNetsConfig& cfg,
@@ -262,17 +219,14 @@ void replayAllTerrainEdits(int32_t chunkX, int32_t chunkZ, ChunkSlot& slot,
 ChunkWorkerImpl::ChunkWorkerImpl(WorkerThreadPool& genPool, WorkerThreadPool& meshPool,
                                  SharedPool& pool, WorldGenPipeline& pipeline,
                                  const GameConfig& config, WorldController& controller,
-                                 BlockRegistry& blocks, ChunkMeshAllocator& meshAllocator)
+                                 ChunkMeshAllocator& meshAllocator)
   : m_genPool(genPool), m_meshPool(meshPool), m_pool(pool),
     m_pipeline(pipeline), m_config(config),
-    m_controller(controller), m_blocks(blocks),
-    m_meshAllocator(meshAllocator) {}
+    m_controller(controller), m_meshAllocator(meshAllocator) {}
 
-void ChunkWorkerImpl::generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t seed) {
-  m_genPool.submitAndForget([this, slotIndex, chunkX, chunkZ, seed]() {
+void ChunkWorkerImpl::generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ, uint32_t /*seed*/) {
+  m_genPool.submitAndForget([this, slotIndex, chunkX, chunkZ]() {
     auto slot = m_pool.view(slotIndex);
-    m_pipeline.generate(slot.voxels, chunkX, chunkZ,
-      m_config.chunkSize, m_config.worldHeight, m_config.chunkSize, seed);
 
     // Initialize density buffer
     const int32_t sx = m_config.chunkSize;
@@ -301,7 +255,7 @@ void ChunkWorkerImpl::generate(int32_t slotIndex, int32_t chunkX, int32_t chunkZ
     const auto edits = m_controller.world().editHistory().getEdits();
     replayAllTerrainEdits(chunkX, chunkZ, slot, m_pipeline, edits, sx, sy);
 
-    *slot.status = static_cast<int32_t>(ChunkSlotStatus::VOXELS_READY);
+    *slot.status = static_cast<int32_t>(ChunkSlotStatus::DENSITY_READY);
     m_controller.onGenCompleted(slotIndex);
   });
 }
@@ -315,40 +269,19 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     *slot.transparentIndexCount = 0u;
     *slot.renderFlags = 0u;
 
-    mesher::MesherConfig mcfg;
-    mcfg.sizeX = m_config.chunkSize;
-    mcfg.sizeY = m_config.worldHeight;
-    mcfg.sizeZ = m_config.chunkSize;
-    mcfg.maxVertices = m_config.maxVertsPerChunk;
-    mcfg.maxIndices = m_config.maxIndicesPerChunk;
-    mcfg.strideFloats = m_config.vertexStrideFloats;
-
     const int32_t chunkX = *slot.chunkX;
     const int32_t chunkZ = *slot.chunkZ;
-    const auto neighbors = gatherNeighborVoxels(m_pool, slotIndex, chunkX, chunkZ);
-    mesher::calculateLighting(slot.voxels, slot.light, m_blocks, mcfg);
 
     const size_t scratchVertexFloats =
-        static_cast<size_t>(std::max(0, mcfg.maxVertices)) *
-        static_cast<size_t>(std::max(1, mcfg.strideFloats));
-    const size_t scratchIndices = static_cast<size_t>(std::max(0, mcfg.maxIndices));
+        static_cast<size_t>(std::max(0, m_config.maxVertsPerChunk)) *
+        static_cast<size_t>(std::max(1, m_config.vertexStrideFloats));
+    const size_t scratchIndices = static_cast<size_t>(std::max(0, m_config.maxIndicesPerChunk));
     if (g_meshScratch.vertices.size() < scratchVertexFloats) {
       g_meshScratch.vertices.resize(scratchVertexFloats);
     }
     if (g_meshScratch.indices.size() < scratchIndices) {
       g_meshScratch.indices.resize(scratchIndices);
     }
-
-    uint32_t vc = 0, ic = 0;
-    uint32_t opaqueIc = 0, transparentIc = 0;
-    bool usedGreedyFallback = false;
-    const auto buildGreedyMesh = [&]() -> bool {
-      return mesher::greedyMesh(
-          slot.voxels, slot.light, m_blocks, mcfg,
-          g_meshScratch.vertices.data(),
-          g_meshScratch.indices.data(),
-          vc, ic, nullptr, nullptr, &opaqueIc, &transparentIc, neighbors);
-    };
 
     mesh::SurfaceNetsConfig scfg;
     scfg.sizeX = m_config.chunkSize;
@@ -402,25 +335,21 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
     sampler.userData = &dctx;
     sampler.sample = &slotDensitySample;
 
+    uint32_t vc = 0, ic = 0;
     bool ok = mesh::surfaceNetsMesh(
         scfg, sampler,
         g_meshScratch.vertices.data(),
         g_meshScratch.indices.data(),
         vc, ic);
+
     if (ok) {
       annotateSurfaceNetsVertices(m_pipeline, scfg,
                                   g_meshScratch.vertices.data(), vc);
-      opaqueIc = ic;
-      transparentIc = 0u;
       *slot.renderFlags |= CHUNK_RENDER_FLAG_TERRAIN;
-    } else {
-      usedGreedyFallback = true;
-      ok = buildGreedyMesh();
     }
 
     if (!ok) {
-      std::cerr << "Chunk mesh build failed for (" << chunkX << ", " << chunkZ
-                << ")" << (usedGreedyFallback ? " after greedy fallback" : "") << "\n";
+      std::cerr << "Chunk mesh build failed for (" << chunkX << ", " << chunkZ << ")\n";
       m_meshAllocator.releaseSlot(slotIndex);
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
       m_controller.onMeshCompleted(slotIndex, false);
@@ -439,28 +368,10 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
         slotIndex,
         static_cast<size_t>(vc) * m_config.vertexStrideFloats * sizeof(float),
         static_cast<size_t>(ic) * sizeof(uint32_t));
+
     if (!allocation || !allocation->valid()) {
-      if (!usedGreedyFallback) {
-        usedGreedyFallback = true;
-        *slot.renderFlags &= ~CHUNK_RENDER_FLAG_TERRAIN;
-        ok = buildGreedyMesh();
-        if (ok) {
-          allocation = m_meshAllocator.allocateForSlot(
-              slotIndex,
-              static_cast<size_t>(vc) * m_config.vertexStrideFloats * sizeof(float),
-              static_cast<size_t>(ic) * sizeof(uint32_t));
-        }
-      }
-    }
-    if (!allocation || !allocation->valid()) {
-      if (!ok) {
-        std::cerr << "Chunk mesh build failed for (" << chunkX << ", " << chunkZ
-                  << ")" << (usedGreedyFallback ? " after greedy fallback" : "") << "\n";
-      } else {
-        std::cerr << "Chunk mesh allocation failed for (" << chunkX << ", " << chunkZ
-                  << ") requesting " << vc << " verts / " << ic << " indices"
-                  << (usedGreedyFallback ? " after greedy fallback" : "") << "\n";
-      }
+      std::cerr << "Chunk mesh allocation failed for (" << chunkX << ", " << chunkZ
+                << ") requesting " << vc << " verts / " << ic << " indices\n";
       *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
       m_controller.onMeshCompleted(slotIndex, false);
       return;
@@ -517,14 +428,12 @@ void ChunkWorkerImpl::mesh(int32_t slotIndex) {
 
     *slot.vertexCount = static_cast<uint32_t>(vc);
     *slot.indexCount = ic;
-    *slot.opaqueIndexCount = opaqueIc;
-    *slot.transparentIndexCount = transparentIc;
+    *slot.opaqueIndexCount = ic;
+    *slot.transparentIndexCount = 0u;
     *slot.status = static_cast<int32_t>(ChunkSlotStatus::MESH_READY);
     if (ok && (*slot.renderFlags & CHUNK_RENDER_FLAG_TERRAIN) != 0u) {
       *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
     }
-    if (transparentIc > 0u) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_TRANSPARENT;
-    if (opaqueIc > 0u) *slot.renderFlags |= CHUNK_RENDER_FLAG_HAS_OPAQUE;
     m_controller.onMeshCompleted(slotIndex, true, std::move(terrainCollision));
   });
 }
@@ -537,4 +446,4 @@ void ChunkWorkerImpl::setGpuTargets(float* vboPtr, size_t vboMaxBytes,
   (void)iboMaxBytes;
 }
 
-} // namespace voxel
+} // namespace terrain

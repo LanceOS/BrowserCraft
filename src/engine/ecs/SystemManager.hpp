@@ -6,7 +6,7 @@
 #include <memory>
 #include <algorithm>
 
-namespace voxel {
+namespace terrain {
 
 enum class SystemStage {
   PrePhysics,
@@ -73,4 +73,4 @@ private:
   std::vector<std::unique_ptr<System>> m_systems;
 };
 
-} // namespace voxel
+} // namespace terrain

@@ -1,10 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include "engine/workers/mesher/GreedyMesher.hpp"
 #include "world/mesh/SurfaceNetsMesher.hpp"
-#include "world/BlockIds.hpp"
-#include "world/BlockRegistry.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-using namespace voxel;
+using namespace terrain;
 
 namespace {
 
@@ -40,15 +37,6 @@ auto sphereDensity(void* userData, float worldX, float worldY, float worldZ) -> 
 auto planeDensity(void* userData, float worldX, float, float) -> float {
   const auto* field = static_cast<const PlaneField*>(userData);
   return worldX - field->x0;
-}
-
-struct HeightField {
-  float y0 = 0.0f;
-};
-
-auto heightDensity(void* userData, float, float worldY, float) -> float {
-  const auto* field = static_cast<const HeightField*>(userData);
-  return worldY - field->y0;
 }
 
 struct SeamKey {
@@ -186,65 +174,4 @@ TEST_CASE("SurfaceNetsMesher stays aligned across a shared chunk border",
   CHECK(vca == 0u);
   CHECK(ica == 0u);
   CHECK(seamB.front().y >= 0);
-}
-
-TEST_CASE("SurfaceNetsMesher keeps triangle counts sane on terrain-like fields",
-          "[surface-nets][counts]") {
-  voxel::BlockRegistry reg(256);
-  voxel::BlockDefinition stone;
-  stone.id = voxel::BlockId::STONE;
-  stone.name = "Stone";
-  stone.textures.top = 1;
-  stone.textures.bottom = 1;
-  stone.textures.side = 1;
-  reg.register_(std::move(stone));
-
-  constexpr int32_t SX = 16;
-  constexpr int32_t SY = 32;
-  constexpr int32_t SZ = 16;
-
-  mesh::SurfaceNetsConfig cfg;
-  cfg.sizeX = SX;
-  cfg.sizeY = SY;
-  cfg.sizeZ = SZ;
-  cfg.maxVertices = 4096;
-  cfg.maxIndices = 8192;
-  cfg.strideFloats = VP_STRIDE;
-
-  HeightField field{16.5f};
-  mesh::DensitySampler sampler{};
-  sampler.userData = &field;
-  sampler.sample = &heightDensity;
-
-  std::vector<float> vertices(static_cast<size_t>(cfg.maxVertices) * cfg.strideFloats, 0.0f);
-  std::vector<uint32_t> indices(static_cast<size_t>(cfg.maxIndices), 0u);
-  uint32_t vertexCount = 0u;
-  uint32_t indexCount = 0u;
-  REQUIRE(mesh::surfaceNetsMesh(cfg, sampler, vertices.data(), indices.data(),
-                                vertexCount, indexCount));
-  REQUIRE(vertexCount > 0u);
-  REQUIRE(indexCount > 0u);
-
-  std::vector<uint8_t> voxels(static_cast<size_t>(SX) * SY * SZ, 0u);
-  for (int32_t y = 0; y < SY; ++y) {
-    for (int32_t z = 0; z < SZ; ++z) {
-      for (int32_t x = 0; x < SX; ++x) {
-        if (static_cast<float>(y) < field.y0) {
-          voxels[(y * SZ + z) * SX + x] = voxel::BlockId::STONE;
-        }
-      }
-    }
-  }
-
-  voxel::mesher::MesherConfig greedyCfg;
-  greedyCfg.sizeX = SX;
-  greedyCfg.sizeY = SY;
-  greedyCfg.sizeZ = SZ;
-  const auto greedyHint = voxel::mesher::estimateMeshCapacity(voxels.data(), reg, greedyCfg);
-  const uint32_t surfaceTriangles = indexCount / 3u;
-  const uint32_t greedyTriangles = greedyHint.quadCount * 2u;
-
-  CAPTURE(surfaceTriangles, greedyTriangles);
-  REQUIRE(greedyTriangles > 0u);
-  CHECK(surfaceTriangles <= greedyTriangles);
 }

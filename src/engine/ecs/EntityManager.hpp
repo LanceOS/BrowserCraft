@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <stdexcept>
 
-namespace voxel {
+namespace terrain {
 
 constexpr int32_t ENTITY_INDEX_MASK = 0x00FF'FFFF;
 constexpr int32_t ENTITY_GEN_SHIFT = 24;
@@ -42,4 +42,4 @@ private:
   int32_t m_liveCount = 0;
 };
 
-} // namespace voxel
+} // namespace terrain

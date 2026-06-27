@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace voxel::audio {
+namespace terrain::audio {
 
 // ---- AudioRegistry ----
 
@@ -97,4 +97,4 @@ void AudioEngine::update(float) {
   m_activeSounds.clear();
 }
 
-} // namespace voxel::audio
+} // namespace terrain::audio

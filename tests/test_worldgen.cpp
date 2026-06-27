@@ -6,21 +6,21 @@
 
 namespace {
 
-class FixedClimateSource final : public voxel::biome::IClimateSource {
+class FixedClimateSource final : public terrain::biome::IClimateSource {
 public:
-  explicit FixedClimateSource(voxel::biome::ClimateSample sample)
+  explicit FixedClimateSource(terrain::biome::ClimateSample sample)
     : m_sample(sample) {}
 
-  auto sampleClimate(float, float) const -> voxel::biome::ClimateSample override {
+  auto sampleClimate(float, float) const -> terrain::biome::ClimateSample override {
     return m_sample;
   }
 
 private:
-  voxel::biome::ClimateSample m_sample;
+  terrain::biome::ClimateSample m_sample;
 };
 
-auto makeFlatTerrainConfig() -> voxel::WorldGenerationConfig {
-  voxel::WorldGenerationConfig cfg;
+auto makeFlatTerrainConfig() -> terrain::WorldGenerationConfig {
+  terrain::WorldGenerationConfig cfg;
   cfg.baseHeight = 32.0f;
   cfg.continentalScale = 0.0f;
   cfg.continentalAmplitude = 0.0f;
@@ -38,7 +38,7 @@ auto makeFlatTerrainConfig() -> voxel::WorldGenerationConfig {
 
 TEST_CASE("TerrainSampler exposes continuous density and layered materials", "[worldgen][terrain]") {
   FixedClimateSource plains{{0.5f, 0.45f}};
-  voxel::TerrainSampler sampler(plains, 42, makeFlatTerrainConfig());
+  terrain::TerrainSampler sampler(plains, 42, makeFlatTerrainConfig());
 
   const auto terrain = sampler.sampleTerrain(8.0f, 8.0f);
 
@@ -48,47 +48,47 @@ TEST_CASE("TerrainSampler exposes continuous density and layered materials", "[w
 
   const auto grass = sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY), 8.0f,
                                             glm::vec3(0.0f, 1.0f, 0.0f));
-  REQUIRE(grass.dominant() == voxel::MaterialId::Grass);
-  REQUIRE(grass.primary == voxel::MaterialId::Grass);
-  REQUIRE(grass.secondary == voxel::MaterialId::Dirt);
+  REQUIRE(grass.dominant() == terrain::MaterialId::Grass);
+  REQUIRE(grass.primary == terrain::MaterialId::Grass);
+  REQUIRE(grass.secondary == terrain::MaterialId::Dirt);
 
   const auto steep = sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY), 8.0f,
                                             glm::vec3(0.0f, 0.2f, 0.98f));
-  REQUIRE(steep.dominant() == voxel::MaterialId::Stone);
+  REQUIRE(steep.dominant() == terrain::MaterialId::Stone);
 
   const auto dirt = sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 1), 8.0f,
                                            glm::vec3(0.0f, 1.0f, 0.0f));
-  REQUIRE(dirt.dominant() == voxel::MaterialId::Dirt);
-  REQUIRE(dirt.primary == voxel::MaterialId::Dirt);
-  REQUIRE(dirt.secondary == voxel::MaterialId::Stone);
+  REQUIRE(dirt.dominant() == terrain::MaterialId::Dirt);
+  REQUIRE(dirt.primary == terrain::MaterialId::Dirt);
+  REQUIRE(dirt.secondary == terrain::MaterialId::Stone);
 
   const auto stone = sampler.sampleMaterial(8.0f, static_cast<float>(terrain.surfaceY - 5), 8.0f,
                                             glm::vec3(0.0f, 1.0f, 0.0f));
-  REQUIRE(stone.dominant() == voxel::MaterialId::Stone);
-  REQUIRE(stone.primary == voxel::MaterialId::Stone);
+  REQUIRE(stone.dominant() == terrain::MaterialId::Stone);
+  REQUIRE(stone.primary == terrain::MaterialId::Stone);
 
   FixedClimateSource desert{{0.8f, 0.2f}};
-  voxel::TerrainSampler desertSampler(desert, 42, makeFlatTerrainConfig());
+  terrain::TerrainSampler desertSampler(desert, 42, makeFlatTerrainConfig());
   const auto desertTerrain = desertSampler.sampleTerrain(8.0f, 8.0f);
 
   const auto desertSurface = desertSampler.sampleMaterial(
       8.0f, static_cast<float>(desertTerrain.surfaceY), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
-  REQUIRE(desertSurface.dominant() == voxel::MaterialId::Sand);
-  REQUIRE(desertSurface.primary == voxel::MaterialId::Sand);
+  REQUIRE(desertSurface.dominant() == terrain::MaterialId::Sand);
+  REQUIRE(desertSurface.primary == terrain::MaterialId::Sand);
 
   const auto desertShallow = desertSampler.sampleMaterial(
       8.0f, static_cast<float>(desertTerrain.surfaceY - 1), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
-  REQUIRE(desertShallow.dominant() == voxel::MaterialId::Sand);
+  REQUIRE(desertShallow.dominant() == terrain::MaterialId::Sand);
 
   const auto desertDeep = desertSampler.sampleMaterial(
       8.0f, static_cast<float>(desertTerrain.surfaceY - 5), 8.0f, glm::vec3(0.0f, 1.0f, 0.0f));
-  REQUIRE(desertDeep.dominant() == voxel::MaterialId::Stone);
+  REQUIRE(desertDeep.dominant() == terrain::MaterialId::Stone);
 }
 
 TEST_CASE("WorldGenPipeline sample helpers match the terrain sampler", "[worldgen][terrain]") {
   FixedClimateSource plains{{0.5f, 0.45f}};
-  voxel::WorldGenPipeline pipeline(plains, 42, makeFlatTerrainConfig());
-  voxel::TerrainSampler sampler(plains, 42, makeFlatTerrainConfig());
+  terrain::WorldGenPipeline pipeline(plains, 42, makeFlatTerrainConfig());
+  terrain::TerrainSampler sampler(plains, 42, makeFlatTerrainConfig());
 
   const auto terrain = sampler.sampleTerrain(8.0f, 8.0f);
 
@@ -121,46 +121,25 @@ TEST_CASE("WorldGenPipeline sample helpers match the terrain sampler", "[worldge
   REQUIRE(pipelineStone.blend == Catch::Approx(samplerStone.blend));
 }
 
-TEST_CASE("WorldGenPipeline generates terrain", "[worldgen]") {
-  voxel::WorldGenPipeline pipeline(42);
+TEST_CASE("WorldGenPipeline continuous sampling validity", "[worldgen]") {
+  terrain::WorldGenPipeline pipeline(42);
 
-  constexpr int32_t sx = 16, sy = 256, sz = 16;
-  std::vector<uint8_t> voxels(sx * sy * sz, 0);
+  // Sample continuous density at a few heights and verify variation
+  float dHigh = pipeline.sampleDensity(0.0f, 100.0f, 0.0f);
+  float dLow = pipeline.sampleDensity(0.0f, 5.0f, 0.0f);
 
-  pipeline.generate(voxels.data(), 0, 0, sx, sy, sz);
-
-  // Check that bedrock is present at y=0
-  bool hasBedrock = false;
-  for (int32_t x = 0; x < sx; ++x) {
-    for (int32_t z = 0; z < sz; ++z) {
-      int32_t idx = (0 * sz + z) * sx + x;
-      if (voxels[idx] == 7) { hasBedrock = true; break; }
-    }
-  }
-  REQUIRE(hasBedrock);
-
-  // Check that some blocks are generated above bedrock
-  int32_t nonAir = 0;
-  for (int32_t i = 0; i < sx * sy * sz; ++i) {
-    if (voxels[i] != 0) ++nonAir;
-  }
-  REQUIRE(nonAir > 100);
+  // Above ground should generally be positive (air), deep below ground should be negative (solid)
+  CHECK(dHigh > 0.0f);
+  CHECK(dLow < 0.0f);
 }
 
-TEST_CASE("WorldGenPipeline handles different seeds", "[worldgen]") {
-  voxel::WorldGenPipeline p1(1);
-  voxel::WorldGenPipeline p2(99999);
+TEST_CASE("WorldGenPipeline handles different seeds for continuous sampling", "[worldgen]") {
+  terrain::WorldGenPipeline p1(1);
+  terrain::WorldGenPipeline p2(99999);
 
-  constexpr int32_t sx = 16, sy = 256, sz = 16;
-  std::vector<uint8_t> v1(sx * sy * sz, 0), v2(sx * sy * sz, 0);
+  // Different seeds should produce different density values
+  float d1 = p1.sampleDensity(10.0f, 32.0f, 10.0f);
+  float d2 = p2.sampleDensity(10.0f, 32.0f, 10.0f);
 
-  p1.generate(v1.data(), 0, 0, sx, sy, sz);
-  p2.generate(v2.data(), 0, 0, sx, sy, sz);
-
-  // Different seeds should produce different terrain
-  int32_t differences = 0;
-  for (int32_t i = 0; i < sx * sy * sz; ++i) {
-    if (v1[i] != v2[i]) ++differences;
-  }
-  REQUIRE(differences > 50); // significant differences
+  REQUIRE(d1 != Catch::Approx(d2).margin(1e-5f));
 }

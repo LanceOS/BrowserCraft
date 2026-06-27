@@ -4,7 +4,7 @@
 
 This document proposes a smooth-terrain system for the current C++ engine.
 The goal is to make natural terrain render as a smooth triangle surface while
-preserving the existing voxel/block layer for placed blocks and other discrete
+preserving the existing terrain/block layer for placed blocks and other discrete
 gameplay systems.
 
 A first implementation prototype already exists in:
@@ -30,7 +30,7 @@ The current engine already blends biome height smoothly in generation, but it
 quantizes the terrain into block ids before meshing:
 
 - terrain generation writes block ids in [`src/world/generation/WorldGenPipeline.cpp`](../src/world/generation/WorldGenPipeline.cpp)
-- the chunk mesher emits axis-aligned cube faces in [`src/engine/workers/mesher/GreedyMesher.cpp`](../src/engine/workers/mesher/GreedyMesher.cpp)
+- the chunk mesher emits axis-aligned cube faces in [`src/engine/workers/mesher/SurfaceNetsMesher.cpp`](../src/engine/workers/mesher/SurfaceNetsMesher.cpp)
 - world queries like solidity and raycast assume integer block cells in
   [`src/world/VoxelStore.cpp`](../src/world/VoxelStore.cpp),
   [`src/engine/collision/EntityCollisions.cpp`](../src/engine/collision/EntityCollisions.cpp),
@@ -45,11 +45,11 @@ and meshing issue, not a noise-generation issue.
 - Preserve the current terrain noise stack and biome logic where possible.
 - Support future digging and deformation with automatic surface reconnection.
 - Reuse the current chunk lifecycle, worker ownership, and slot-based streaming.
-- Keep placed blocks, flora, and similar gameplay on the current voxel path in v1.
+- Keep placed blocks, flora, and similar gameplay on the current terrain path in v1.
 
 ## Non-Goals
 
-- Full micro-voxel storage for the entire world
+- Full micro-terrain storage for the entire world
 - Replacing every block-based system in the first milestone
 - Folding smooth terrain into the existing `top/bottom/side` block texture model
 - Immediate support for redstone, structures, and block placement inside smooth terrain
@@ -72,7 +72,7 @@ at once.
 
 Introduce a second terrain representation for natural ground:
 
-1. Keep the existing voxel/block layer for placed blocks and discrete gameplay.
+1. Keep the existing terrain/block layer for placed blocks and discrete gameplay.
 2. Add a new density-field layer for natural terrain only.
 3. Mesh the density field into smooth triangles using an isosurface algorithm.
 4. Render terrain and block geometry as separate mesh paths.
@@ -80,7 +80,7 @@ Introduce a second terrain representation for natural ground:
 This is a hybrid system:
 
 - natural terrain uses a smooth field
-- player-placed cubes remain cubes
+- player-placed density points remain density points
 
 That lets the world look smooth without discarding the existing block gameplay
 architecture.
@@ -106,10 +106,10 @@ lattice of:
 
 With the current defaults of `16 x 256 x 16`, that is:
 
-- current voxel cells: `16 x 256 x 16 = 65,536`
+- current terrain cells: `16 x 256 x 16 = 65,536`
 - terrain lattice samples: `17 x 257 x 17 = 74,273`
 
-This is a modest increase compared with full micro-voxel subdivision and is one
+This is a modest increase compared with full micro-terrain subdivision and is one
 of the main reasons a field-based terrain layer is preferred.
 
 ### Storage Type
@@ -169,8 +169,8 @@ Use `Surface Nets` for the first implementation.
 
 Why `Surface Nets` first:
 
-- cleaner terrain output than greedy voxel faces
-- lighter and simpler than marching cubes for a first milestone
+- cleaner terrain output than SurfaceNets terrain faces
+- lighter and simpler than marching density points for a first milestone
 - good fit for hills, cliffs, and caves
 - easier to stabilize for editing than hand-authored cube subdivision
 
@@ -224,7 +224,7 @@ production terrain.
 ## Terrain Materials
 
 Smooth terrain should not rely on the current block face texture model in
-[`src/world/BlockDefinition.hpp`](../src/world/BlockDefinition.hpp).
+[`src/world/MaterialDefinition.hpp`](../src/world/MaterialDefinition.hpp).
 
 Recommended v1 terrain shader features:
 
@@ -335,7 +335,7 @@ Untouched terrain should continue to regenerate from the world seed.
 
 ### Milestone 6: Block/Terrain Integration
 
-- define placement rules for cubes on smooth surfaces
+- define placement rules for density points on smooth surfaces
 - define overlap or replacement rules between terrain and block geometry
 
 ## Current Prototype
@@ -358,7 +358,7 @@ below are still future milestones.
 
 - cracks at chunk borders if shared samples are not identical
 - duplicate geometry if border cells are emitted by both chunks
-- awkward seams where voxel blocks meet smooth terrain
+- awkward seams where terrain blocks meet smooth terrain
 - collision complexity once players can stand on terrain triangles
 - shader/material complexity compared with the current block face model
 - terrain edits that affect save size or remesh cost more than expected
@@ -377,12 +377,12 @@ of gameplay and persistence changes.
 
 ## Summary
 
-This proposal keeps the existing voxel architecture where it is strongest and
+This proposal keeps the existing terrain architecture where it is strongest and
 adds a dedicated smooth-terrain layer for natural ground.
 
 That approach is preferred over cube subdivision because:
 
 - it actually changes the terrain silhouette
-- it scales much better than micro-voxel storage
+- it scales much better than micro-terrain storage
 - it supports future terrain deformation that reconnects to neighboring surfaces
 - it fits the current chunk, worker, and slot-based ownership model

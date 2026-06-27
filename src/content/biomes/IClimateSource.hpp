@@ -2,7 +2,7 @@
 
 #include "BiomeData.hpp"
 
-namespace voxel::biome {
+namespace terrain::biome {
 
 /// Interface for climate noise sampling.
 /// Implementations provide temperature and humidity at any world coordinate.
@@ -18,4 +18,4 @@ public:
   [[nodiscard]] virtual ClimateSample sampleClimate(float worldX, float worldZ) const = 0;
 };
 
-} // namespace voxel::biome
+} // namespace terrain::biome

@@ -2,7 +2,7 @@
 #include "engine/alloc/SharedPool.hpp"
 
 TEST_CASE("SharedPool create and acquire", "[alloc]") {
-  voxel::ChunkDimensions dims{};
+  terrain::ChunkDimensions dims{};
   dims.sizeX = 16;
   dims.sizeY = 256;
   dims.sizeZ = 16;
@@ -10,25 +10,25 @@ TEST_CASE("SharedPool create and acquire", "[alloc]") {
   dims.maxIndicesPerChunk = 20000;
   dims.vertexStrideFloats = 8;
 
-  auto pool = voxel::SharedPool::create(4, dims);
+  auto pool = terrain::SharedPool::create(4, dims);
   REQUIRE(pool->capacity() == 4);
   REQUIRE(pool->slotByteSize() > 0);
 
   auto slot = pool->acquire();
   REQUIRE(slot.has_value());
-  REQUIRE(*slot->status == static_cast<int32_t>(voxel::ChunkSlotStatus::FREE));
+  REQUIRE(*slot->status == static_cast<int32_t>(terrain::ChunkSlotStatus::FREE));
   REQUIRE(*slot->vertexCount == 0);
   REQUIRE(*slot->indexCount == 0);
   REQUIRE(*slot->opaqueIndexCount == 0);
   REQUIRE(*slot->transparentIndexCount == 0);
 
-  // Write voxel data and verify
-  slot->voxels[0] = 5;
-  REQUIRE(slot->voxels[0] == 5);
+  // Write terrain data and verify
+  slot->density[0] = 5.0f;
+  REQUIRE(slot->density[0] == 5.0f);
 }
 
 TEST_CASE("SharedPool acquire all then release", "[alloc]") {
-  voxel::ChunkDimensions dims{};
+  terrain::ChunkDimensions dims{};
   dims.sizeX = 16;
   dims.sizeY = 256;
   dims.sizeZ = 16;
@@ -36,7 +36,7 @@ TEST_CASE("SharedPool acquire all then release", "[alloc]") {
   dims.maxIndicesPerChunk = 200;
   dims.vertexStrideFloats = 8;
 
-  auto pool = voxel::SharedPool::create(3, dims);
+  auto pool = terrain::SharedPool::create(3, dims);
 
   auto s0 = pool->acquire();
   auto s1 = pool->acquire();
@@ -56,7 +56,7 @@ TEST_CASE("SharedPool acquire all then release", "[alloc]") {
 }
 
 TEST_CASE("SharedPool multi-threaded view access", "[alloc]") {
-  voxel::ChunkDimensions dims{};
+  terrain::ChunkDimensions dims{};
   dims.sizeX = 16;
   dims.sizeY = 256;
   dims.sizeZ = 16;
@@ -64,14 +64,14 @@ TEST_CASE("SharedPool multi-threaded view access", "[alloc]") {
   dims.maxIndicesPerChunk = 200;
   dims.vertexStrideFloats = 8;
 
-  auto pool = voxel::SharedPool::create(2, dims);
+  auto pool = terrain::SharedPool::create(2, dims);
 
   // view() works from any context (single SharedPool, no attach needed)
   auto slot = pool->view(0);
-  slot.voxels[5] = 42;
-  REQUIRE(slot.voxels[5] == 42);
+  slot.density[5] = 42.0f;
+  REQUIRE(slot.density[5] == 42.0f);
 
   // Same data visible through another view
   auto mainSlot = pool->view(0);
-  REQUIRE(mainSlot.voxels[5] == 42);
+  REQUIRE(mainSlot.density[5] == 42.0f);
 }

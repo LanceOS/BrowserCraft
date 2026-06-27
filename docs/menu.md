@@ -138,7 +138,7 @@ export class UIManager {
     this.root.innerHTML = `
       <div class="ui-overlay">
         <div class="ui-panel">
-          <div class="ui-title">VOXEL ENGINE (v1.5.2)</div>
+          <div class="ui-title">TERRAIN ENGINE (v1.5.2)</div>
           <button class="ui-btn" data-action="start-singleplayer">Singleplayer</button>
           <button class="ui-btn" data-action="show-options">Options</button>
           <button class="ui-btn" data-action="quit-game">Quit Game</button>
@@ -297,7 +297,7 @@ private renderMenuBackground(): void {
   const pitch = Math.sin(time * 0.1) * 0.1;
   
   // Override UBO with menu camera matrices...
-  // Render a special pre-baked voxel scene...
+  // Render a special pre-baked terrain scene...
 }
 ```
 

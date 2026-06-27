@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace voxel {
+namespace terrain {
 
 // Declare the ray-AABB intersection helper defined in TerrainCollision.cpp
 extern bool rayAABBIntersect(const glm::vec3& origin, const glm::vec3& dir,
@@ -87,4 +87,4 @@ auto raycastTerrain(
   return result;
 }
 
-} // namespace voxel
+} // namespace terrain

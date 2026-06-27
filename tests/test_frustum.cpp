@@ -6,7 +6,7 @@ using Catch::Approx;
 #include "engine/math/Frustum.hpp"
 
 TEST_CASE("Frustum extractFrom populates 6 planes", "[math]") {
-  using namespace voxel;
+  using namespace terrain;
   auto proj = glm::perspective(glm::radians(70.0f), 16.0f / 9.0f, 0.1f, 1000.0f);
   auto view = glm::lookAt(
     glm::vec3(0.0f, 100.0f, 200.0f),
@@ -26,7 +26,7 @@ TEST_CASE("Frustum extractFrom populates 6 planes", "[math]") {
 }
 
 TEST_CASE("Frustum intersectsAABB with box inside view", "[math]") {
-  using namespace voxel;
+  using namespace terrain;
   auto proj = glm::perspective(glm::radians(70.0f), 16.0f / 9.0f, 0.1f, 1000.0f);
   auto view = glm::lookAt(
     glm::vec3(0.0f, 100.0f, 200.0f),
@@ -43,7 +43,7 @@ TEST_CASE("Frustum intersectsAABB with box inside view", "[math]") {
 }
 
 TEST_CASE("Frustum intersectsAABB with box behind camera", "[math]") {
-  using namespace voxel;
+  using namespace terrain;
   auto proj = glm::perspective(glm::radians(70.0f), 16.0f / 9.0f, 0.1f, 1000.0f);
   auto view = glm::lookAt(
     glm::vec3(0.0f, 100.0f, 200.0f),

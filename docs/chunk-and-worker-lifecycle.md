@@ -4,33 +4,33 @@ This document describes how a chunk moves through the current engine from visibi
 
 The main moving pieces are:
 
-- [`cpp-voxel/src/game/Game.hpp`](../cpp-voxel/src/game/Game.hpp)
-- [`cpp-voxel/src/world/World.hpp`](../cpp-voxel/src/world/World.hpp)
-- [`cpp-voxel/src/world/Chunk.hpp`](../cpp-voxel/src/world/Chunk.hpp)
-- [`cpp-voxel/src/engine/alloc/SharedPool.hpp`](../cpp-voxel/src/engine/alloc/SharedPool.hpp)
-- [`cpp-voxel/src/engine/threading/WorkerThreadPool.hpp`](../cpp-voxel/src/engine/threading/WorkerThreadPool.hpp)
-- [`cpp-voxel/src/engine/workers/worldgen/WorldGenPipeline.hpp`](../cpp-voxel/src/engine/workers/worldgen/WorldGenPipeline.hpp)
-- [`cpp-voxel/src/engine/render/ChunkMesh.hpp`](../cpp-voxel/src/engine/render/ChunkMesh.hpp)
-- [`cpp-voxel/src/engine/save/SaveManager.hpp`](../cpp-voxel/src/engine/save/SaveManager.hpp)
-- [`cpp-voxel/src/engine/save/SaveManager.hpp`](../cpp-voxel/src/engine/save/SaveManager.hpp)
-- [`cpp-voxel/src/engine/render/Renderer.hpp`](../cpp-voxel/src/engine/render/Renderer.hpp)
+- [`cpp-terrain/src/game/Game.hpp`](../cpp-terrain/src/game/Game.hpp)
+- [`cpp-terrain/src/world/World.hpp`](../cpp-terrain/src/world/World.hpp)
+- [`cpp-terrain/src/world/Chunk.hpp`](../cpp-terrain/src/world/Chunk.hpp)
+- [`cpp-terrain/src/engine/alloc/SharedPool.hpp`](../cpp-terrain/src/engine/alloc/SharedPool.hpp)
+- [`cpp-terrain/src/engine/threading/WorkerThreadPool.hpp`](../cpp-terrain/src/engine/threading/WorkerThreadPool.hpp)
+- [`cpp-terrain/src/engine/workers/worldgen/WorldGenPipeline.hpp`](../cpp-terrain/src/engine/workers/worldgen/WorldGenPipeline.hpp)
+- [`cpp-terrain/src/engine/render/ChunkMesh.hpp`](../cpp-terrain/src/engine/render/ChunkMesh.hpp)
+- [`cpp-terrain/src/engine/save/SaveManager.hpp`](../cpp-terrain/src/engine/save/SaveManager.hpp)
+- [`cpp-terrain/src/engine/save/SaveManager.hpp`](../cpp-terrain/src/engine/save/SaveManager.hpp)
+- [`cpp-terrain/src/engine/render/Renderer.hpp`](../cpp-terrain/src/engine/render/Renderer.hpp)
 
 ## High-Level Flow
 
 1. The game creates a shared chunk pool and starts worker pools.
 2. `World.update()` decides which chunks should exist around the camera.
 3. Each new chunk either loads from disk or queues for procedural generation.
-4. Generated or loaded voxel data is queued for meshing.
+4. Generated or loaded terrain data is queued for meshing.
 5. The mesher builds vertex/index data and marks the chunk mesh-ready.
 6. The renderer uploads finished buffers to the GPU and marks the chunk uploaded.
 7. Chunks that move outside the visible radius are released back to the shared pool.
 
 ## Shared Chunk Memory
 
-Every chunk lives in one slot of [`SharedPool`](../cpp-voxel/src/engine/alloc/SharedPool.hpp). A slot contains:
+Every chunk lives in one slot of [`SharedPool`](../cpp-terrain/src/engine/alloc/SharedPool.hpp). A slot contains:
 
 - a small atomic header
-- `voxels`
+- `density data`
 - `light`
 - `redstone`
 - `vertices`
@@ -55,8 +55,8 @@ The main thread owns allocation and release. Worker-attached pool views can insp
 
 The code tracks chunk progress in two places:
 
-- [`Chunk.state`](../cpp-voxel/src/world/Chunk.hpp): a main-thread-friendly string state used by `World`
-- [`ChunkSlotStatus`](../cpp-voxel/src/engine/alloc/SharedPool.hpp): an atomic enum stored inside shared memory
+- [`Chunk.state`](../cpp-terrain/src/world/Chunk.hpp): a main-thread-friendly string state used by `World`
+- [`ChunkSlotStatus`](../cpp-terrain/src/engine/alloc/SharedPool.hpp): an atomic enum stored inside shared memory
 
 ### `Chunk.state`
 
@@ -87,12 +87,12 @@ The string state is easier for gameplay code to reason about. The atomic status 
 
 ## Startup
 
-During construction, [`Game`](../cpp-voxel/src/game/Game.hpp):
+During construction, [`Game`](../cpp-terrain/src/game/Game.hpp):
 
-- creates a [`SharedPool`](../cpp-voxel/src/engine/alloc/SharedPool.hpp)
-- spawns worldgen workers and mesher workers through [`WorkerThreadPool`](../cpp-voxel/src/engine/threading/WorkerThreadPool.hpp)
-- creates a [`World`](../cpp-voxel/src/world/World.hpp)
-- creates a [`SaveManager`](../cpp-voxel/src/engine/save/SaveManager.hpp)
+- creates a [`SharedPool`](../cpp-terrain/src/engine/alloc/SharedPool.hpp)
+- spawns worldgen workers and mesher workers through [`WorkerThreadPool`](../cpp-terrain/src/engine/threading/WorkerThreadPool.hpp)
+- creates a [`World`](../cpp-terrain/src/world/World.hpp)
+- creates a [`SaveManager`](../cpp-terrain/src/engine/save/SaveManager.hpp)
 
 Both worker pools receive one `init` message containing:
 
@@ -114,7 +114,7 @@ Each frame, `Game.update()` eventually calls `world.update(cameraPosition)`.
 When `ensureVisibleRadius()` finds a missing chunk:
 
 1. it acquires a slot from `SharedPool`
-2. it creates a [`Chunk`](../cpp-voxel/src/world/Chunk.hpp) with `(chunkX, chunkZ, slotIndex)`
+2. it creates a [`Chunk`](../cpp-terrain/src/world/Chunk.hpp) with `(chunkX, chunkZ, slotIndex)`
 3. it writes `chunkX` and `chunkZ` into the shared slot header
 4. it either requests a disk load or queues worldgen
 
@@ -124,7 +124,7 @@ The choice depends on whether a save manager is attached.
 
 If saving is enabled, newly discovered chunks start in `loadingFromDisk`.
 
-[`SaveManager.requestLoad()`](../cpp-voxel/src/engine/save/SaveManager.hpp) sends a `LOAD_CHUNK` message to the save worker. The worker:
+[`SaveManager.requestLoad()`](../cpp-terrain/src/engine/save/SaveManager.hpp) sends a `LOAD_CHUNK` message to the save worker. The worker:
 
 - opens IndexedDB
 - looks up the world/region record
@@ -134,7 +134,7 @@ If saving is enabled, newly discovered chunks start in `loadingFromDisk`.
 Back on the main thread:
 
 - `LOAD_SUCCESS` calls `World.onSaveLoadSuccess()`
-- voxel, light, and redstone arrays are copied into the slot
+- terrain, light, and redstone arrays are copied into the slot
 - the slot status becomes `VOXELS_READY`
 - the chunk moves to `voxelsReady`
 - the chunk is pushed onto `pendingMesh`
@@ -152,10 +152,10 @@ If a chunk is not loaded from disk, it goes through worldgen.
 3. set `chunk.state = "generating"`
 4. send a `generate` message with `slotIndex`, `chunkX`, `chunkZ`, and a chunk-local seed
 
-Inside [`WorldGenPipeline`](../cpp-voxel/src/engine/workers/worldgen/WorldGenPipeline.hpp), the pipeline:
+Inside [`WorldGenPipeline`](../cpp-terrain/src/engine/workers/worldgen/WorldGenPipeline.hpp), the pipeline:
 
 - samples biome and density noise
-- fills the voxel array
+- fills the terrain array
 - carves caves
 - places structures
 - distributes ore
@@ -183,9 +183,9 @@ When finished, the worker posts `generated`.
 Inside `src/game/ChunkWorkerImpl.cpp`, the worker chooses a meshing path based
 on `GameConfig::useSurfaceNets`:
 
-1. the greedy voxel path recalculates lighting into the slot's `light` array
-2. the greedy path consults redstone state for dynamic emitters like the redstone lamp
-3. the greedy path calls `mesher::greedyMesh()` and writes interleaved vertex data and indices into the shared slot
+1. the SurfaceNets terrain path recalculates lighting into the slot's `light` array
+2. the SurfaceNets path consults redstone state for dynamic emitters like the redstone lamp
+3. the SurfaceNets path calls `mesher::greedyMesh()` and writes interleaved vertex data and indices into the shared slot
 4. the smooth path builds a `mesh::DensitySampler` and calls `mesh::surfaceNetsMesh()`
 5. both paths store `MESH_READY` into the atomic status
 6. the worker posts `meshed` with `success`, `vertexCount`, and `indexCount`
@@ -199,13 +199,13 @@ On the main thread, `World.onMeshDone()`:
 
 ## Step 4: GPU Upload
 
-The renderer performs uploads lazily inside [`Renderer.syncChunks()`](../cpp-voxel/src/engine/render/Renderer.hpp).
+The renderer performs uploads lazily inside [`Renderer.syncChunks()`](../cpp-terrain/src/engine/render/Renderer.hpp).
 
 For each chunk in `meshReady`:
 
 - grab the slot views from `World.getChunkSlot()`
 - slice the exact vertex and index ranges
-- upload them into a [`ChunkMesh`](../cpp-voxel/src/engine/render/ChunkMesh.hpp)
+- upload them into a [`ChunkMesh`](../cpp-terrain/src/engine/render/ChunkMesh.hpp)
 - call `world.markUploaded(chunk)`
 
 `markUploaded()` sets:
@@ -213,14 +213,14 @@ For each chunk in `meshReady`:
 - `chunk.state = "uploaded"`
 - `slot.status = GPU_UPLOADED`
 
-After this point, the slot still owns the authoritative voxel, light, redstone, and mesh arrays, but the renderer also has a GPU copy.
+After this point, the slot still owns the authoritative terrain, light, redstone, and mesh arrays, but the renderer also has a GPU copy.
 
 ## Remeshing After Edits
 
 Gameplay edits happen through:
 
-- [`World.setBlockIdAt()`](../cpp-voxel/src/world/World.hpp)
-- [`World.setRedstonePackedAt()`](../cpp-voxel/src/world/World.hpp)
+- [`World.setBlockIdAt()`](../cpp-terrain/src/world/World.hpp)
+- [`World.setRedstonePackedAt()`](../cpp-terrain/src/world/World.hpp)
 
 Both methods:
 
@@ -230,22 +230,22 @@ Both methods:
 
 If the chunk is already meshing, `World.requestRemesh()` sets `chunk.needsRemesh = true` instead of interrupting the current worker. Once `onMeshDone()` fires, the chunk is queued again.
 
-This behavior is covered by [`tests/world-remesh.test.mjs`](../tests/world-remesh.test.mjs) (original TS) and the C++ tests in `cpp-voxel/tests/`.
+This behavior is covered by [`tests/world-remesh.test.mjs`](../tests/world-remesh.test.mjs) (original TS) and the C++ tests in `cpp-terrain/tests/`.
 
 ## Save Cycle
 
 Saving is intentionally decoupled from generation and meshing.
 
-[`SaveManager`](../cpp-voxel/src/engine/save/SaveManager.hpp):
+[`SaveManager`](../cpp-terrain/src/engine/save/SaveManager.hpp):
 
 - keeps a `dirtyQueue`
 - waits for `saveInterval`
-- serializes ready chunks with [`serializeChunkData()`](../cpp-voxel/src/engine/save/SaveManager.hpp)
+- serializes ready chunks with [`serializeChunkData()`](../cpp-terrain/src/engine/save/SaveManager.hpp)
 - transfers the resulting `ArrayBuffer` to `SaveWorker`
 
 The serialized payload includes:
 
-- voxels
+- density data
 - light
 - redstone
 
@@ -269,7 +269,7 @@ Releasing the slot returns it to the main-thread free list and marks it `FREE`.
 
 ## Worker Messages
 
-Worker protocol currently lives in [`cpp-voxel/src/engine/threading/WorkerThreadPool.hpp`](../cpp-voxel/src/engine/threading/WorkerThreadPool.hpp).
+Worker protocol currently lives in [`cpp-terrain/src/engine/threading/WorkerThreadPool.hpp`](../cpp-terrain/src/engine/threading/WorkerThreadPool.hpp).
 
 Inbound messages:
 
@@ -278,18 +278,18 @@ Inbound messages:
 - `mesh`
 
 The `mesh` message is still the single entry point; `ChunkWorkerImpl.cpp` now
-fans out to greedy voxel meshing or Surface Nets internally.
+fans out to SurfaceNets terrain meshing or Surface Nets internally.
 
 Outbound messages:
 
 - `generated`
 - `meshed`
 
-The save worker uses its own message shapes (see [`SaveManager`](../cpp-voxel/src/engine/save/SaveManager.hpp)).
+The save worker uses its own message shapes (see [`SaveManager`](../cpp-terrain/src/engine/save/SaveManager.hpp)).
 
 ## Practical Gotchas
 
 - `Chunk.state` and `ChunkSlotStatus` are related but not identical; if they disagree, trust the code path that owns the transition.
 - Render distance changes are applied by mutating `config.renderDistance` from the current session each update.
 - The mesher recalculates lighting every mesh job, so edits that change visibility or emission do not need a separate light rebuild pass.
-- Redstone is stored in its own array, not embedded in voxel IDs or light bytes.
+- Redstone is stored in its own array, not embedded in terrain IDs or light bytes.
