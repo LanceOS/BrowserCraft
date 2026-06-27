@@ -23,6 +23,8 @@ inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_TRANSPARENT = 1u << 0;
 inline constexpr uint32_t CHUNK_RENDER_FLAG_HAS_OPAQUE = 1u << 1;
 inline constexpr uint32_t CHUNK_RENDER_FLAG_TERRAIN = 1u << 2;
 
+inline constexpr float kGridSpacing = 0.5f;
+
 /// Canonical chunk sizing metadata used when constructing the shared pool.
 struct ChunkDimensions {
   int32_t sizeX;

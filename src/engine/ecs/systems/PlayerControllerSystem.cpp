@@ -122,6 +122,8 @@ void PlayerControllerSystem::update(TickContext& ctx) {
   auto& body = m_bodies.get(idx);
   auto& player = m_players.get(idx);
 
+  m_prevPosition = transform.position;
+
   syncHotbarSelection(m_input, player);
   const bool canControl = (m_session.state() == GameState::InGame ||
                           m_session.state() == GameState::GeneratingWorld) &&
@@ -312,6 +314,22 @@ void PlayerControllerSystem::syncCameraFromPlayer() {
   m_camera.forward = lookDirectionFromPlayer(player);
   m_camera.right = glm::normalize(glm::cross(m_camera.forward, m_camera.up));
   m_camera.position = transform.position + glm::vec3(0.0f, player.eyeHeight, 0.0f);
+  m_cameraDirty = true;
+}
+
+void PlayerControllerSystem::interpolateCamera(float alpha) {
+  int32_t idx = m_cachedPlayerIndex;
+  if (idx < 0 || !m_transforms.has(idx) || !m_players.has(idx)) {
+    return;
+  }
+
+  const auto& transform = m_transforms.get(idx);
+  const auto& player = m_players.get(idx);
+
+  glm::vec3 interpPos = glm::mix(m_prevPosition, transform.position, alpha);
+  m_camera.position = interpPos + glm::vec3(0.0f, player.eyeHeight, 0.0f);
+  m_camera.forward = lookDirectionFromPlayer(player);
+  m_camera.right = glm::normalize(glm::cross(m_camera.forward, m_camera.up));
   m_cameraDirty = true;
 }
 

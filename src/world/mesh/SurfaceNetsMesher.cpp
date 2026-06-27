@@ -1,4 +1,5 @@
 #include "SurfaceNetsMesher.hpp"
+#include "world/ChunkTypes.hpp"
 
 #include <algorithm>
 #include <array>
@@ -82,9 +83,12 @@ inline auto vertexOffset(uint32_t vertexIndex, uint32_t strideFloats) -> size_t 
 inline void writeVertex(float* out, uint32_t vertexIndex, uint32_t strideFloats,
                         const Vec3& pos, const Vec3& normal) {
   float* p = out + vertexOffset(vertexIndex, strideFloats);
-  p[0] = pos.x;
-  p[1] = pos.y;
-  p[2] = pos.z;
+  float worldX = pos.x * kGridSpacing;
+  float worldY = pos.y * kGridSpacing;
+  float worldZ = pos.z * kGridSpacing;
+  p[0] = worldX;
+  p[1] = worldY;
+  p[2] = worldZ;
   p[3] = normal.x;
   p[4] = normal.y;
   p[5] = normal.z;
@@ -96,14 +100,14 @@ inline void writeVertex(float* out, uint32_t vertexIndex, uint32_t strideFloats,
   float u = 0.0f;
   float v = 0.0f;
   if (ay >= ax && ay >= az) {
-    u = pos.x * kUvScale;
-    v = pos.z * kUvScale;
+    u = worldX * kUvScale;
+    v = worldZ * kUvScale;
   } else if (ax >= az) {
-    u = pos.z * kUvScale;
-    v = pos.y * kUvScale;
+    u = worldZ * kUvScale;
+    v = worldY * kUvScale;
   } else {
-    u = pos.x * kUvScale;
-    v = pos.y * kUvScale;
+    u = worldX * kUvScale;
+    v = worldY * kUvScale;
   }
 
   p[6] = u;
@@ -187,11 +191,11 @@ auto surfaceNetsMesh(
 
   // Sample the density lattice in world coordinates.
   for (int32_t y = sampleMinY; y <= sampleMaxY; ++y) {
-    const float worldY = cfg.originY + static_cast<float>(y);
+    const float worldY = cfg.originY + static_cast<float>(y) * kGridSpacing;
     for (int32_t z = sampleMinZ; z <= sampleMaxZ; ++z) {
-      const float worldZ = cfg.originZ + static_cast<float>(z);
+      const float worldZ = cfg.originZ + static_cast<float>(z) * kGridSpacing;
       for (int32_t x = sampleMinX; x <= sampleMaxX; ++x) {
-        const float worldX = cfg.originX + static_cast<float>(x);
+        const float worldX = cfg.originX + static_cast<float>(x) * kGridSpacing;
         const size_t idx = sampleIndex(x - sampleMinX, y - sampleMinY, z - sampleMinZ,
                                        sampleXCount, sampleZCount);
         g_scratch.densities[idx] = density(worldX, worldY, worldZ);

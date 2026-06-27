@@ -45,7 +45,7 @@ struct MovementSolver {
       glm::vec3 hitPos(0.0f);
       glm::vec3 hitNormal(0.0f);
       float hitDist = 0.0f;
-      float maxDist = startY + 2.0f;
+      float maxDist = 2.0f;
 
       if (chunk->terrainCollision->raycast(origin, direction, maxDist, hitPos, hitNormal, hitDist)) {
         return hitPos.y;
@@ -74,86 +74,149 @@ struct MovementSolver {
     return highest;
   }
 
-  void resolve(float dx, float dy, float dz, cmp::Transform& transform) {
-    const float maxDelta = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
-    const int32_t steps = std::max(1, static_cast<int32_t>(std::ceil(maxDelta / 0.5f)));
-    const float invSteps = 1.0f / static_cast<float>(steps);
+  bool resolveCollisions(glm::vec3& position, glm::vec3& velocity, bool& outOnGround) {
+    outOnGround = false;
+    bool collided = false;
 
-    for (int32_t s = 0; s < steps; ++s) {
-      float subDx = dx * invSteps;
-      float subDy = dy * invSteps;
-      float subDz = dz * invSteps;
+    // Resolve up to 4 iterations of collision contacts
+    for (int iter = 0; iter < 4; ++iter) {
+      std::vector<TerrainTriangle> candidates;
+      const glm::vec3 minPoint = position + body.aabbMin;
+      const glm::vec3 maxPoint = position + body.aabbMax;
 
-      glm::vec3 stepPos = transform.position;
+      // Expand the search bounds slightly to catch all potentially intersecting triangles
+      const glm::vec3 searchMin = minPoint - glm::vec3(0.1f);
+      const glm::vec3 searchMax = maxPoint + glm::vec3(0.1f);
 
-      // ----- Y axis (gravity + landing) -----------------------------------
-      glm::vec3 yStep = stepPos + glm::vec3(0.0f, subDy, 0.0f);
-      if (!collisions.collidesAt(yStep, body)) {
-        stepPos = yStep;
-        body.onGround = 0;
-      } else if (subDy <= 0.0f) {
-        const glm::vec3 supportProbePos = stepPos + glm::vec3(subDx, 0.0f, subDz);
-        const float feetY = yStep.y + body.aabbMin.y;
-        
-        // Find the highest ground height in our footprint
-        const float surfaceY = highestGroundInFootprintFloat(supportProbePos, stepPos.y + body.aabbMin.y);
-        
-        if (surfaceY >= 0.0f && (feetY - surfaceY) <= 1.5f) {
-          // Ground is close — snap to it
-          stepPos.y = surfaceY - body.aabbMin.y;
-          body.onGround = 1;
-          int32_t safety = 64;
-          while (collisions.collidesAt(stepPos, body) && --safety > 0) {
-            stepPos.y += 0.05f;
+      int32_t minCX = floorToChunk(static_cast<int32_t>(std::floor(searchMin.x)), chunkSize);
+      int32_t maxCX = floorToChunk(static_cast<int32_t>(std::floor(searchMax.x)), chunkSize);
+      int32_t minCZ = floorToChunk(static_cast<int32_t>(std::floor(searchMin.z)), chunkSize);
+      int32_t maxCZ = floorToChunk(static_cast<int32_t>(std::floor(searchMax.z)), chunkSize);
+
+      for (int32_t cz = minCZ; cz <= maxCZ; ++cz) {
+        for (int32_t cx = minCX; cx <= maxCX; ++cx) {
+          const Chunk* chunk = world.getChunk(cx, cz);
+          if (chunk && chunk->terrainCollision && !chunk->terrainCollision->empty()) {
+            chunk->terrainCollision->getTrianglesIntersectingAABB(searchMin, searchMax, candidates);
           }
-          body.velocity.y = 0.0f;
-          subDy = 0.0f;
-        } else {
-          body.velocity.y = 0.0f;
-          subDy = 0.0f;
-        }
-      } else {
-        // Hit ceiling
-        body.velocity.y = 0.0f;
-        subDy = 0.0f;
-      }
-
-      // ----- X axis (with step-assist) ------------------------------------
-      glm::vec3 xStep = stepPos + glm::vec3(subDx, 0.0f, 0.0f);
-      if (!collisions.collidesAt(xStep, body)) {
-        stepPos.x = xStep.x;
-      } else {
-        if (body.onGround && subDx != 0.0f) {
-          glm::vec3 raised = stepPos + glm::vec3(subDx, kStepHeight, 0.0f);
-          if (!collisions.collidesAt(raised, body)) {
-            stepPos = raised;
-          } else {
-            body.velocity.x = 0.0f;
-          }
-        } else {
-          body.velocity.x = 0.0f;
         }
       }
 
-      // ----- Z axis (with step-assist) ------------------------------------
-      glm::vec3 zStep = stepPos + glm::vec3(0.0f, 0.0f, subDz);
-      if (!collisions.collidesAt(zStep, body)) {
-        stepPos.z = zStep.z;
-      } else {
-        if (body.onGround && subDz != 0.0f) {
-          glm::vec3 raised = stepPos + glm::vec3(0.0f, kStepHeight, subDz);
-          if (!collisions.collidesAt(raised, body)) {
-            stepPos = raised;
-          } else {
-            body.velocity.z = 0.0f;
+      if (candidates.empty()) {
+        break;
+      }
+
+      float maxDepth = -1.0f;
+      CollisionContact deepestContact;
+
+      const glm::vec3 boxCenter = position + 0.5f * (body.aabbMin + body.aabbMax);
+      const glm::vec3 boxHalfSize = 0.5f * (body.aabbMax - body.aabbMin);
+
+      for (const auto& tri : candidates) {
+        CollisionContact contact;
+        if (collideAABBTriangle(boxCenter, boxHalfSize, tri.v0, tri.v1, tri.v2, contact)) {
+          if (contact.depth > maxDepth) {
+            maxDepth = contact.depth;
+            deepestContact = contact;
           }
-        } else {
-          body.velocity.z = 0.0f;
         }
       }
 
-      transform.position = stepPos;
+      if (maxDepth <= 0.0f) {
+        break;
+      }
+
+      // Resolve the deepest collision by pushing the position out
+      position += deepestContact.normal * deepestContact.depth;
+      collided = true;
+
+      // A contact is ground if the normal points mostly up (e.g. normal.y > 0.5f)
+      if (deepestContact.normal.y > 0.5f) {
+        outOnGround = true;
+      }
+
+      // Project velocity onto the contact plane to slide
+      float velDotN = glm::dot(velocity, deepestContact.normal);
+      if (velDotN < 0.0f) {
+        velocity -= deepestContact.normal * velDotN;
+      }
     }
+
+    return collided;
+  }
+
+  void resolve(float dx, float dy, float dz, cmp::Transform& transform) {
+    glm::vec3 originalPos = transform.position;
+    glm::vec3 position = originalPos;
+    glm::vec3 velocity = body.velocity;
+    bool originallyOnGround = body.onGround != 0;
+
+    // 1. Apply movement
+    position += glm::vec3(dx, dy, dz);
+
+    // 2. Resolve collisions at the new position
+    bool onGround = false;
+    resolveCollisions(position, velocity, onGround);
+
+    // 3. Step-assist check
+    // If the player was on the ground, has horizontal movement, and got blocked:
+    float horizontalMoveDistSq = dx * dx + dz * dz;
+    if (originallyOnGround && horizontalMoveDistSq > 1e-6f) {
+      glm::vec3 expectedPos = originalPos + glm::vec3(dx, dy, dz);
+      
+      float dxTravelled = position.x - originalPos.x;
+      float dzTravelled = position.z - originalPos.z;
+      float travelDistSq = dxTravelled * dxTravelled + dzTravelled * dzTravelled;
+      
+      float expectedDistSq = dx * dx + dz * dz;
+
+      // If we travelled less than 90% of the expected horizontal distance, we might be blocked by a step
+      if (travelDistSq < expectedDistSq * 0.9f) {
+        glm::vec3 stepUpPos = originalPos;
+        stepUpPos.y += kStepHeight; // Lift up
+
+        // Move horizontally at the elevated height
+        stepUpPos += glm::vec3(dx, 0.0f, dz);
+
+        // Resolve collisions at this elevated position
+        bool stepOnGround = false;
+        glm::vec3 stepVelocity = velocity;
+        resolveCollisions(stepUpPos, stepVelocity, stepOnGround);
+
+        // Pull back down
+        stepUpPos.y -= kStepHeight;
+        resolveCollisions(stepUpPos, stepVelocity, stepOnGround);
+
+        // If step-up was successful:
+        // - We ended up higher than our original position
+        // - We landed on a walkable surface
+        // - We travelled further horizontally than the blocked path
+        if (stepUpPos.y > position.y && stepOnGround) {
+          float stepDx = stepUpPos.x - originalPos.x;
+          float stepDz = stepUpPos.z - originalPos.z;
+          float stepTravelDistSq = stepDx * stepDx + stepDz * stepDz;
+
+          if (stepTravelDistSq > travelDistSq) {
+            position = stepUpPos;
+            velocity = stepVelocity;
+            onGround = true;
+          }
+        }
+      }
+    }
+
+    // 4. Update rigid body state
+    body.onGround = onGround ? 1 : 0;
+    body.velocity = velocity;
+
+    // Failsafe: if the player is still colliding after resolution (should be extremely rare),
+    // push them out using a max-penetration-rescue.
+    int32_t safety = 8;
+    while (collisions.collidesAt(position, body) && --safety > 0) {
+      position.y += 0.05f;
+    }
+
+    transform.position = position;
   }
 };
 

@@ -13,6 +13,16 @@ struct TerrainTriangle {
   glm::vec3 normal;
 };
 
+struct CollisionContact {
+  glm::vec3 normal{0.0f}; // Points from triangle to AABB (direction to push AABB out)
+  float depth = 0.0f;     // Penetration depth
+};
+
+// Compute the Minimum Translation Vector (MTV) to push an AABB out of a triangle
+bool collideAABBTriangle(const glm::vec3& boxCenter, const glm::vec3& boxHalfSize,
+                         const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2,
+                         CollisionContact& contact);
+
 struct TerrainBVHNode {
   glm::vec3 boundsMin;
   glm::vec3 boundsMax;
@@ -33,6 +43,10 @@ public:
   // Check if an AABB intersects the terrain mesh.
   bool intersectsAABB(const glm::vec3& boxMin, const glm::vec3& boxMax) const;
 
+  // Gather all triangles that potentially intersect the AABB using the BVH.
+  void getTrianglesIntersectingAABB(const glm::vec3& boxMin, const glm::vec3& boxMax,
+                                    std::vector<TerrainTriangle>& outTriangles) const;
+
   // Cast a ray against the terrain mesh, returning the closest hit.
   bool raycast(const glm::vec3& origin, const glm::vec3& direction, float maxDistance,
                glm::vec3& outHitPos, glm::vec3& outHitNormal, float& outHitDist) const;
@@ -44,6 +58,8 @@ public:
 private:
   void buildRecursive(int32_t nodeIdx, int32_t start, int32_t count);
   bool intersectsAABBRecursive(int32_t nodeIdx, const glm::vec3& boxMin, const glm::vec3& boxMax) const;
+  void getTrianglesIntersectingAABBRecursive(int32_t nodeIdx, const glm::vec3& boxMin, const glm::vec3& boxMax,
+                                             std::vector<TerrainTriangle>& outTriangles) const;
   bool raycastRecursive(int32_t nodeIdx, const glm::vec3& origin, const glm::vec3& direction,
                         float& inOutMaxDist, glm::vec3& outHitPos, glm::vec3& outHitNormal) const;
 
