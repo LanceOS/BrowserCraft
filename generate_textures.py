@@ -235,9 +235,43 @@ def coal_ore(): return make_ore("coal", np.array([40, 40, 40]), 4, 7)
 def iron_ore(): return make_ore("iron", np.array([200, 170, 140]), 3, 6)
 def gold_ore(): return make_ore("gold", np.array([255, 215, 0]), 3, 5)
 def diamond_ore(): return make_ore("diamond", np.array([80, 220, 255]), 2, 4)
-def powerstone_ore(): return make_ore("powerstone", np.array([220, 40, 40]), 3, 5) # Reddish? wait, in AssetManager, it says powerstone is purple (0xFF9B30FF) which is R=155, G=48, B=255. Let's use purple/magenta.
+def powerstone_ore(): return make_ore("powerstone", np.array([170, 40, 255]), 3, 6)
 
-def powerstone_ore_fixed(): return make_ore("powerstone", np.array([170, 40, 255]), 3, 6)
+def tall_grass():
+    tex = np.zeros((16, 16, 4), dtype=np.float32)
+    # Draw blades of grass from bottom up
+    for _ in range(8):
+        x = random.randint(2, 13)
+        height = random.randint(6, 14)
+        color = np.array([46, 139, 46]) + np.random.randint(-15, 15, 3)
+        for h in range(height):
+            y = 15 - h
+            tex[y, x, :3] = color
+            tex[y, x, 3] = 255
+            if random.random() > 0.6:
+                x += random.choice([-1, 1])
+                x = np.clip(x, 0, 15)
+    return tex
+
+def fern():
+    tex = np.zeros((16, 16, 4), dtype=np.float32)
+    base_color = np.array([60, 179, 113])
+    # Main stem
+    for y in range(16):
+        x = 7 + int(np.sin(y * 0.5) * 2)
+        tex[y, x, :3] = base_color + np.random.randint(-10, 10, 3)
+        tex[y, x, 3] = 255
+        # Branches
+        if y % 3 == 0 and y < 12:
+            length = (15 - y) // 2
+            for i in range(1, length):
+                if x - i >= 0:
+                    tex[y - i//2, x - i, :3] = base_color + np.random.randint(-10, 10, 3)
+                    tex[y - i//2, x - i, 3] = 255
+                if x + i < 16:
+                    tex[y - i//2, x + i, :3] = base_color + np.random.randint(-10, 10, 3)
+                    tex[y - i//2, x + i, 3] = 255
+    return tex
 
 textures = {
     'dirt': dirt,
@@ -254,7 +288,9 @@ textures = {
     'iron_ore': iron_ore,
     'gold_ore': gold_ore,
     'diamond_ore': diamond_ore,
-    'powerstone_ore': powerstone_ore_fixed
+    'powerstone_ore': powerstone_ore,
+    'tall_grass': tall_grass,
+    'fern': fern
 }
 
 if __name__ == '__main__':
