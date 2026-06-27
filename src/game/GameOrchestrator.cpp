@@ -15,7 +15,8 @@ namespace terrain {
 namespace {
 
 static auto makeDims(const GameConfig& cfg) -> ChunkDimensions {
-  return {cfg.chunkSize, cfg.worldHeight, cfg.chunkSize,
+  int32_t scale = static_cast<int32_t>(1.0f / cfg.gridSpacing);
+  return {cfg.chunkSize * scale, cfg.worldHeight * scale, cfg.chunkSize * scale,
           cfg.maxVertsPerChunk, cfg.maxIndicesPerChunk, cfg.vertexStrideFloats};
 }
 
@@ -358,7 +359,10 @@ void GameOrchestrator::update(Game& game, float dt) {
   }
 }
 
-void GameOrchestrator::render(Game& game, float /*alpha*/, float timeSeconds) {
+void GameOrchestrator::render(Game& game, float alpha, float timeSeconds) {
+  if (game.m_playerController) {
+    game.m_playerController->interpolateCamera(alpha);
+  }
   updateCamera(game);
   if (game.m_session.state() == GameState::InGame ||
       game.m_session.state() == GameState::Paused ||
@@ -387,7 +391,7 @@ void GameOrchestrator::updateCamera(Game& game) {
 void GameOrchestrator::run(Game& game) {
   GameLoop loop(60.0f,
     [&game](float dt) { GameOrchestrator::update(game, dt); },
-    [&game, &loop](float, float time) {
+    [&game, &loop](float alpha, float time) {
       game.m_input.clearFrameState();
       glfwPollEvents();
       if (glfwWindowShouldClose(game.m_window) || !game.m_running) { loop.stop(); return; }
@@ -412,7 +416,7 @@ void GameOrchestrator::run(Game& game) {
       }
       game.m_ui->setSelectedHotbarSlot(selectedHotbarSlot);
       game.m_ui->beginFrame();
-      GameOrchestrator::render(game, 0.0f, game.m_dayNightCycle.time());
+      GameOrchestrator::render(game, alpha, game.m_dayNightCycle.time());
       game.m_ui->endFrame();
 
       glfwSwapBuffers(game.m_window);

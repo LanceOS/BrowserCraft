@@ -186,6 +186,83 @@ bool intersectsAABBTriangle(const glm::vec3& boxCenter, const glm::vec3& boxHalf
   return true;
 }
 
+bool collideAABBTriangle(const glm::vec3& boxCenter, const glm::vec3& boxHalfSize,
+                         const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2,
+                         CollisionContact& contact) {
+  // Translate vertices relative to box center
+  glm::vec3 u0 = v0 - boxCenter;
+  glm::vec3 u1 = v1 - boxCenter;
+  glm::vec3 u2 = v2 - boxCenter;
+
+  glm::vec3 edge0 = u1 - u0;
+  glm::vec3 edge1 = u2 - u1;
+  glm::vec3 edge2 = u0 - u2;
+
+  // Candidate axes (3 face normals + 1 triangle normal + 9 edge cross products)
+  glm::vec3 axes[13];
+  axes[0] = glm::vec3(1.0f, 0.0f, 0.0f);
+  axes[1] = glm::vec3(0.0f, 1.0f, 0.0f);
+  axes[2] = glm::vec3(0.0f, 0.0f, 1.0f);
+  
+  axes[3] = glm::cross(edge0, edge1);
+  
+  axes[4] = glm::vec3(0.0f, -edge0.z, edge0.y); // edge0 x u_x
+  axes[5] = glm::vec3(0.0f, -edge1.z, edge1.y); // edge1 x u_x
+  axes[6] = glm::vec3(0.0f, -edge2.z, edge2.y); // edge2 x u_x
+  
+  axes[7] = glm::vec3(edge0.z, 0.0f, -edge0.x); // edge0 x u_y
+  axes[8] = glm::vec3(edge1.z, 0.0f, -edge1.x); // edge1 x u_y
+  axes[9] = glm::vec3(edge2.z, 0.0f, -edge2.x); // edge2 x u_y
+  
+  axes[10] = glm::vec3(-edge0.y, edge0.x, 0.0f); // edge0 x u_z
+  axes[11] = glm::vec3(-edge1.y, edge1.x, 0.0f); // edge1 x u_z
+  axes[12] = glm::vec3(-edge2.y, edge2.x, 0.0f); // edge2 x u_z
+
+  float minOverlap = std::numeric_limits<float>::infinity();
+  glm::vec3 bestAxis(0.0f);
+
+  for (int i = 0; i < 13; ++i) {
+    glm::vec3 L = axes[i];
+    float len2 = glm::dot(L, L);
+    if (len2 < 1e-8f) continue; // Skip degenerate axes
+    L /= std::sqrt(len2); // Normalize
+
+    // Project AABB
+    float r = boxHalfSize.x * std::abs(L.x) +
+              boxHalfSize.y * std::abs(L.y) +
+              boxHalfSize.z * std::abs(L.z);
+
+    // Project Triangle
+    float p0 = glm::dot(u0, L);
+    float p1 = glm::dot(u1, L);
+    float p2 = glm::dot(u2, L);
+
+    float minP = std::min({p0, p1, p2});
+    float maxP = std::max({p0, p1, p2});
+
+    // Check overlap
+    if (minP > r || maxP < -r) {
+      return false; // Separating axis found, no intersection!
+    }
+
+    // Calculate overlap/push distance
+    float shift1 = minP - r; // negative
+    float shift2 = maxP + r; // positive
+    float overlap = (std::abs(shift1) < std::abs(shift2)) ? shift1 : shift2;
+    float overlapMagnitude = std::abs(overlap);
+
+    if (overlapMagnitude < minOverlap) {
+      minOverlap = overlapMagnitude;
+      bestAxis = L * (overlap < 0.0f ? -1.0f : 1.0f);
+    }
+  }
+
+  // If we got here, all axes overlap. Intersection exists!
+  contact.normal = bestAxis; // Points from triangle to AABB
+  contact.depth = minOverlap;
+  return true;
+}
+
 static inline bool aabbOverlap(const glm::vec3& minA, const glm::vec3& maxA,
                                const glm::vec3& minB, const glm::vec3& maxB) {
   return minA.x <= maxB.x && maxA.x >= minB.x &&
@@ -358,6 +435,33 @@ bool TerrainChunkCollision::raycastRecursive(int32_t nodeIdx, const glm::vec3& o
   }
 
   return hitAny;
+}
+
+void TerrainChunkCollision::getTrianglesIntersectingAABB(
+    const glm::vec3& boxMin, const glm::vec3& boxMax,
+    std::vector<TerrainTriangle>& outTriangles) const {
+  if (m_triangles.empty()) return;
+  getTrianglesIntersectingAABBRecursive(0, boxMin, boxMax, outTriangles);
+}
+
+void TerrainChunkCollision::getTrianglesIntersectingAABBRecursive(
+    int32_t nodeIdx, const glm::vec3& boxMin, const glm::vec3& boxMax,
+    std::vector<TerrainTriangle>& outTriangles) const {
+  const auto& node = m_nodes[static_cast<size_t>(nodeIdx)];
+  if (!aabbOverlap(node.boundsMin, node.boundsMax, boxMin, boxMax)) {
+    return;
+  }
+
+  if (node.leftChild == -1) {
+    for (int32_t i = 0; i < node.triangleCount; ++i) {
+      const auto& tri = m_triangles[static_cast<size_t>(node.triangleStart + i)];
+      outTriangles.push_back(tri);
+    }
+    return;
+  }
+
+  getTrianglesIntersectingAABBRecursive(node.leftChild, boxMin, boxMax, outTriangles);
+  getTrianglesIntersectingAABBRecursive(node.rightChild, boxMin, boxMax, outTriangles);
 }
 
 } // namespace terrain

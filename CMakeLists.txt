@@ -126,6 +126,7 @@ add_library(terrain_engine STATIC
   src/engine/ecs/SystemManager.cpp
   src/engine/collision/EntityCollisions.cpp
   src/engine/collision/EntityCollisionsMovement.cpp
+  src/engine/collision/MovementSolver.cpp
   src/engine/ecs/systems/PlayerControllerSystem.cpp
   src/engine/ecs/systems/PlayerSpawnSystem.cpp
   src/engine/assets/AssetManager.cpp

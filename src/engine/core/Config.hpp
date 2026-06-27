@@ -10,6 +10,7 @@ struct GameConfig {
   int32_t worldHeight = 256;
   int32_t renderDistance = 12;
   uint32_t worldSeed = 0;
+  float gridSpacing = 0.5f;
   // These defaults size the persistent chunk-mesh allocator budget.
   // Measured terrain near spawn regularly exceeds the old 15k / 30k values,
   // which caused chunks to drop out and expose hard chunk walls.

@@ -16,8 +16,20 @@ WorldGenPipeline::WorldGenPipeline(biome::IClimateSource& climateSource,
     m_densityNoise(seed)
 {}
 
+auto WorldGenPipeline::sampleTerrain(float worldX, float worldZ) const -> TerrainSample {
+  return m_terrain.sampleTerrain(worldX, worldZ);
+}
+
 auto WorldGenPipeline::sampleDensity(float worldX, float worldY, float worldZ) const -> float {
   return m_terrain.sampleDensity(worldX, worldY, worldZ);
+}
+
+auto WorldGenPipeline::sampleDensity(float worldX, float worldY, float worldZ, const TerrainSample& terrain) const -> float {
+  return m_terrain.sampleDensity(worldX, worldY, worldZ, terrain);
+}
+
+auto WorldGenPipeline::config() const -> const WorldGenerationConfig& {
+  return m_terrain.config();
 }
 
 auto WorldGenPipeline::sampleMaterial(float worldX, float worldY, float worldZ) const -> TerrainMaterial {

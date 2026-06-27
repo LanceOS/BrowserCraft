@@ -54,6 +54,7 @@ out float v_blend;
 out float v_tint;
 out vec3 v_normal;
 out vec3 v_worldPos;
+out float v_viewSpaceZ;
 
 void main() {
   uint chunkIndex = gl_BaseInstance;
@@ -66,4 +67,5 @@ void main() {
   v_tint = clamp(a_tint, 0.0, 1.0);
   v_normal = a_normal;
   v_worldPos = worldPos;
+  v_viewSpaceZ = (u_view * vec4(worldPos, 1.0)).z;
 }

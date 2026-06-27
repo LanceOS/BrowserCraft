@@ -30,6 +30,7 @@ in float v_blend;
 in float v_tint;
 in vec3 v_normal;
 in vec3 v_worldPos;
+in float v_viewSpaceZ;
 
 out vec4 fragColor;
 
@@ -49,14 +50,14 @@ int terrainLayer(int materialId) {
 
 float terrainScale(int materialId) {
   switch (materialId) {
-    case 0: return 0.18; // grass
-    case 1: return 0.16; // dirt
-    case 2: return 0.24; // stone
-    case 3: return 0.15; // sand
-    case 4: return 0.20; // gravel
-    case 5: return 0.12; // clay
-    case 6: return 0.25; // cracked stone
-    default: return 0.18;
+    case 0: return 2.0; // grass
+    case 1: return 2.0; // dirt
+    case 2: return 2.0; // stone
+    case 3: return 2.0; // sand
+    case 4: return 2.0; // gravel
+    case 5: return 2.0; // clay
+    case 6: return 2.0; // cracked stone
+    default: return 2.0;
   }
 }
 
@@ -113,6 +114,7 @@ void main() {
   vec4 secondaryAlbedo = sampleTerrainMaterial(secondary, v_worldPos, normal, v_tint);
   vec4 albedo = mix(primaryAlbedo, secondaryAlbedo, blend);
 
+#ifndef OPAQUE_PASS
   if (albedo.a < 0.05) {
     discard;
   }
@@ -123,6 +125,7 @@ void main() {
   if (u_opaquePass == 0 && albedo.a >= 0.5) {
     discard;
   }
+#endif
 
   vec3 sunDir = normalize(u_sunDir);
   float diffuse = max(dot(normal, sunDir), 0.0);
@@ -134,7 +137,7 @@ void main() {
   vec3 lit = albedo.rgb * lighting;
 
   float fogDist = u_fogColor.a;
-  float fragDist = distance(u_camTime.xyz, v_worldPos);
+  float fragDist = -v_viewSpaceZ;
   float fogFactor = clamp(fragDist / fogDist, 0.0, 1.0);
 
   fragColor.rgb = mix(lit, u_fogColor.rgb, fogFactor);

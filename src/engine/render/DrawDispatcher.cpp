@@ -4,11 +4,11 @@
 
 namespace terrain {
 
-DrawDispatcher::DrawDispatcher(ShaderProgram& terrainShader, ShaderProgram& skyShader,
-                               Texture2DArray& textures, IndirectBatcher& indirectBatcher,
-                               uint32_t& masterVao, uint32_t& skyVao)
-  : m_terrainShader(terrainShader), m_skyShader(skyShader),
-    m_textures(textures), m_indirectBatcher(indirectBatcher),
+DrawDispatcher::DrawDispatcher(ShaderProgram& terrainOpaqueShader, ShaderProgram& terrainTransparentShader,
+                               ShaderProgram& skyShader, Texture2DArray& textures,
+                               IndirectBatcher& indirectBatcher, uint32_t& masterVao, uint32_t& skyVao)
+  : m_terrainOpaqueShader(terrainOpaqueShader), m_terrainTransparentShader(terrainTransparentShader),
+    m_skyShader(skyShader), m_textures(textures), m_indirectBatcher(indirectBatcher),
     m_masterVao(masterVao), m_skyVao(skyVao)
 {}
 
@@ -35,13 +35,12 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
   const uint32_t terrainOpaqueCount = m_indirectBatcher.terrainOpaqueCommandCount();
   const uint32_t terrainTransparentCount = m_indirectBatcher.terrainTransparentCommandCount();
 
-  m_terrainShader.use();
-  gl::Uniform1i(m_terrainShader.uniform("u_terrainTextures"), 0);
-
   // Terrain pass: opaque geometry first.
   if (terrainOpaqueCount > 0u) {
+    m_terrainOpaqueShader.use();
+    gl::Uniform1i(m_terrainOpaqueShader.uniform("u_terrainTextures"), 0);
+    gl::Uniform1i(m_terrainOpaqueShader.uniform("u_opaquePass"), 1);
     gl::Disable(GL_BLEND);
-    gl::Uniform1i(m_terrainShader.uniform("u_opaquePass"), 1);
     gl::DepthMask(GL_TRUE);
     gl::DepthFunc(GL_LESS);
     m_indirectBatcher.drawIndirect(terrainOpaqueCount, m_indirectBatcher.terrainOpaqueCommandBase());
@@ -49,8 +48,10 @@ void DrawDispatcher::renderChunks(const Frustum& frustum) {
 
   // Terrain transparent pass, kept for future material effects.
   if (terrainTransparentCount > 0u) {
+    m_terrainTransparentShader.use();
+    gl::Uniform1i(m_terrainTransparentShader.uniform("u_terrainTextures"), 0);
+    gl::Uniform1i(m_terrainTransparentShader.uniform("u_opaquePass"), 0);
     gl::Enable(GL_BLEND);
-    gl::Uniform1i(m_terrainShader.uniform("u_opaquePass"), 0);
     gl::DepthMask(GL_FALSE);
     gl::DepthFunc(GL_LEQUAL);
     m_indirectBatcher.drawIndirect(terrainTransparentCount, m_indirectBatcher.terrainTransparentCommandBase());

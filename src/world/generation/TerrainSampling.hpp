@@ -119,6 +119,7 @@ public:
 
   /// Sample signed density. Negative = solid, positive = air, zero = surface.
   [[nodiscard]] auto sampleDensity(float worldX, float worldY, float worldZ) const -> float;
+  [[nodiscard]] auto sampleDensity(float worldX, float worldY, float worldZ, const TerrainSample& terrain) const -> float;
 
   /// Sample the terrain material for a world coordinate.
   /// Returns blended terrain material hints derived from slope, depth, and
@@ -182,8 +183,7 @@ inline auto TerrainSampler::sampleTerrain(float worldX, float worldZ) const -> T
   return sample;
 }
 
-inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worldZ) const -> float {
-  const auto terrain = sampleTerrain(worldX, worldZ);
+inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worldZ, const TerrainSample& terrain) const -> float {
   float density = worldY - terrain.surfaceHeight;
 
   const auto& cfg = m_config;
@@ -205,6 +205,10 @@ inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worl
   return density;
 }
 
+inline auto TerrainSampler::sampleDensity(float worldX, float worldY, float worldZ) const -> float {
+  return sampleDensity(worldX, worldY, worldZ, sampleTerrain(worldX, worldZ));
+}
+
 inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float worldZ) const -> TerrainMaterial {
   return sampleMaterial(worldX, worldY, worldZ, glm::vec3(0.0f, 1.0f, 0.0f));
 }
@@ -213,6 +217,9 @@ inline auto TerrainSampler::sampleMaterial(float worldX, float worldY, float wor
                                            const glm::vec3& normal) const -> TerrainMaterial {
   const auto terrain = sampleTerrain(worldX, worldZ);
   terrain::TerrainMaterialContext ctx{};
+  ctx.worldX = worldX;
+  ctx.worldY = worldY;
+  ctx.worldZ = worldZ;
   ctx.surfaceHeight = terrain.surfaceHeight;
   ctx.seaLevel = static_cast<float>(m_config.seaLevel);
   ctx.depthBelowSurface = terrain.surfaceHeight - worldY;

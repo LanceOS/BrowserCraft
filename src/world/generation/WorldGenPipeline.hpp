@@ -22,8 +22,13 @@ public:
                             uint32_t seed,
                             const WorldGenerationConfig& config = {});
 
+  [[nodiscard]] auto sampleTerrain(float worldX, float worldZ) const -> TerrainSample;
+
   /// Continuous signed-distance-like sampling for smooth meshers.
   [[nodiscard]] auto sampleDensity(float worldX, float worldY, float worldZ) const -> float;
+  [[nodiscard]] auto sampleDensity(float worldX, float worldY, float worldZ, const TerrainSample& terrain) const -> float;
+
+  [[nodiscard]] auto config() const -> const WorldGenerationConfig&;
 
   /// Terrain material sampling for smooth meshers.
   [[nodiscard]] auto sampleMaterial(float worldX, float worldY, float worldZ) const -> TerrainMaterial;

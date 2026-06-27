@@ -38,6 +38,9 @@ public:
   [[nodiscard]] auto name() const -> const std::string& override;
   [[nodiscard]] auto stage() const -> SystemStage override;
   void update(TickContext& ctx) override;
+  
+  /// Interpolate the camera position between physics ticks for smooth rendering.
+  void interpolateCamera(float alpha);
 
   /// Collision engine shared with PlayerSpawnSystem.
   [[nodiscard]] auto collisions() -> EntityCollisions& { return m_collisions; }
@@ -70,6 +73,8 @@ private:
   bool& m_cameraDirty;
   int32_t m_cachedPlayerIndex = -1;
   bool m_prevOnGround = true;
+  glm::vec3 m_prevPosition{0.0f};
+  bool m_firstUpdate = true;
   EntityCollisions m_collisions;
 };
 
