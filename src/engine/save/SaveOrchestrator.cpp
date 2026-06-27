@@ -93,6 +93,18 @@ auto SaveOrchestrator::prepareLoadWorld(const std::string& identifier) -> Prepar
   return {{}, "No world found with that name."};
 }
 
+auto SaveOrchestrator::deleteWorld(const std::string& slug) -> bool {
+  if (slug.empty()) return false;
+  auto path = m_saveDir / slug;
+  std::error_code ec;
+  if (std::filesystem::exists(path, ec)) {
+    std::filesystem::remove_all(path, ec);
+    refreshWorldList();
+    return !ec;
+  }
+  return false;
+}
+
 void SaveOrchestrator::finalizeWorldStart(SaveManager& saveMgr,
                                            const std::string& displayName,
                                            const std::string& slug,

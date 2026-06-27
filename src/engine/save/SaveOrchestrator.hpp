@@ -64,6 +64,9 @@ public:
   /// Resolve slug for loading an existing world (by display name or slug).
   [[nodiscard]] auto prepareLoadWorld(const std::string& identifier) -> PrepareResult;
 
+  /// Delete a world by its slug, returning true on success.
+  auto deleteWorld(const std::string& slug) -> bool;
+
   /// After WorldController has configured the SaveManager, write/update the
   /// world metadata (name, seed, mode, timestamp).
   void finalizeWorldStart(SaveManager& saveMgr,

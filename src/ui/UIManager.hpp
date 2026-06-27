@@ -33,6 +33,7 @@ public:
     Callback onResume;
     Callback onQuit;
     Callback onRenderDistanceChanged;
+    std::function<void(const std::string&)> onDeleteWorld;
   };
 
   UIManager(GLFWwindow* window, Callbacks callbacks);
@@ -55,6 +56,9 @@ public:
 
   /// Show the options menu.
   void showOptions();
+
+  /// Set whether a game session is currently active
+  void setSessionActive(bool active) { m_sessionActive = active; }
 
   /// Hide all menus (in-game state).
   void clearUI();
@@ -129,10 +133,13 @@ private:
   std::array<char, 64> m_slotId{};
   bool m_showDemoWindow = false;
   bool m_initialized = false;
+  bool m_sessionActive = false;
+  UIState m_previousState = UIState::MainMenu;
 
   // World list state
   std::vector<WorldEntry> m_worldEntries;
   std::string m_worldErrorMsg;
+  std::string m_worldToDelete;
 };
 
 } // namespace terrain

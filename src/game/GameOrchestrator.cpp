@@ -90,6 +90,7 @@ void GameOrchestrator::initialize(Game& game, GLFWwindow* window, const Game::Op
     },
     .onQuitToTitle = [&game]{
       game.m_saveOrchestrator->onWorldClosed(game.m_worldController->saveManager());
+      game.m_ui->setSessionActive(false);
       game.m_session.returnToTitle();
     },
     .onResume = [&game]{ glfwSetInputMode(game.m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); },
@@ -97,6 +98,12 @@ void GameOrchestrator::initialize(Game& game, GLFWwindow* window, const Game::Op
     .onRenderDistanceChanged = [&game]{
       int32_t rd = game.m_ui->renderDistance();
       GameOrchestrator::applyRenderDistance(game, rd);
+    },
+    .onDeleteWorld = [&game](const std::string& slug) {
+      if (game.m_saveOrchestrator) {
+        game.m_saveOrchestrator->deleteWorld(slug);
+        game.m_ui->setWorldList(SaveOrchestrator::buildWorldEntries(game.m_saveOrchestrator->worldList()));
+      }
     },
   });
 
@@ -300,6 +307,7 @@ void GameOrchestrator::startWorld(Game& game, GameMode mode, const std::string& 
 
   game.m_ui->clearUI();
   game.m_ui->setInventoryOpen(false);
+  game.m_ui->setSessionActive(true);
   glfwSetInputMode(game.m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
   game.m_saveOrchestrator->refreshWorldList();
