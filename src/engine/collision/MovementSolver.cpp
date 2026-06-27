@@ -125,17 +125,15 @@ void MovementSolver::resolve(float dx, float dy, float dz, cmp::Transform& trans
       break;
     }
 
-    // 5. Collision detected! Move the sphere up to the point of impact.
+    // 5. Collision detected! Move the sphere up to the exact point of impact.
     float t = bestContact.t;
-    
-    // We push the sphere back slightly along its velocity vector using an epsilon.
-    // This prevents floating-point inaccuracies from embedding the sphere exactly on the plane,
-    // which would cause the next iteration's collision detection to fail.
-    const float epsilon = 0.005f;
-    float pushBack = epsilon / velLen;
-    t = std::max(0.0f, t - pushBack);
-
     eOrigin += eVel * t;
+    
+    // Nudge the sphere away from the collision surface by a tiny epsilon.
+    // Pushing out along the normal (instead of backing up along velocity) guarantees 
+    // we won't get stuck in a t=0 infinite collision loop with the same triangle.
+    const float epsilon = 0.005f;
+    eOrigin += bestContact.normal * epsilon;
 
     // Check if the surface normal points upwards (to determine if we landed on the ground).
     // The normal must be transformed back to world space for an accurate Y-axis check.
